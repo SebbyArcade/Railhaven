@@ -52,8 +52,11 @@ attachInput(canvas, () => game.s.camera, () => view, () => game.world.n * 32, {
 
 // toolbar: tapping a tool again closes it
 for (const b of document.querySelectorAll<HTMLButtonElement>('#bar [data-mode]')) b.onclick = () => { tools.setMode(b.dataset.mode as Mode); };
+let newArmed = 0;
 $('newGame').onclick = () => {
-  if (!confirm('Start a new map? This replaces the current preview game.')) return;
+  // the artifact frame blocks confirm(), so ask with a second tap instead
+  if (performance.now() - newArmed > 3000) { newArmed = performance.now(); toast('Tap New again to start a new map'); return; }
+  newArmed = 0;
   game = newGame(); tools.cancel(); tools.selected = null; renderer = new Renderer(game, tools); saveTo(localStorage, game);
 };
 $('ok').onclick = () => tools.confirm();
