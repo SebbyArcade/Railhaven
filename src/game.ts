@@ -1,4 +1,5 @@
-import type { Game, GameState } from './state.ts';
+import type { Game, GameState, Site } from './state.ts';
+import { doubleSquares, hallsOf } from './buildings/stations.ts';
 import { generateWorld, refreshIslands, refreshWater, TILE } from './world/terrain.ts';
 import { generateSites } from './world/sites.ts';
 import { emptyFog, reveal } from './world/fog.ts';
@@ -22,12 +23,14 @@ export function buildWorld(s: GameState) {
   return world;
 }
 
-function makeNetwork(track: TrackMap, n: number): Network {
-  return buildNetwork(track, n);
+function makeNetwork(track: TrackMap, n: number, sites: Site[]): Network {
+  const halls = hallsOf(track, n, sites), dbl = doubleSquares(track, halls), still = new Set<number>();
+  for (const h of halls) for (const i of [...h.squares, ...h.approaches]) still.add(i);
+  return buildNetwork(track, n, { forceDouble: i => dbl.has(i), noWide: i => still.has(i) });
 }
 
 function assemble(s: GameState): Game {
-  const world = buildWorld(s), track = trackFromSave(s.track ?? []), net = makeNetwork(track, world.n);
+  const world = buildWorld(s), track = trackFromSave(s.track ?? []), net = makeNetwork(track, world.n, s.sites);
   s.trains ??= []; s.nextId ??= 1;
   const g: Game = { s, world, track, net, sys: new TrainSystem(net, s.trains) };
   if (s.netKey !== networkKey(net)) {
@@ -69,7 +72,7 @@ export function prepareSave(g: Game) {
 /** After the track changed: rebuild the rails and put every train back where it stood. */
 export function trackChanged(g: Game) {
   const where = g.s.trains.map(t => snapshot(g.net, t));
-  g.net = makeNetwork(g.track, g.world.n);
+  g.net = makeNetwork(g.track, g.world.n, g.s.sites);
   g.sys.setNetwork(g.net);
   g.s.trains.forEach((t, k) => { relocate(g.net, t, where[k]!); });
   g.sys.rebuildHolds();

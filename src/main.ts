@@ -1,4 +1,5 @@
 import { newGame } from './game.ts';
+import { hallAt, hallsOf } from './buildings/stations.ts';
 import { type View, toSquare, toWorld } from './render/camera.ts';
 import { Renderer } from './render/renderer.ts';
 import { loadFrom, saveTo } from './save/save.ts';
@@ -44,7 +45,7 @@ attachInput(canvas, () => game.s.camera, () => view, () => game.world.n * 32, {
     if (tools.tapSquare(i)) return;
     const n = game.world.n, x = i % n, y = (i / n) | 0;
     if (!isRevealed(game, i)) { toast('Unexplored fog. Scouting comes in a later stage.'); return; }
-    const site = game.s.sites.find(s => Math.abs(s.x - x) <= 1 && Math.abs(s.y - y) <= 1);
+    const site = hallAt(hallsOf(game.track, n, game.s.sites), i)?.town ?? game.s.sites.find(s => Math.abs(s.x - x) <= 1 && Math.abs(s.y - y) <= 1);
     if (site) toast(site.kind === 'town' ? `🏘 ${site.name}` : site.kind === 'plot' ? `🚩 Settlement site: ${site.name}` : `⛏ ${site.res} deposit`);
     else toast(TERRAIN_NAMES[game.world.terr[i]!]!);
   },

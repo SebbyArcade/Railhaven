@@ -27,7 +27,7 @@ const res = await page.evaluate(() => {
   T.mode = 'pan';
   const [a, b] = g.s.trains;
   if (a) g.sys.sendTo(a, sq(0, 2)); if (b) g.sys.sendTo(b, sq(3, 2));
-  g.s.camera.x = (cx + 3.5) * 32; g.s.camera.y = (cy + 2.5) * 32; g.s.camera.z = 2.2;
+  g.s.camera.x = (cx + 2.2) * 32; g.s.camera.y = (cy + 2.5) * 32; g.s.camera.z = 2.2;
   return { terr, log, trains: g.s.trains.length, pieces: g.net.pieces.length, money: g.s.money };
 });
 console.log(JSON.stringify(res));

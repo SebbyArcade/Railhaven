@@ -4,6 +4,8 @@ import { TILE } from '../world/terrain.ts';
 import { type View, toWorld } from './camera.ts';
 import { drawFog } from './fog.ts';
 import { drawSites } from './sites.ts';
+import { drawHall } from './stations.ts';
+import { hallsOf } from '../buildings/stations.ts';
 import { TerrainCache } from './terrainCache.ts';
 import { drawWaterLive } from './terrainArt.ts';
 import { drawTrack } from './track.ts';
@@ -34,7 +36,9 @@ export class Renderer {
     }
     const vis = (sq: number) => { const x = sq % n, y = (sq / n) | 0; return x >= x0 - 1 && x <= x1 + 1 && y >= y0 - 1 && y <= y1 + 1; };
     drawTrack(ctx, g.net, p => p.squares.some(vis), cam.z);
-    drawSites(ctx, g, x0, y0, x1, y1, cam.z, tm);
+    const halls = hallsOf(g.track, n, g.s.sites);
+    for (const h of halls) if (vis(h.squares[1]) && isRevealed(g, h.squares[1])) drawHall(ctx, g.s.seed, h, cam.z);
+    drawSites(ctx, g, x0, y0, x1, y1, cam.z, tm, halls);
     drawTrains(ctx, g.net, g.s.trains, tm);
     this.drawOverlay(ctx, tm);
     drawFog(ctx, g, x0, y0, x1, y1, cam.z, tm);

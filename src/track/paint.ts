@@ -1,6 +1,16 @@
 import type { Game } from '../state.ts';
 import { bridgeJoinsIslands, squareCost } from './rules.ts';
 import { layPath } from './edit.ts';
+import { stationLinkError } from '../buildings/stations.ts';
+import type { TrackMap } from './types.ts';
+
+/** The track as it would be with this stroke laid (copies only what it touches). */
+function withPath(g: Game, path: number[]): TrackMap {
+  const t: TrackMap = new Map(g.track);
+  for (const i of path) { const o = t.get(i); if (o) t.set(i, { ...o }); }
+  layPath(t, g.world.n, path);
+  return t;
+}
 
 /** A track stroke being painted: squares in order, starting on the network. */
 export interface PaintPlan {
@@ -33,6 +43,8 @@ export function extendPlan(g: Game, p: PaintPlan, i: number) {
     if (p.path.includes(next)) return; // no loops back onto the stroke itself
     const c = squareCost(g, next);
     if (typeof c === 'string' && !g.track.has(next)) { p.refused = { square: next, why: c }; return; }
+    const st = stationLinkError(withPath(g, p.path), n, g.s.sites, last, next);
+    if (st) { p.refused = { square: next, why: st }; return; }
     p.path.push(next);
   }
 }
@@ -48,6 +60,10 @@ export function planCost(g: Game, p: PaintPlan): number {
 export function planError(g: Game, p: PaintPlan): string {
   if (p.path.length < 2) return 'Drag or tap next to the track to add squares';
   const cost = planCost(g, p);
+  for (let k = 1; k < p.path.length; k++) {
+    const e = stationLinkError(withPath(g, p.path.slice(0, k)), g.world.n, g.s.sites, p.path[k - 1]!, p.path[k]!);
+    if (e) return e;
+  }
   if (cost > g.s.money) return `Need $${(cost - g.s.money).toLocaleString('en-US')} more`;
   const water = p.path.filter(i => !g.world.terr[i]);
   if (water.length) {

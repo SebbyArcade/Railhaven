@@ -26,8 +26,8 @@ that makes sense. Details for each line: `legacy/CHANGES.md` (search the version
 ## Stage 2: real rails and trains
 - [x] Track painting in Build → Build rails: square by square, attaches to network, cost + confirm, drag pans unless it starts on the network
 - [ ] Track costs by terrain; mountains need tunnels; no track through fog; undo except fog-revealing strokes
-- [ ] Rail model: straights, wide smooth curves, gradual turnouts, crossings, double track, crossovers (done: straights, wide curves, double track, fans; to do: gradual multi-square turnouts, crossings)
-- [ ] Station halls (2 platform lanes, entered only at the ends, building per town size)
+- [ ] Rail model: straights, wide smooth curves, gradual turnouts, crossings, double track, crossovers (done: straights, wide curves, double track, fans, gentle turnouts; to do: crossings, double-track turnouts)
+- [x] Station halls (2 platform lanes, entered only at the ends, building per town size)
 - [x] Trains on rail pieces: no spin, reverse at dead ends, queue at signals, easing (plus: parked trains move aside, trains step aside when the way is blocked)
 - [ ] Bridges: trestle/stone/steel truss by depth, $500/$1,500/$3,500 per square, upkeep, never join two islands, max 3 from land / 8 long
 - [ ] Remove track square, route-cut warning, broken rail events + repair handcar
