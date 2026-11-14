@@ -133,6 +133,12 @@ export class TrainSystem {
     const head = t.trail.at(-1)!;
     const at = t.plan.findIndex(m => sameStep(m, head));
     if (at >= 0) t.plan.splice(0, at + 1);
+    // the plan guessed which way the back of the train lay; if the rails behind went another way, plan again
+    const nx = t.plan[0];
+    if (nx && !isRev(nx) && !nextStepsOf(this.net, head).some(o => sameStep(o, nx))) {
+      const last = t.plan.filter(m => !isRev(m)).at(-1) as Step;
+      t.plan = findRoute(this.net, { head, tail: t.trail[0]!, trail: t.trail, trainLen: trainLength(t), goal: s => sameStep(s, last), extra: s => this.laneCost(s) }) ?? [];
+    }
     t.held = 0;
     this.rebuildHolds();
   }
@@ -145,7 +151,7 @@ export class TrainSystem {
   /** Plan a trip to a square. Returns false when there is no way. */
   sendTo(t: Train, dest: number): boolean {
     const route = findRoute(this.net, {
-      head: t.trail.at(-1)!, tail: t.trail[0]!, trainLen: trainLength(t), canReverseNow: true,
+      head: t.trail.at(-1)!, tail: t.trail[0]!, trail: t.trail, trainLen: trainLength(t), canReverseNow: true,
       goal: s => this.net.pieces[s.piece]!.squares.includes(dest),
       extra: s => this.laneCost(s) + (() => { const h = this.holder.get(s.piece); return h !== undefined && h !== t.id ? 200 : 0; })(),
     });
@@ -226,7 +232,7 @@ export class TrainSystem {
     // pieces under other trains can't be passed; pieces they have only signalled ahead are just costly
     const bodies = new Set<number>();
     for (const o of this.trains) if (o !== t) for (const s of o.trail) { bodies.add(s.piece); for (const c of this.net.conflicts[s.piece]!) bodies.add(c); }
-    const base = { head: t.trail.at(-1)!, tail: t.trail[0]!, trainLen: L, canReverseNow: true };
+    const base = { head: t.trail.at(-1)!, tail: t.trail[0]!, trail: t.trail, trainLen: L, canReverseNow: true };
     const cost = (s: Step) => bodies.has(s.piece) ? Infinity : this.laneCost(s) + (() => { const h = this.holder.get(s.piece); return h !== undefined && h !== t.id ? 4000 : 0; })();
     const route = findRoute(this.net, { ...base, goal: s => this.net.pieces[s.piece]!.squares.includes(dest), extra: cost });
     if (route) { t.plan = route; t.held = 0; this.rebuildHolds(); return; }
@@ -248,10 +254,13 @@ export class TrainSystem {
     }
     // no way round: get out of the way of every train that is waiting
     const inWay = new Set<number>();
-    for (const o of this.trains) if (o !== t && o.plan.length) {
+    for (const o of this.trains) if (o !== t) {
       let c = 0; for (const m of o.plan) { if (isRev(m)) continue; inWay.add(m.piece); for (const x of this.net.conflicts[m.piece]!) inWay.add(x); if (++c > 60) break; }
+      // never stand aside on another train's destination (it may be standing aside itself, with no plan right now)
+      if (o.dest !== undefined) for (const p of this.net.bySquare.get(o.dest) ?? []) { inWay.add(p); for (const x of this.net.conflicts[p]!) inWay.add(x); }
     }
-    if (this.stepAside(t, inWay)) t.refuge = REFUGE_WAIT;
+    // stagger retries so two trains standing aside don't come back at the same moment
+    if (this.stepAside(t, inWay)) t.refuge = REFUGE_WAIT + (t.id % 3) * 1.5;
   }
 
   /** Drive a train to a siding or passing track clear of the given pieces (and of other trains). */
@@ -260,7 +269,7 @@ export class TrainSystem {
     const bodies = new Set<number>();
     for (const o of this.trains) if (o !== t) for (const s of o.trail) { bodies.add(s.piece); for (const c of this.net.conflicts[s.piece]!) bodies.add(c); }
     const refuge = findRoute(this.net, {
-      head: t.trail.at(-1)!, tail: t.trail[0]!, trainLen: L, canReverseNow: true,
+      head: t.trail.at(-1)!, tail: t.trail[0]!, trail: t.trail, trainLen: L, canReverseNow: true,
       extra: s => bodies.has(s.piece) ? Infinity : this.laneCost(s) + (() => { const h = this.holder.get(s.piece); return h !== undefined && h !== t.id ? 4000 : 0; })(),
       goal: s => !inWay.has(s.piece) && (this.net.passing[s.piece]! || (s.dir === 1 && !!this.net.pieces[s.piece]!.endB)),
       accept: moves => { // the whole train must stand clear of the others' way

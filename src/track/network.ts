@@ -87,7 +87,31 @@ export function buildNetwork(track: TrackMap, n: number, opt: NetworkOptions = {
     }
   }
 
-  // 2. every other square: one piece per lane for every pair of joined sides
+  // 2. gentle turnouts: at a junction, a branch with plain single straights on both legs leaves the main line
+  //    as a radius-1.5 arc that starts a square early, like a real turnout (the straight line stays as it is)
+  const turned = new Set<string>();
+  for (const c of keys) {
+    if (consumed.has(c) || opt.noWide?.(c) || isDbl(c)) continue;
+    const s = sides(links(c));
+    if (s.length < 3) continue;
+    for (const a of s) for (const b of s) {
+      if (a >= b || a === opposite(b)) continue;
+      const A = nb(c, a), B = nb(c, b);
+      if (A < 0 || B < 0 || consumed.has(A) || consumed.has(B) || isDbl(A) || isDbl(B) || opt.noWide?.(A) || opt.noWide?.(B)) continue;
+      if (links(A) !== (bit(a) | bit(opposite(a))) || links(B) !== (bit(b) | bit(opposite(b)))) continue;
+      const [ox, oy] = centre(c), R = 1.5 * T, kx = ox + R * (DX[a] + DX[b]), ky = oy + R * (DY[a] + DY[b]);
+      const pa = port(A, a, 0), pb = port(B, b, 0);
+      let a0 = Math.atan2(pa[1] - ky, pa[0] - kx), a1 = Math.atan2(pb[1] - ky, pb[0] - kx);
+      while (a1 - a0 > Math.PI) a1 -= 2 * Math.PI;
+      while (a0 - a1 > Math.PI) a1 += 2 * Math.PI;
+      const pts = sampleArc(kx, ky, R, a0, a1, 24);
+      pts[0] = pa[0]; pts[1] = pa[1]; pts[pts.length - 2] = pb[0]; pts[pts.length - 1] = pb[1];
+      add(pts, [A, c, B], 'wide', [-DX[a], -DY[a]], [DX[b], DY[b]]);
+      turned.add(c + ':' + a + ':' + b);
+    }
+  }
+
+  // 3. every other square: one piece per lane for every pair of joined sides
   for (const i of keys) {
     if (consumed.has(i)) continue;
     const s = sides(links(i));
@@ -101,6 +125,7 @@ export function buildNetwork(track: TrackMap, n: number, opt: NetworkOptions = {
     }
     for (let u = 0; u < s.length; u++) for (let v = u + 1; v < s.length; v++) {
       const d1 = s[u]!, d2 = s[v]!, straight = d1 === opposite(d2);
+      if (turned.has(i + ':' + Math.min(d1, d2) + ':' + Math.max(d1, d2))) continue;
       const L1 = laneOffsets(i, d1).map(o => port(i, d1, o)), L2 = laneOffsets(i, d2).map(o => port(i, d2, o));
       const t0: V2 = [-DX[d1], -DY[d1]], t1: V2 = [DX[d2], DY[d2]];
       const pairs: [V2, V2][] = [];
@@ -128,7 +153,16 @@ export function buildNetwork(track: TrackMap, n: number, opt: NetworkOptions = {
     }
   }
 
-  // 3. connections and overlaps
+  // drop pieces left hanging (a branch leg whose junction side is all taken by turnouts): every non-buffer end must join
+  for (let changed = true; changed;) {
+    changed = false;
+    const ends = new Map<NodeKey, number>();
+    for (const p of pieces) { ends.set(p.a, (ends.get(p.a) ?? 0) + 1); if (!p.endB) ends.set(p.b, (ends.get(p.b) ?? 0) + 1); }
+    const keep = pieces.filter(p => ends.get(p.a)! > 1 && (p.endB || ends.get(p.b)! > 1));
+    if (keep.length && keep.length !== pieces.length) { changed = true; pieces.length = 0; keep.forEach((p, k) => { p.id = k; pieces.push(p); }); }
+  }
+
+  // 4. connections and overlaps
   const outs = new Map<NodeKey, { step: Step; hx: number; hy: number }[]>();
   const push = (k: NodeKey, v: { step: Step; hx: number; hy: number }) => { const a = outs.get(k); if (a) a.push(v); else outs.set(k, [v]); };
   const bySquare = new Map<number, number[]>();
