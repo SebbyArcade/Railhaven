@@ -1,4 +1,8 @@
 import type { World } from './world/terrain.ts';
+import type { SavedTrack } from './track/state.ts';
+import type { TrackMap } from './track/types.ts';
+import type { Network } from './track/network.ts';
+import type { Train, TrainSystem } from './trains/train.ts';
 
 export type Resource = 'wood' | 'farm' | 'stone' | 'coal' | 'iron' | 'oil';
 
@@ -32,10 +36,21 @@ export interface GameState {
   /** squares whose terrain changed from the generated map (index -> terrain) */
   terrainEdits: Record<number, number>;
   camera: { x: number; y: number; z: number };
+  track: SavedTrack;
+  trains: Train[];
+  /** fingerprint of the rail network the trains' positions refer to */
+  netKey: string;
+  nextId: number;
 }
 
 /** The running game: saved state plus the world rebuilt from the seed. */
 export interface Game {
   s: GameState;
   world: World;
+  /** live track and the rail network built from it (rebuilt on every track change) */
+  track: TrackMap;
+  net: Network;
+  sys: TrainSystem;
+  /** set by the renderer: squares whose baked terrain must be redrawn (track hides trees) */
+  terrainDirty?: (squares: number[]) => void;
 }
