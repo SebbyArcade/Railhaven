@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>Railhaven</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #15130f; overflow: hidden; font-family: system-ui, sans-serif; color: #f3e6c8; overscroll-behavior: none; }
+  canvas { display: block; position: fixed; inset: 0; }
+  #hud { position: fixed; top: max(8px, env(safe-area-inset-top)); left: 8px; display: flex; gap: 6px; pointer-events: none; }
+  .chip { background: rgba(28,22,16,.88); border: 1px solid #6b5132; border-radius: 14px; padding: 4px 10px; font-weight: 600; font-size: 14px; }
+  .chip.money { color: #ffd27a; }
+  #toast { position: fixed; left: 50%; bottom: 84px; transform: translateX(-50%); background: rgba(28,22,16,.94); border: 1px solid #c99a5b; border-radius: 12px; padding: 8px 14px; font-size: 14px; opacity: 0; transition: opacity .3s; pointer-events: none; max-width: 86vw; text-align: center; }
+  #bar { position: fixed; bottom: max(10px, env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%); display: flex; gap: 8px; }
+  #bar button { background: #3a2a18; color: #ffe9c4; border: 1px solid #c99a5b; border-radius: 12px; padding: 10px 14px; font-size: 15px; font-weight: 600; }
+  #stage { position: fixed; top: max(8px, env(safe-area-inset-top)); right: 8px; font-size: 11px; opacity: .7; pointer-events: none; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="hud"></div>
+<div id="stage">Rebuild preview · stage 1</div>
+<div id="toast"></div>
+<div id="bar"><button id="newGame">🗺 New map</button></div>
+<script type="module" src="/src/main.ts"></script>
+</body>
+</html>

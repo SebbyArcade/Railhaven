@@ -1,0 +1,24 @@
+{
+  "name": "railhaven",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Railhaven: build a railway across an endless archipelago.",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "bot": "node --experimental-strip-types tools/bot.ts",
+    "shots": "node tools/shots.mjs"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.65.1",
+    "@types/node": "^26.6.6",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.8",
+    "vite-plugin-singlefile": "^2.3.4",
+    "vitest": "^5.1.0"
+  }
+}
