@@ -61,11 +61,13 @@ $('newGame').onclick = () => {
   game = newGame(); tools.cancel(); tools.selected = null; renderer = new Renderer(game, tools); saveTo(localStorage, game);
 };
 $('ok').onclick = () => tools.confirm();
+$('undo').onclick = () => tools.undo();
 $('cancel').onclick = () => { tools.cancel(); };
 
 function updateUi() {
   for (const b of document.querySelectorAll<HTMLButtonElement>('#bar [data-mode]')) b.classList.toggle('on', b.dataset.mode === tools.mode);
   const hint = MODE_HINT[tools.mode]; $('hint').textContent = hint; $('hint').style.display = hint ? 'block' : 'none';
+  $('undo').style.display = tools.canUndo() ? 'block' : 'none';
   const bar = tools.bar(), cb = $('confirm');
   cb.style.display = bar ? 'flex' : 'none';
   if (bar) { $('ctext').textContent = bar.text; ($('ok') as HTMLButtonElement).disabled = !bar.can; $('ok').textContent = bar.ok; }

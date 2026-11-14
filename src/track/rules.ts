@@ -4,8 +4,11 @@ import { T } from '../world/terrain.ts';
 
 /** Track prices carried over from the old game: grass and forest $5, hills $15. Bridges by distance from land. */
 export const TRACK_COST = { flat: 5, hills: 15, bridge: [0, 500, 1500, 3500], double: 10 };
-/** A bridge may reach at most this many squares out from land. */
+/** A bridge may reach at most this many squares out from land, and be at most this long. */
 export const BRIDGE_MAX_FROM_LAND = 3;
+export const BRIDGE_MAX_LEN = 8;
+/** Bridge kinds by how far out from land they reach: wooden trestle, stone viaduct, steel truss. */
+export const BRIDGE_NAMES = ['', 'Wooden trestle', 'Stone viaduct', 'Steel truss'];
 
 /** Squares from the nearest land (0 on land). Computed lazily per world. */
 const landDistCache = new WeakMap<object, Int16Array>();
@@ -54,6 +57,7 @@ export function bridgeJoinsIslands(g: Game, water: Iterable<number>, isTrack: (i
       }
     }
     if (islands.size > 1) return 'A bridge can\'t join two islands: build a dock and ship goods across';
+    if (q.length > BRIDGE_MAX_LEN) return `A bridge can be at most ${BRIDGE_MAX_LEN} squares long (this one is ${q.length})`;
   }
   return '';
 }

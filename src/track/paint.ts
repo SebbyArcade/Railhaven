@@ -2,7 +2,8 @@ import type { Game } from '../state.ts';
 import { bridgeJoinsIslands, squareCost } from './rules.ts';
 import { layPath } from './edit.ts';
 import { stationLinkError } from '../buildings/stations.ts';
-import type { TrackMap } from './types.ts';
+import type { TrackMap, TrackSquare } from './types.ts';
+import { reveal } from '../world/fog.ts';
 
 /** The track as it would be with this stroke laid (copies only what it touches). */
 function withPath(g: Game, path: number[]): TrackMap {
@@ -74,10 +75,32 @@ export function planError(g: Game, p: PaintPlan): string {
   return '';
 }
 
-export function buildPlan(g: Game, p: PaintPlan): string {
+/** What one built stroke changed, so it can be undone. */
+export interface BuiltStroke {
+  /** track squares as they were before (undefined = no track there) */
+  before: [number, TrackSquare | undefined][];
+  cost: number;
+  /** fog squares the new track uncovered: such a stroke can't be undone */
+  revealed: number;
+}
+
+/** Track uncovers the land around it, this many squares out. */
+export const TRACK_REVEAL = 3;
+
+export function buildPlan(g: Game, p: PaintPlan): BuiltStroke | string {
   const e = planError(g, p);
   if (e) return e;
-  g.s.money -= planCost(g, p);
-  layPath(g.track, g.world.n, p.path);
-  return '';
+  const n = g.world.n, cost = planCost(g, p), fresh = p.path.filter(i => !g.track.has(i));
+  const before: BuiltStroke['before'] = [...new Set(p.path)].map(i => { const o = g.track.get(i); return [i, o && { ...o }]; });
+  g.s.money -= cost;
+  layPath(g.track, n, p.path);
+  let revealed = 0;
+  for (const i of fresh) revealed += reveal(g, i % n, (i / n) | 0, TRACK_REVEAL);
+  return { before, cost, revealed };
+}
+
+/** Put the track back as it was before a stroke and refund it. */
+export function undoStroke(g: Game, b: BuiltStroke) {
+  for (const [i, o] of b.before) { if (o) g.track.set(i, { ...o }); else g.track.delete(i); }
+  g.s.money += b.cost;
 }

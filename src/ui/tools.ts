@@ -1,6 +1,6 @@
 import type { Game } from '../state.ts';
 import { trackChanged } from '../game.ts';
-import { buildPlan, extendPlan, isAnchor, type PaintPlan, planCost, planError, startPlan } from '../track/paint.ts';
+import { type BuiltStroke, buildPlan, extendPlan, isAnchor, type PaintPlan, planCost, planError, startPlan, undoStroke } from '../track/paint.ts';
 import { removeSquare } from '../track/edit.ts';
 import { TRACK_COST } from '../track/rules.ts';
 import { placeTrain } from '../trains/train.ts';
@@ -25,6 +25,8 @@ export class Tools {
   removeAt: number | null = null;
   selected: number | null = null;
   flash: { square: number; until: number } | null = null;
+  /** the last stroke built, while it can still be undone */
+  lastStroke: BuiltStroke | null = null;
 
   constructor(private g: () => Game) {}
 
@@ -98,6 +100,23 @@ export class Tools {
     return false;
   }
 
+  /** can the last stroke be undone right now (no train on its new squares)? */
+  canUndo(): boolean {
+    const g = this.g(), b = this.lastStroke;
+    if (!b || this.mode !== 'rail') return false;
+    const fresh = new Set(b.before.filter(([, o]) => !o).map(([i]) => i));
+    return !g.s.trains.some(t => t.trail.some(s => g.net.pieces[s.piece]!.squares.some(q => fresh.has(q))));
+  }
+
+  undo() {
+    const g = this.g(), b = this.lastStroke;
+    if (!b) return;
+    if (!this.canUndo()) { toast('A train is on that track'); return; }
+    undoStroke(g, b); this.lastStroke = null; this.plan = null;
+    trackChanged(g); g.terrainDirty?.(b.before.map(([i]) => i));
+    toast(`Undone · ${fmtMoney(b.cost)} back`);
+  }
+
   // ---- the confirm bar
   bar(): { text: string; ok: string; can: boolean } | null {
     const g = this.g();
@@ -116,17 +135,20 @@ export class Tools {
   confirm() {
     const g = this.g();
     if (this.mode === 'rail' && this.plan) {
-      const e = buildPlan(g, this.plan); if (e) { toast(e); return; }
+      const b = buildPlan(g, this.plan); if (typeof b === 'string') { toast(b); return; }
+      this.lastStroke = b.revealed ? null : b;
+      if (b.revealed) toast('New land uncovered! (Track that uncovers land can\'t be undone)');
       trackChanged(g); g.terrainDirty?.(this.plan.path);
       this.plan = { path: [this.plan.path.at(-1)!] };
     } else if (this.mode === 'double') {
       const add = [...this.dbl].filter(i => g.track.has(i) && !g.track.get(i)!.dbl), c = add.length * TRACK_COST.double;
       if (c > g.s.money) { toast('Not enough money'); return; }
-      g.s.money -= c; for (const i of add) g.track.get(i)!.dbl = true;
+      g.s.money -= c; for (const i of add) g.track.get(i)!.dbl = true; this.lastStroke = null;
       trackChanged(g); this.dbl.clear();
     } else if (this.mode === 'remove' && this.removeAt !== null) {
       const i = this.removeAt;
       if (g.s.trains.some(t => t.trail.some(s => g.net.pieces[s.piece]!.squares.includes(i)))) { toast('A train is on this track'); return; }
+      this.lastStroke = null;
       removeSquare(g.track, g.world.n, i); trackChanged(g); g.terrainDirty?.([i]); this.removeAt = null;
     }
   }
