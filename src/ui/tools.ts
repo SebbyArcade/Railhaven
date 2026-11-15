@@ -17,11 +17,11 @@ export type Mode = 'pan' | 'rail' | 'double' | 'remove' | 'train' | 'build' | 's
 
 export const MODE_HINT: Record<Mode, string> = {
   pan: '',
-  rail: '🛤 Drag from your track (or Ashford), or tap the track then tap where the line should go: it runs straight, turning once. ✓ Build when done.',
+  rail: '🛤 Drag outward from your track (from Ashford at first). To join a town, lay track across its glowing square, or straight past right beside it. ✓ Build when done.',
   double: '═ Tap or drag along your track to make it double. Trains keep left, so two can pass.',
   remove: '✂ Tap a track square to remove it.',
   train: '🚂 Trains roll out of the engine shed and run themselves: each takes the best waiting load where it is needed.',
-  build: '🏗 Drag the outline where you want it: blue squares are its loading tracks, green its building. ⟳ Turn rotates it.',
+  build: '🏗 Drag the picture where you want it. Blue row = loading track: your rails join it in line, at either end (gold arrows), from any distance. ⟳ Turn rotates it.',
   scout: '🔭 Tap a glowing town (scouts on foot) or dock (a boat), then drag or tap to draw the route into the fog.',
 };
 
