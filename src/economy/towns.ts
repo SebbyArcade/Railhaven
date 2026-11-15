@@ -104,12 +104,15 @@ export function townRoom(g: Game, t: Site, k: Good): { order: number; steady: nu
 }
 export const townWants = (g: Game, t: Site, k: Good) => { const r = townRoom(g, t, k); return r.order + r.steady > 0 || steadyGoods(t, g).includes(k) || !!orderOf(g, t)[k]; };
 
-/** Unload goods at a town: fills the order first, then steady demand, the rest is surplus. Returns the units in each part. */
-export function deliverToTown(g: Game, t: Site, k: Good, n: number) {
-  const r = townRoom(g, t, k), order = Math.min(n, r.order), steady = Math.min(n - order, r.steady), surplus = n - order - steady;
+/**
+ * Unload goods at a town: fills the order first, then a capital's 🤝 trade order (up to `tradeLeft`, counted by the
+ * caller), then steady demand, the rest is surplus. Returns the units in each part.
+ */
+export function deliverToTown(g: Game, t: Site, k: Good, n: number, tradeLeft = 0) {
+  const r = townRoom(g, t, k), order = Math.min(n, r.order), trade = Math.min(n - order, tradeLeft), steady = Math.min(n - order - trade, r.steady), surplus = n - order - trade - steady;
   if (order) { (t.got ??= {})[k] = (t.got[k] ?? 0) + order; }
   if (steady) (t.steady ??= {})[k] = (t.steady[k] ?? 0) - steady;
-  return { order, steady, surplus };
+  return { order, trade, steady, surplus };
 }
 
 /** Steady demand refills; people move in as the order fills. */

@@ -1,4 +1,6 @@
 import { sizeName, stepOf } from '../economy/towns.ts';
+import { isCapital, tradeOf } from '../economy/trade.ts';
+import { GOODS } from '../buildings/industries.ts';
 import { looks } from './looks.ts';
 import { hash } from '../core/rng.ts';
 import type { Game, Site } from '../state.ts';
@@ -84,7 +86,9 @@ function drawTown(ctx: CanvasRenderingContext2D, g: Game, s: Site, tm: number, z
   // name board
   const fs = Math.max(11, 12 / Math.min(1, zoom));
   ctx.font = `700 ${fs}px Georgia,serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  const label = s.name ?? '', tw = ctx.measureText(label).width + 12;
+  // 👑 region capitals, once there is more than one region
+  const cap = !!g.s.caps && Object.keys(g.s.caps).length > 0 && isCapital(g, s);
+  const label = (cap ? '👑 ' : '') + (s.name ?? ''), tw = ctx.measureText(label).width + 12;
   // the board sits in the middle of the town: below the town square, or among the houses round a station beside it
   const Hb = fs * 1.75 + 14;
   const { LX, BT } = labelAt(g.s.seed, s, hall, g.world.n, tw, Hb);
@@ -93,7 +97,8 @@ function drawTown(ctx: CanvasRenderingContext2D, g: Game, s: Site, tm: number, z
   ctx.fillStyle = '#ffe9c4'; ctx.fillText(label, LX, BT + (fs + 6) / 2 + 1);
   if (zoom >= 1.15) {
     ctx.font = `600 ${fs * 0.75}px system-ui`; ctx.fillStyle = 'rgba(20,18,14,.75)';
-    const sz = townSize(s) + (pop > 0 ? ' · 👥 ' + Math.floor(pop) : ''), sw = ctx.measureText(sz).width + 10;
+    const tr = tradeOf(g, s);
+    const sz = townSize(s) + (pop > 0 ? ' · 👥 ' + Math.floor(pop) : '') + (tr ? ` · 🤝 ${GOODS[tr.good].icon} ${tr.got}/${tr.need}` : ''), sw = ctx.measureText(sz).width + 10;
     ctx.fillRect(LX - sw / 2, BT + fs + 8, sw, fs * 0.75 + 5);
     ctx.fillStyle = '#f3e6c8'; ctx.fillText(sz, LX, BT + fs + 8 + (fs * 0.75 + 5) / 2 + 1);
   }

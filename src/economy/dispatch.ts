@@ -6,7 +6,7 @@ import { type Building, GOODS, type Good, INDUSTRIES, isLinked, yardSquares } fr
 import { hallOf } from '../buildings/stations.ts';
 import { shedSiding } from '../buildings/shed.ts';
 import { bldDist, bldOf, destName, destSquares, dockKey, factoryRoom, payFor, type Plan, railDist, type Ship, shipPlan, siteOf } from './shipping.ts';
-import { isDock, islandOfB } from '../ships/docks.ts';
+import { isDock, islandName, islandOfB } from '../ships/docks.ts';
 import { tickShips } from '../ships/ships.ts';
 import { tickScouts } from '../world/explore.ts';
 import { reachedIslands, tickMissions } from '../progress/missions.ts';
@@ -15,6 +15,7 @@ import { V_MAX } from '../trains/train.ts';
 import { isRev } from '../track/route.ts';
 import { GRAND_LOAD, hasGrandStation, payMul, rewardMul } from '../buildings/parks.ts';
 import { BRIDGE_UPKEEP, bridgeSquares } from '../track/rules.ts';
+import { tickTrade, tradeDelivered, tradeRoom } from './trade.ts';
 import { deliverToTown, orderDone, reward, sizeName, stepOf } from './towns.ts';
 
 export const LOAD_TIME = 4;
@@ -163,7 +164,7 @@ function bestJob(g: Game, t: Train, plan: Plan): { b: Building; k: Good; ship: S
 function divert(g: Game, t: Train, plan: Plan) {
   const best = bestJob(g, t, plan);
   if (best) {
-    t.job = { src: best.b.id, to: best.ship.to, good: best.k, phase: 'toLoad', timer: 0, ...(best.ship.sea !== undefined ? { sea: best.ship.sea } : {}) };
+    t.job = { src: best.b.id, to: best.ship.to, good: best.k, phase: 'toLoad', timer: 0, ...(best.ship.sea !== undefined ? { sea: best.ship.sea } : {}), ...(best.ship.then !== undefined ? { then: best.ship.then } : {}) };
     if (g.sys.sendToArea(t, yardSquares(g.world.n, best.b))) return;
     endJob(t);
   }
@@ -195,7 +196,7 @@ function unload(g: Game, t: Train) {
   g.s.loads = (g.s.loads ?? 0) + 1; // train loads delivered (for achievements)
   if (j.to.kind === 'bld' && isDock(bldOf(g, j.to.id)!)) { // a dock: the goods wait for a ship (or stay landed for this island)
     const d = bldOf(g, j.to.id)!;
-    if (j.sea !== undefined) { const q = (d.outq ??= []).find(x => x.to === j.sea && x.good === k); if (q) q.n += c.n; else d.outq.push({ good: k, n: c.n, to: j.sea }); }
+    if (j.sea !== undefined) { const q = (d.outq ??= []).find(x => x.to === j.sea && x.good === k && x.then === j.then); if (q) q.n += c.n; else d.outq.push({ good: k, n: c.n, to: j.sea, ...(j.then !== undefined ? { then: j.then } : {}) }); }
     else (d.landed ??= {})[k] = (d.landed[k] ?? 0) + c.n;
     const v = payFor(k, c.n, c.d, 'factory'); pay(g, v);
     t.lastPay = { pay: Math.round(v), at: g.s.t, n: c.n, good: k, to: j.to };
@@ -211,8 +212,8 @@ function unload(g: Game, t: Train) {
     t.cargo = undefined; endJob(t); return;
   }
   const town = siteOf(g, j.to.id)!;
-  const p = deliverToTown(g, town, k, c.n);
-  let v = (payFor(k, p.order, c.d, 'order') + payFor(k, p.steady, c.d, 'steady') + payFor(k, p.surplus, c.d, 'extra')) * payMul(g, town); // 🏛 town projects pay more
+  const p = deliverToTown(g, town, k, c.n, tradeRoom(g, town, k));
+  let v = (payFor(k, p.order + p.trade, c.d, 'order') + payFor(k, p.steady, c.d, 'steady') + payFor(k, p.surplus, c.d, 'extra')) * payMul(g, town); // 🏛 town projects pay more
   v -= rushDelivered(g, j.to, k, p.order, v); pay(g, v);
   t.lastPay = { pay: Math.round(v), at: g.s.t, n: c.n, good: k, to: j.to };
   if (!town.filled && orderDone(g, town)) {
@@ -220,6 +221,13 @@ function unload(g: Game, t: Train) {
     const r = Math.round(reward(stepOf(town)) * fallsMul(g, town.x, town.y) * rewardMul(g)); pay(g, r); // ⛪ Cathedral +5%
     g.s.orders = (g.s.orders ?? 0) + 1;
     news(g, `✅ ${town.name}'s order is filled! +$${r.toLocaleString('en-US')} · tap ⬆ to grow it into a ${sizeName(stepOf(town) + 1)}`);
+    checkLevel(g);
+  }
+  const tr = tradeDelivered(g, town, p.trade);
+  if (tr) { // 🤝 a trade order filled: it counts as a filled order too
+    const o = g.s.trade![g.world.islandOf[town.y * g.world.n + town.x]!]!, r = Math.round(tr * rewardMul(g)); pay(g, r);
+    g.s.orders = (g.s.orders ?? 0) + 1; g.s.tradeDone = (g.s.tradeDone ?? 0) + 1;
+    news(g, `🤝 ${town.name}'s trade order is filled: ${o.need} ${GOODS[o.good].icon} from ${islandName(g, o.from)}! +$${r.toLocaleString('en-US')}`);
     checkLevel(g);
   }
   t.cargo = undefined; endJob(t);
@@ -239,7 +247,7 @@ function nearestTown(g: Game, t: Train): { kind: 'town'; id: number } | null {
 /** Goods trains run themselves: each idle train collects the best waiting load and takes it where the plan says. */
 export function tickTrains(g: Game, dt: number) {
   tickShips(g, dt); tickScouts(g, dt);
-  if (Math.floor(g.s.t) !== Math.floor(g.s.t - dt)) { tickMissions(g); if (Math.floor(g.s.t) % 5 === 0) checkLevel(g); } // reaching an island can let a held level through
+  if (Math.floor(g.s.t) !== Math.floor(g.s.t - dt)) { tickMissions(g); if (Math.floor(g.s.t) % 5 === 0) { checkLevel(g); tickTrade(g); } } // reaching an island can let a held level through
   let plan: Plan | null = null;
   const P = () => (plan ??= shipPlan(g));
   const fm = fleetMul(g.s.trains.length) * fleetMulOf(g, 'rep');
@@ -258,7 +266,7 @@ export function tickTrains(g: Game, dt: number) {
       if ((t.idle = (t.idle ?? 0) - dt) > 0) continue;
       t.idle = 2; // look again every 2 s
       const best = bestJob(g, t, P()); if (!best) continue;
-      t.job = { src: best.b.id, to: best.ship.to, good: best.k, phase: 'toLoad', timer: 0, ...(best.ship.sea !== undefined ? { sea: best.ship.sea } : {}) };
+      t.job = { src: best.b.id, to: best.ship.to, good: best.k, phase: 'toLoad', timer: 0, ...(best.ship.sea !== undefined ? { sea: best.ship.sea } : {}), ...(best.ship.then !== undefined ? { then: best.ship.then } : {}) };
       if (!g.sys.sendToArea(t, yardSquares(g.world.n, best.b))) endJob(t);
       continue;
     }
@@ -275,7 +283,7 @@ export function tickTrains(g: Game, dt: number) {
       const n = Math.min(trainCap(g), Math.floor(readyOf(src, j.good)));
       if (n <= 0) { endJob(t); continue; }
       if (isDock(src)) src.landed![j.good as Good]! -= n; else src.stock -= n;
-      const ship = planFor(P(), src, j.good); if (ship) { j.to = ship.to; j.sea = ship.sea; }
+      const ship = planFor(P(), src, j.good); if (ship) { j.to = ship.to; j.sea = ship.sea; j.then = ship.then; }
       t.cargo = { good: j.good, n, d: ship?.d ?? 8 };
       j.phase = 'toDrop'; sendLoaded(g, t);
     } else if (j.phase === 'toDrop') {

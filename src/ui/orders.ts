@@ -4,6 +4,8 @@ import { maxLvlOf } from '../economy/upgrades.ts';
 import { reachedIslands } from '../progress/missions.ts';
 import { capOf, GOODS, type Good, INDUSTRIES, isFactory, isLinked } from '../buildings/industries.ts';
 import { factoryState } from '../economy/production.ts';
+import { capitalOf, tradeOf, tradeWhy } from '../economy/trade.ts';
+import { islandName } from '../ships/docks.ts';
 import { orderDone, orderOf, orderProgress, sizeName, stepOf, townLinked, upgradePrice } from '../economy/towns.ts';
 import { bldDist, destSquares, shipPlan } from '../economy/shipping.ts';
 import { jams } from '../economy/jams.ts';
@@ -115,6 +117,15 @@ export function ordersHtml(g: Game): string {
     const ord = orderOf(g, t), p = orderProgress(g, t);
     const goods = (Object.keys(ord) as Good[]).map(k => { const need = ord[k]!, got = Math.min(need, Math.floor(t.got?.[k] ?? 0)); return `<span class="chip2${got >= need ? ' ok' : ''}">${GOODS[k].icon} ${got}/${need}</span>`; }).join(' ');
     h += `<div class="row"><b class="ico">${p >= 1 ? '⬆' : '🏘'}</b><div class="grow"><div class="line"><span>${esc(t.name ?? 'Town')} · ${sizeName(stepOf(t))}</span><span>${Math.round(p * 100)}%</span></div>${bar(p, p >= 1 ? '#5cc46a' : '#e8a33c')}<div class="chips">${goods}</div></div>${open('town', t.id, '›')}</div>`;
+  }
+  // 🤝 trade orders between island capitals
+  const caps = Object.keys(g.s.trade ?? {}).map(Number).map(k => capitalOf(g, k)).filter((t): t is Site => !!t && !!tradeOf(g, t));
+  if (caps.length) {
+    h += `<h3>🤝 Trade between islands</h3>`;
+    for (const t of caps) {
+      const o = tradeOf(g, t)!, G = GOODS[o.good], why = tradeWhy(g, t, o);
+      h += `<div class="row"><b class="ico">${G.icon}</b><div class="grow"><div class="line"><span>👑 ${esc(t.name ?? 'Capital')} wants ${G.name.toLowerCase()} from ${esc(islandName(g, o.from))}</span><span>${o.got}/${o.need}</span></div>${bar(o.got / o.need, '#6bb8e8')}${why ? `<small class="why">⚠ ${why}</small>` : ''}</div>${open('town', t.id, '›')}</div>`;
+    }
   }
   const off = g.s.sites.filter(t => t.kind === 'town' && (t.pop ?? 0) > 0 && !townLinked(g, t)).length;
   if (off) h += `<div class="note">🔌 ${off} more town${off > 1 ? 's' : ''} you've found ${off > 1 ? 'are' : 'is'} not on the railway yet</div>`;
