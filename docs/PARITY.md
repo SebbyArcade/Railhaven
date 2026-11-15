@@ -20,7 +20,7 @@ that makes sense. Details for each line: `legacy/CHANGES.md` (search the version
 - [x] One finger pans, two fingers pinch, wheel zoom, zoom 0.1 to 3.4, default 1.8
 - [x] Terrain art from the old game (grass, shores, trees, mountains, moving water), cached in chunks
 - [x] Save every 5 s and when hidden; versioned save format with migrations
-- [ ] Seasons (colours per season)
+- [x] Seasons (colours per season)
 - [ ] Island name pills and info when zoomed out (v211)
 - [ ] Endless seas: rings of new islands when most are linked (planned, never built in the old game)
 

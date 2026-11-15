@@ -26,6 +26,7 @@ import { type Plan, shipPlan } from '../economy/shipping.ts';
 import { drawAlerts, drawShipArrow, drawTownBadges } from './orders.ts';
 import { stuckList } from '../ui/orders.ts';
 import { drawView, ViewCache } from './views.ts';
+import { seasonOf } from '../world/season.ts';
 import { shipPlace } from '../ships/ships.ts';
 
 /** Squares under a building (trees are cleared there). */
@@ -56,6 +57,7 @@ export class Renderer {
     ctx.translate(view.w / 2, view.h / 2); ctx.scale(cam.z, cam.z); ctx.translate(-cam.x, -cam.y);
     const [wx0, wy0] = toWorld(cam, view, 0, 0), [wx1, wy1] = toWorld(cam, view, view.w, view.h);
     const x0 = Math.floor(wx0 / TILE) - 1, y0 = Math.floor(wy0 / TILE) - 1, x1 = Math.ceil(wx1 / TILE) + 1, y1 = Math.ceil(wy1 / TILE) + 1;
+    this.terrain.setSeason(seasonOf(g.s.t));
     this.terrain.draw(ctx, x0, y0, x1, y1, cam.z);
     if (cam.z >= 0.6) {
       for (let y = Math.max(0, y0); y <= Math.min(n - 1, y1); y++) for (let x = Math.max(0, x0); x <= Math.min(n - 1, x1); x++)
@@ -93,6 +95,7 @@ export class Renderer {
     drawFog(ctx, g, x0, y0, x1, y1, cam.z, tm);
     this.drawIslandNames(ctx, cam.z);
     ctx.restore();
+    if (seasonOf(g.s.t) === 3) this.drawSnow(ctx, view, tm);
     const v = this.tools?.view; if (v) drawView(ctx, g, v, view, this.views.get(g, v, tm), tm, this.arrows);
   }
 
@@ -134,6 +137,16 @@ export class Renderer {
     if (t.selected !== null) {
       const tr = this.g.s.trains.find(x => x.id === t.selected);
       if (tr) { const p = bodyPoint(this.g.net, tr, 8); ctx.strokeStyle = '#ffd27a'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(p.x, p.y, 14 + Math.sin(tm * 5), 0, 7); ctx.stroke(); }
+    }
+  }
+
+  /** Winter: a few soft flakes drifting down the screen. */
+  private drawSnow(ctx: CanvasRenderingContext2D, view: View, tm: number) {
+    ctx.fillStyle = 'rgba(255,255,255,.75)';
+    for (let k = 0; k < 70; k++) {
+      const sx = (k * 137.5) % view.w, sp = 18 + (k % 7) * 5;
+      const y = ((tm * sp + k * 61.7) % (view.h + 20)) - 10, x = (sx + Math.sin(tm * 0.8 + k) * 12 + view.w) % view.w;
+      ctx.beginPath(); ctx.arc(x, y, 0.8 + (k % 3) * 0.5, 0, 7); ctx.fill();
     }
   }
 
