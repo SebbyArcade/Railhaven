@@ -2,7 +2,7 @@ import { hash } from '../core/rng.ts';
 import { capOf, type Building, INDUSTRIES, isLinked } from '../buildings/industries.ts';
 import type { Game } from '../state.ts';
 import { TILE } from '../world/terrain.ts';
-import { bush, cottage, logEnd, logSide, person, puff } from './art.ts';
+import { barrel, bush, cart, cottage, crate, dog, flowers, hayBale, hen, lamp, logEnd, logSide, person, pine, puff, sack, stoneWall } from './art.ts';
 
 const CRATE: Record<string, string> = { wood: '#8a5a2e', farm: '#d8b44a', stone: '#9a958c', coal: '#2e2b28', iron: '#8a5a4a', oil: '#3a3a48', wool: '#efeadf', sawmill: '#e0b878', brickworks: '#b5523b', gristmill: '#f4efe2', mill: '#9aa0a8', refinery: '#4a4a58', textile: '#5a7ab0', cannery: '#c0c6cc' };
 
@@ -29,6 +29,8 @@ export function drawBuilding(ctx: CanvasRenderingContext2D, g: Game, b: Building
     ctx.fillStyle = col; ctx.fillRect(u, -18.6, 5, 3.2);
     ctx.strokeStyle = 'rgba(0,0,0,.3)'; ctx.lineWidth = 0.4; ctx.strokeRect(u, -18.6, 5, 3.2);
   }
+  // half of all buildings are laid out the other way round along their yard (docks keep their pier and office as built)
+  if (b.kind !== 'dock' && H(1) < 0.5) ctx.scale(-1, 1);
   ART[b.kind](ctx, tm, H, b.lvl);
   ctx.restore();
   // name, when close or when it is the only thing that tells you what this is
@@ -51,135 +53,304 @@ export function drawBuilding(ctx: CanvasRenderingContext2D, g: Game, b: Building
 
 type Art = (ctx: CanvasRenderingContext2D, tm: number, H: (k: number) => number, lvl: number) => void;
 
-function house(ctx: CanvasRenderingContext2D, u: number, v: number, w: number, d: number, wall: string, roof: string) {
-  ctx.fillStyle = 'rgba(0,0,0,.25)'; ctx.fillRect(u - w / 2 + 1.5, v - d / 2 + 1.5, w, d);
-  ctx.fillStyle = wall; ctx.fillRect(u - w / 2, v - d / 2, w, d);
-  ctx.fillStyle = roof; ctx.fillRect(u - w / 2 - 0.8, v - d / 2 + d * 0.2, w + 1.6, d * 0.6);
-  ctx.fillStyle = 'rgba(255,255,255,.14)'; ctx.fillRect(u - w / 2 - 0.8, v - d / 2 + d * 0.2, w + 1.6, 0.8);
-}
-function smoke(ctx: CanvasRenderingContext2D, u: number, v: number, tm: number, dark = false) {
-  for (let k = 0; k < 2; k++) { const p = (tm * 0.5 + k * 0.5) % 1; ctx.fillStyle = dark ? `rgba(60,58,55,${0.45 * (1 - p)})` : `rgba(225,220,210,${0.4 * (1 - p)})`; ctx.beginPath(); ctx.arc(u + p * 3, v - p * 10, 1.4 + p * 3, 0, 7); ctx.fill(); }
+/** Pick one of a few looks from a building's own random number (0..1). */
+const pick = <T,>(r: number, xs: readonly T[]): T => xs[Math.min(xs.length - 1, Math.floor(r * xs.length))]!;
+
+/** Wall and roof colours a factory hall may have: each factory gets one, so no two look quite alike. */
+const HALL_LOOKS: Record<string, readonly (readonly [string, string])[]> = {
+  sawmill: [['#b07a48', '#8a6a52'], ['#9a6a40', '#5e5a56'], ['#c09060', '#6e4a36']],
+  brickworks: [['#9a4a36', '#5e3428'], ['#a85a40', '#4a4848'], ['#8a3e2e', '#6a4a3a']],
+  gristmill: [['#d8cdb4', '#7a6a50'], ['#e6dcc4', '#5e6a72'], ['#cbbf9e', '#8a5a40']],
+  mill: [['#5a4e56', '#3a343a'], ['#6a5a50', '#3a3e44'], ['#4e5660', '#2e3238']],
+  refinery: [['#7a7e86', '#4a4e56'], ['#8a8478', '#4e4a44'], ['#6e7680', '#3e5266']],
+  textile: [['#a8705a', '#5e4038'], ['#b8805e', '#4a4e58'], ['#9a6050', '#6a4a3e']],
+  cannery: [['#e6e2d6', '#3f6a8a'], ['#e8dcc8', '#8a3a30'], ['#d8e0e2', '#4a5a4a']],
+};
+
+/**
+ * A factory hall: brick walls with a front wall of arched windows and a big door, a sawtooth roof of north lights,
+ * a loading bay with a canopy toward the yard tracks, a tall chimney (busy factories smoke).
+ */
+function hall(ctx: CanvasRenderingContext2D, tm: number, u: number, w: number, wall: string, roof: string, busy: boolean, lvl: number) {
+  const d = 22, v = 0, x0 = u - w / 2, y0 = v - d / 2, fw = 4.6; // fw: the front wall seen below the roof
+  ctx.fillStyle = 'rgba(0,0,0,.28)'; ctx.fillRect(x0 + 2, y0 + 2, w, d);
+  // front wall: brick courses, arched windows, the works door
+  ctx.fillStyle = wall; ctx.fillRect(x0, y0 + d - fw, w, fw);
+  ctx.strokeStyle = 'rgba(255,230,210,.16)'; ctx.lineWidth = 0.25;
+  for (let y = y0 + d - fw + 1; y < y0 + d; y += 1) { ctx.beginPath(); ctx.moveTo(x0, y); ctx.lineTo(x0 + w, y); ctx.stroke(); }
+  const wins = Math.max(3, Math.round(w / 5.5)), door = Math.floor(wins / 2);
+  for (let k = 0; k < wins; k++) {
+    const xx = x0 + (w / wins) * (k + 0.5);
+    if (k === door) { ctx.fillStyle = '#4a3424'; ctx.fillRect(xx - 2.2, y0 + d - fw + 0.8, 4.4, fw - 0.8); ctx.fillStyle = 'rgba(255,255,255,.15)'; ctx.fillRect(xx - 0.1, y0 + d - fw + 0.8, 0.2, fw - 0.8); continue; }
+    ctx.fillStyle = '#efe6d2'; ctx.beginPath(); ctx.roundRect(xx - 1.2, y0 + d - fw + 0.9, 2.4, 2.6, [1.2, 1.2, 0, 0]); ctx.fill();
+    ctx.fillStyle = busy ? '#e8c070' : '#6f93a8'; ctx.beginPath(); ctx.roundRect(xx - 0.9, y0 + d - fw + 1.2, 1.8, 2.2, [0.9, 0.9, 0, 0]); ctx.fill();
+  }
+  ctx.fillStyle = 'rgba(0,0,0,.3)'; ctx.fillRect(x0, y0 + d - 0.6, w, 0.6);
+  // the roof: teeth of dark slope and glass catching the light
+  const rd = d - fw, teeth = Math.max(3, Math.round(w / 7)), tw = w / teeth;
+  for (let k = 0; k < teeth; k++) {
+    const x = x0 + k * tw;
+    ctx.fillStyle = roof; ctx.fillRect(x + 0.3, y0, tw - 0.6, rd);
+    ctx.fillStyle = 'rgba(255,255,255,.18)'; ctx.fillRect(x + 0.3, y0, (tw - 0.6) * 0.45, rd);
+    ctx.fillStyle = 'rgba(200,225,240,.9)'; ctx.fillRect(x + tw - 2.4, y0 + 0.6, 1.8, rd - 1.2);
+    ctx.fillStyle = 'rgba(255,255,255,.5)'; ctx.fillRect(x + tw - 2.4, y0 + 0.6, 0.5, rd - 1.2);
+    ctx.fillStyle = 'rgba(0,0,0,.35)'; ctx.fillRect(x + tw - 0.6, y0, 0.6, rd);
+  }
+  ctx.fillStyle = 'rgba(0,0,0,.4)'; ctx.fillRect(x0, y0 + rd - 0.5, w, 0.6); // gutter
+  ctx.strokeStyle = 'rgba(0,0,0,.45)'; ctx.lineWidth = 0.6; ctx.strokeRect(x0, y0, w, d);
+  // loading bay toward the yard tracks: a canopy on posts over a doorway, a hand truck by it
+  const lu = u - w * 0.15;
+  ctx.fillStyle = 'rgba(0,0,0,.25)'; ctx.fillRect(lu - 5 + 0.8, y0 - 3.4 + 0.8, 10, 3.4);
+  ctx.fillStyle = '#5b6066'; ctx.fillRect(lu - 5, y0 - 3.4, 10, 3.4);
+  ctx.fillStyle = 'rgba(255,255,255,.18)'; ctx.fillRect(lu - 5, y0 - 3.4, 10, 0.8);
+  ctx.strokeStyle = 'rgba(0,0,0,.3)'; ctx.lineWidth = 0.25; for (let x = lu - 4; x < lu + 5; x += 1.6) { ctx.beginPath(); ctx.moveTo(x, y0 - 3.4); ctx.lineTo(x, y0); ctx.stroke(); }
+  // chimney: taller by level, banded
+  const cx = u + w / 2 - 4, cy = y0 + 3, r = 2.6 + lvl * 0.4;
+  ctx.fillStyle = 'rgba(0,0,0,.3)'; ctx.beginPath(); ctx.arc(cx + 2 + lvl * 0.6, cy + 2 + lvl * 0.6, r, 0, 7); ctx.fill();
+  ctx.fillStyle = '#7a3a2a'; ctx.beginPath(); ctx.arc(cx, cy, r, 0, 7); ctx.fill();
+  ctx.strokeStyle = '#d8c8a8'; ctx.lineWidth = 0.4; ctx.beginPath(); ctx.arc(cx, cy, r * 0.8, 0, 7); ctx.stroke();
+  ctx.fillStyle = '#2a211c'; ctx.beginPath(); ctx.arc(cx, cy, r * 0.5, 0, 7); ctx.fill();
+  if (busy) puff(ctx, cx, cy - 2, tm, true, 0.9 + lvl * 0.15);
 }
 
-/** A factory hall: brick walls, a sawtooth roof of north lights, a tall chimney (busy factories smoke). */
-function hall(ctx: CanvasRenderingContext2D, tm: number, u: number, w: number, wall: string, roof: string, busy: boolean, lvl: number) {
-  const d = 22, v = 0;
-  ctx.fillStyle = 'rgba(0,0,0,.28)'; ctx.fillRect(u - w / 2 + 2, v - d / 2 + 2, w, d);
-  ctx.fillStyle = wall; ctx.fillRect(u - w / 2, v - d / 2, w, d);
-  ctx.strokeStyle = 'rgba(0,0,0,.45)'; ctx.lineWidth = 0.8; ctx.strokeRect(u - w / 2, v - d / 2, w, d);
-  const teeth = Math.max(3, Math.round(w / 7));
-  for (let k = 0; k < teeth; k++) { // each tooth: dark slope and a strip of glass catching the light
-    const x = u - w / 2 + k * (w / teeth);
-    const tw = w / teeth;
-    ctx.fillStyle = roof; ctx.fillRect(x + 0.5, v - d / 2 + 1, tw - 1, d - 2);
-    ctx.fillStyle = 'rgba(255,255,255,.18)'; ctx.fillRect(x + 0.5, v - d / 2 + 1, (tw - 1) * 0.45, d - 2); // the slope facing the light
-    ctx.fillStyle = 'rgba(200,225,240,.9)'; ctx.fillRect(x + tw - 2.4, v - d / 2 + 1, 1.8, d - 2); // north-light glazing
-    ctx.fillStyle = 'rgba(0,0,0,.35)'; ctx.fillRect(x + tw - 0.6, v - d / 2 + 1, 0.6, d - 2);
+/** The ground of a works: packed gravel with a kerb, puddles, weeds at the edge, a fence with a gate at the front. */
+function worksGround(ctx: CanvasRenderingContext2D, H: (k: number) => number, col: string) {
+  ctx.fillStyle = col; ctx.beginPath(); ctx.roundRect(-59, -14, 118, 28, 4); ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,.12)'; ctx.fillRect(-59, -14, 118, 0.7);
+  for (let k = 0; k < 60; k++) { ctx.fillStyle = k % 3 ? 'rgba(40,36,30,.35)' : 'rgba(255,250,235,.3)'; ctx.fillRect(-57 + H(300 + k) * 114, -12 + H(400 + k) * 24, 0.7, 0.6); }
+  for (let k = 0; k < 2; k++) { ctx.fillStyle = 'rgba(120,150,170,.45)'; ctx.beginPath(); ctx.ellipse(-40 + H(450 + k) * 90, 11 + H(460 + k) * 1.5, 2.2 + H(470 + k) * 2, 0.8, 0, 0, 7); ctx.fill(); }
+  for (let k = 0; k < 14; k++) { ctx.fillStyle = k % 2 ? '#5f8a3a' : '#4e7a30'; ctx.fillRect(-58 + H(480 + k) * 116, H(490 + k) > 0.5 ? 12.6 : -13.6, 1, 0.8); }
+  // fence along the front, with a gate
+  const gate = -20 + H(495) * 50;
+  ctx.strokeStyle = '#3a3532'; ctx.lineWidth = 0.35;
+  for (const [a, b] of [[-58, gate - 4], [gate + 4, 58]] as const) {
+    ctx.beginPath(); ctx.moveTo(a, 14); ctx.lineTo(b, 14); ctx.stroke();
+    for (let x = a; x <= b; x += 2.2) { ctx.fillStyle = '#3a3532'; ctx.fillRect(x - 0.25, 13.6, 0.5, 0.8); }
   }
-  // chimney: taller by level
-  const cx = u + w / 2 - 4, cy = v - d / 2 + 3, r = 2.6 + lvl * 0.4;
-  ctx.fillStyle = 'rgba(0,0,0,.3)'; ctx.beginPath(); ctx.arc(cx + 2, cy + 2, r, 0, 7); ctx.fill();
-  ctx.fillStyle = '#7a3a2a'; ctx.beginPath(); ctx.arc(cx, cy, r, 0, 7); ctx.fill();
-  ctx.fillStyle = '#2a211c'; ctx.beginPath(); ctx.arc(cx, cy, r * 0.5, 0, 7); ctx.fill();
-  if (busy) smoke(ctx, cx, cy - 2, tm, true);
+  ctx.fillStyle = '#6a5a4a'; ctx.fillRect(gate - 4.4, 13, 0.9, 2); ctx.fillRect(gate + 3.5, 13, 0.9, 2);
 }
+
+/**
+ * Small things that make each building its own: chosen by its random numbers from a pool, set down at the free spots
+ * its layout leaves (u, v in the building's frame). A spot may stay empty.
+ */
+function extras(ctx: CanvasRenderingContext2D, tm: number, H: (k: number) => number, spots: readonly (readonly [number, number])[], pool: readonly string[]) {
+  spots.forEach(([u, v], k) => {
+    const r = H(800 + k); if (r < 0.2) return;
+    const what = pick(H(820 + k), pool), s = (j: number) => H(840 + k * 10 + j);
+    switch (what) {
+      case 'barrels': for (let j = 0; j < 3; j++) barrel(ctx, u + (j % 2) * 3.2 - 1.6, v + (j > 1 ? 2.8 : 0) - 1.4, pick(s(j), ['#7a5230', '#5a5a62', '#8a3a2e'])); break;
+      case 'sacks': for (let j = 0; j < 4; j++) sack(ctx, u + (j % 2) * 3 - 1.5, v + (j > 1 ? 2.2 : 0) - 1.1); break;
+      case 'crates': crate(ctx, u - 3, v - 1.4); crate(ctx, u + 0.2, v - 1.4); crate(ctx, u - 1.4, v - 3.6, 2.6, '#b08a54'); break;
+      case 'worker': person(ctx, u, v, pick(s(1), ['#3f5a7a', '#a8402e', '#5a6a3a', '#6a5a4a']), pick(s(2), ['#3a2a1e', '#d0a020', '#2e2a26'])); break;
+      case 'workers': person(ctx, u - 1.6, v, pick(s(1), ['#3f5a7a', '#a8402e', '#5a6a3a'])); person(ctx, u + 1.6, v + 0.6, pick(s(2), ['#6a5a4a', '#2e4a6a', '#8a6a3a'])); break;
+      case 'lamp': lamp(ctx, u, v, tm); break;
+      case 'tree': bush(ctx, u, v, 3 + s(1) * 1.4, pick(s(2), ['#3f6f30', '#4a7a36', '#356228'])); break;
+      case 'pine': pine(ctx, u, v, 3 + s(1) * 1.2); break;
+      case 'cart': cart(ctx, u, v, '#8a6038', pick(s(1), ['#c99a5b', '#9a958c', '#d8c8a0', undefined])); break;
+      case 'flowers': flowers(ctx, u, v, s); break;
+      case 'hens': for (let j = 0; j < 3; j++) hen(ctx, u + s(j) * 6 - 3, v + s(j + 3) * 3 - 1.5, tm, pick(s(j + 6), ['#f4efe2', '#b8763a', '#2e2a26'])); break;
+      case 'dog': dog(ctx, u, v, pick(s(1), ['#3a2c22', '#c89858', '#2a2624'])); break;
+      case 'bales': hayBale(ctx, u - 2, v); hayBale(ctx, u + 2, v + 0.6); break;
+    }
+  });
+}
+
+const WORKS = ['barrels', 'crates', 'worker', 'workers', 'lamp', 'tree', 'cart', 'sacks'] as const;
 
 const FACTORY_ART = {
   sawmill: (ctx, tm, H, lvl) => { // timber hall, a log pile going in and stacked planks coming out
-    hall(ctx, tm, -26, 36, '#b07a48', '#8a6a52', true, lvl);
-    for (let r = 0; r < 3; r++) for (let k = 0; k < 4 - (r % 2); k++) { const x = 4 + k * 4.4 + (r % 2) * 2.2, y = 8 - r * 3.2; ctx.fillStyle = '#7a4e28'; ctx.beginPath(); ctx.arc(x, y, 1.9, 0, 7); ctx.fill(); ctx.fillStyle = '#c99a5b'; ctx.beginPath(); ctx.arc(x, y, 0.9, 0, 7); ctx.fill(); }
-    for (let k = 0; k < 2 + lvl; k++) { ctx.fillStyle = k % 2 ? '#e0b878' : '#d2a868'; ctx.fillRect(28, 7 - k * 3, 20, 2.4); ctx.fillStyle = 'rgba(0,0,0,.2)'; ctx.fillRect(28, 9.4 - k * 3, 20, 0.6); }
-    const a = tm * 6; ctx.strokeStyle = '#c9ccd1'; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(-4, -8, 3, a, a + 5); ctx.stroke(); // the saw blade
-    void H;
+    worksGround(ctx, H, '#8f8270');
+    const [w, r] = pick(H(2), HALL_LOOKS.sawmill!);
+    hall(ctx, tm, -28, 34, w, r, true, lvl);
+    for (let row = 0; row < 3; row++) for (let k = 0; k < 4 - (row % 2); k++) logEnd(ctx, 4 + k * 4.4 + (row % 2) * 2.2, 8 - row * 3.2, 1.9);
+    for (let k = 0; k < 2 + lvl; k++) { ctx.fillStyle = k % 2 ? '#e0b878' : '#d2a868'; ctx.fillRect(28, 7 - k * 3, 20, 2.4); ctx.fillStyle = 'rgba(0,0,0,.2)'; ctx.fillRect(28, 9.4 - k * 3, 20, 0.6); ctx.fillStyle = 'rgba(160,110,60,.6)'; for (let x = 30; x < 48; x += 5) ctx.fillRect(x, 7 - k * 3, 0.4, 2.4); }
+    const a = tm * 6; ctx.strokeStyle = '#c9ccd1'; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(-6, -8, 3, a, a + 5); ctx.stroke();
+    for (let k = 0; k < 10; k++) { ctx.fillStyle = 'rgba(240,210,150,.8)'; ctx.fillRect(-2 + H(900 + k) * 10, -10 + H(910 + k) * 6, 0.6, 0.5); } // sawdust
+    extras(ctx, tm, H, [[-53, -6], [-53, 6], [22, -8], [53, -9], [16, 11]], WORKS);
   },
-  brickworks: (ctx, tm, H, lvl) => { // a round kiln glowing, a drying shed, stacks of red bricks
-    hall(ctx, tm, -30, 28, '#9a4a36', '#5e3428', false, lvl);
+  brickworks: (ctx, tm, H, lvl) => { // a round kiln glowing, a drying shed, stacks of red bricks, a clay heap
+    worksGround(ctx, H, '#94806c');
+    const [w, r] = pick(H(2), HALL_LOOKS.brickworks!);
+    hall(ctx, tm, -32, 26, w, r, false, lvl);
     const glow = 0.5 + 0.5 * Math.sin(tm * 2);
     ctx.fillStyle = 'rgba(0,0,0,.3)'; ctx.beginPath(); ctx.arc(2, 2, 10, 0, 7); ctx.fill();
     ctx.fillStyle = '#a0583c'; ctx.beginPath(); ctx.arc(0, 0, 10, 0, 7); ctx.fill();
+    ctx.strokeStyle = 'rgba(255,220,200,.2)'; ctx.lineWidth = 0.3; for (let rr = 7; rr < 10; rr += 1.2) { ctx.beginPath(); ctx.arc(0, 0, rr, 0, 7); ctx.stroke(); }
     ctx.fillStyle = '#7a3a28'; ctx.beginPath(); ctx.arc(0, 0, 6, 0, 7); ctx.fill();
     ctx.fillStyle = `rgba(255,${140 + 60 * glow},60,.9)`; ctx.beginPath(); ctx.arc(0, 0, 3, 0, 7); ctx.fill();
-    smoke(ctx, 0, -3, tm, true);
-    for (let k = 0; k < 3 + lvl; k++) { const x = 18 + (k % 3) * 9, y = 6 - Math.floor(k / 3) * 7; ctx.fillStyle = '#b5523b'; ctx.fillRect(x, y - 3, 7, 5); ctx.strokeStyle = 'rgba(60,20,10,.5)'; ctx.lineWidth = 0.4; ctx.strokeRect(x, y - 3, 7, 5); ctx.beginPath(); ctx.moveTo(x, y - 0.5); ctx.lineTo(x + 7, y - 0.5); ctx.stroke(); }
-    void H;
+    for (let k = 0; k < 4; k++) { const a = k * 1.571 + 0.4; ctx.fillStyle = `rgba(255,${150 + 60 * glow},70,.8)`; ctx.fillRect(Math.cos(a) * 9 - 0.7, Math.sin(a) * 9 - 0.7, 1.4, 1.4); } // fire holes
+    puff(ctx, 0, -3, tm, true);
+    for (let k = 0; k < 3 + lvl; k++) { const x = 18 + (k % 3) * 9, y = 6 - Math.floor(k / 3) * 7; ctx.fillStyle = 'rgba(0,0,0,.25)'; ctx.fillRect(x + 0.8, y - 2.2, 7, 5); ctx.fillStyle = '#b5523b'; ctx.fillRect(x, y - 3, 7, 5); ctx.strokeStyle = 'rgba(60,20,10,.5)'; ctx.lineWidth = 0.4; ctx.strokeRect(x, y - 3, 7, 5); ctx.beginPath(); ctx.moveTo(x, y - 0.5); ctx.lineTo(x + 7, y - 0.5); ctx.moveTo(x + 3.5, y - 3); ctx.lineTo(x + 3.5, y - 0.5); ctx.stroke(); }
+    ctx.fillStyle = '#9a6a4a'; ctx.beginPath(); ctx.ellipse(-12, 9, 5, 2.6, 0, 0, 7); ctx.fill(); ctx.fillStyle = '#b07a56'; ctx.beginPath(); ctx.ellipse(-13, 8.4, 2.6, 1.2, 0, 0, 7); ctx.fill(); // clay heap
+    extras(ctx, tm, H, [[-53, -6], [-53, 6], [14, -9], [53, -9], [52, 9]], WORKS);
   },
   gristmill: (ctx, tm, H, lvl) => { // a windmill with turning sails, the mill house and flour sacks
-    hall(ctx, tm, -28, 30, '#d8cdb4', '#7a6a50', false, lvl);
-    ctx.fillStyle = 'rgba(0,0,0,.3)'; ctx.beginPath(); ctx.arc(14, 2, 8, 0, 7); ctx.fill();
-    ctx.fillStyle = '#efe6d2'; ctx.beginPath(); ctx.arc(12, 0, 8, 0, 7); ctx.fill();
-    ctx.fillStyle = '#6e5a44'; ctx.beginPath(); ctx.arc(12, 0, 4.5, 0, 7); ctx.fill();
+    worksGround(ctx, H, '#988a72');
+    const [w, r] = pick(H(2), HALL_LOOKS.gristmill!);
+    hall(ctx, tm, -30, 28, w, r, false, lvl);
+    ctx.fillStyle = 'rgba(0,0,0,.3)'; ctx.beginPath(); ctx.arc(15, 2, 8, 0, 7); ctx.fill();
+    ctx.fillStyle = pick(H(3), ['#efe6d2', '#d8cfc0', '#e8d8b8']); ctx.beginPath(); ctx.arc(12, 0, 8, 0, 7); ctx.fill();
+    ctx.strokeStyle = 'rgba(0,0,0,.15)'; ctx.lineWidth = 0.3; for (let rr = 5.5; rr < 8; rr += 1.2) { ctx.beginPath(); ctx.arc(12, 0, rr, 0, 7); ctx.stroke(); }
+    ctx.fillStyle = pick(H(4), ['#6e5a44', '#4a5a6a', '#8a4a36']); ctx.beginPath(); ctx.arc(12, 0, 4.5, 0, 7); ctx.fill();
     const a = tm * 1.4; ctx.save(); ctx.translate(12, 0); ctx.rotate(a);
-    for (let k = 0; k < 4; k++) { ctx.rotate(Math.PI / 2); ctx.fillStyle = '#5b4330'; ctx.fillRect(-0.6, 2, 1.2, 14); ctx.fillStyle = 'rgba(240,232,214,.9)'; ctx.fillRect(0.6, 5, 3.2, 10); }
+    for (let k = 0; k < 4; k++) { ctx.rotate(Math.PI / 2); ctx.fillStyle = 'rgba(0,0,0,.18)'; ctx.fillRect(1.6, 3, 3.2, 13); ctx.fillStyle = '#5b4330'; ctx.fillRect(-0.6, 2, 1.2, 14); ctx.fillStyle = 'rgba(240,232,214,.92)'; ctx.fillRect(0.6, 5, 3.2, 10); ctx.strokeStyle = 'rgba(90,70,50,.5)'; ctx.lineWidth = 0.2; for (let y = 6; y < 15; y += 1.8) { ctx.beginPath(); ctx.moveTo(0.6, y); ctx.lineTo(3.8, y); ctx.stroke(); } }
     ctx.restore();
-    for (let k = 0; k < 2 + lvl; k++) { ctx.fillStyle = '#efe9d8'; ctx.beginPath(); ctx.ellipse(32 + (k % 3) * 6, 7 - Math.floor(k / 3) * 5, 2.6, 2, 0, 0, 7); ctx.fill(); ctx.strokeStyle = '#b8a888'; ctx.lineWidth = 0.4; ctx.stroke(); }
-    void H;
+    for (let k = 0; k < 2 + lvl * 2; k++) sack(ctx, 32 + (k % 4) * 4, 8 - Math.floor(k / 4) * 3, '#efe9d8');
+    extras(ctx, tm, H, [[-53, -6], [-53, 6], [36, -9], [53, -9], [52, 2]], ['sacks', 'cart', 'worker', 'hens', 'tree', 'flowers', 'lamp']);
   },
-  mill: (ctx, tm, H, lvl) => { // a steel works: two smoking stacks, furnace glow, steel beams
-    hall(ctx, tm, -22, 40, '#5a4e56', '#3a343a', true, lvl);
+  mill: (ctx, tm, H, lvl) => { // a steel works: two smoking stacks, furnace glow, steel beams, an ore bin
+    worksGround(ctx, H, '#7a7268');
+    const [w, r] = pick(H(2), HALL_LOOKS.mill!);
+    hall(ctx, tm, -24, 38, w, r, true, lvl);
     const glow = 0.5 + 0.5 * Math.sin(tm * 3);
-    ctx.fillStyle = `rgba(255,${120 + 80 * glow},40,.85)`; ctx.fillRect(-30, 8, 10, 2.4);
-    for (const x of [8, 16]) { ctx.fillStyle = '#4a4248'; ctx.beginPath(); ctx.arc(x, -6, 3.2, 0, 7); ctx.fill(); ctx.fillStyle = '#1e1a1c'; ctx.beginPath(); ctx.arc(x, -6, 1.6, 0, 7); ctx.fill(); smoke(ctx, x, -8, tm + x, true); }
-    for (let k = 0; k < 2 + lvl; k++) { ctx.fillStyle = '#9aa0a8'; ctx.fillRect(26, 8 - k * 3, 22, 2); ctx.fillStyle = '#6a7078'; ctx.fillRect(26, 9.4 - k * 3, 22, 0.6); }
-    void H;
+    ctx.fillStyle = `rgba(255,${120 + 80 * glow},40,.85)`; ctx.fillRect(-32, 8.2, 10, 1.8);
+    for (const x of [8, 16]) { ctx.fillStyle = 'rgba(0,0,0,.3)'; ctx.beginPath(); ctx.arc(x + 1.6, -4.4, 3.4, 0, 7); ctx.fill(); ctx.fillStyle = '#4a4248'; ctx.beginPath(); ctx.arc(x, -6, 3.2, 0, 7); ctx.fill(); ctx.strokeStyle = '#8a8288'; ctx.lineWidth = 0.4; ctx.beginPath(); ctx.arc(x, -6, 2.6, 0, 7); ctx.stroke(); ctx.fillStyle = '#1e1a1c'; ctx.beginPath(); ctx.arc(x, -6, 1.6, 0, 7); ctx.fill(); puff(ctx, x, -8, tm + x, true, 1.1); }
+    ctx.fillStyle = '#5a3a30'; ctx.fillRect(4, 3, 14, 7); ctx.fillStyle = '#7a4a3a'; for (let k = 0; k < 14; k++) ctx.fillRect(5 + H(930 + k) * 12, 4 + H(940 + k) * 5, 1, 0.8); // ore bin
+    for (let k = 0; k < 2 + lvl; k++) { ctx.fillStyle = 'rgba(0,0,0,.25)'; ctx.fillRect(26.6, 8.6 - k * 3, 22, 2); ctx.fillStyle = '#9aa0a8'; ctx.fillRect(26, 8 - k * 3, 22, 2); ctx.fillStyle = '#c8ccd2'; ctx.fillRect(26, 8 - k * 3, 22, 0.5); ctx.fillStyle = '#6a7078'; ctx.fillRect(26, 9.4 - k * 3, 22, 0.6); }
+    extras(ctx, tm, H, [[-53, -6], [-53, 6], [24, -9], [53, -9], [52, 10]], ['barrels', 'crates', 'worker', 'workers', 'lamp', 'cart']);
   },
-  refinery: (ctx, tm, H, lvl) => { // round tanks, pipes and a gas flare
-    hall(ctx, tm, -32, 24, '#7a7e86', '#4a4e56', false, lvl);
-    for (const [x, y, r] of [[-6, -2, 8], [12, 3, 7], [28, -2, 6]] as const) { ctx.fillStyle = 'rgba(0,0,0,.25)'; ctx.beginPath(); ctx.arc(x + 1.5, y + 1.5, r, 0, 7); ctx.fill(); ctx.fillStyle = '#d6d9de'; ctx.beginPath(); ctx.arc(x, y, r, 0, 7); ctx.fill(); ctx.strokeStyle = '#9a9ea6'; ctx.lineWidth = 0.7; ctx.beginPath(); ctx.arc(x, y, r * 0.6, 0, 7); ctx.stroke(); }
-    ctx.strokeStyle = '#8a8d92'; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(-20, 6); ctx.lineTo(40, 6); ctx.stroke();
-    ctx.fillStyle = '#5b6066'; ctx.fillRect(42, -8, 2, 14);
-    const f = Math.sin(tm * 9) * 0.8; ctx.fillStyle = 'rgba(255,170,40,.9)'; ctx.beginPath(); ctx.moveTo(41, -8); ctx.quadraticCurveTo(43 + f, -16, 45, -8); ctx.fill();
-    void lvl; void H;
+  refinery: (ctx, tm, H, lvl) => { // round tanks with ladders, pipes, a cracking tower and a gas flare
+    worksGround(ctx, H, '#7e786c');
+    const [w, r] = pick(H(2), HALL_LOOKS.refinery!);
+    hall(ctx, tm, -34, 22, w, r, false, lvl);
+    const tank = pick(H(3), [['#d6d9de', '#9a9ea6'], ['#e8e2d0', '#a89a7a'], ['#d6dcd2', '#8a9a8a']]);
+    const tanks = [[-8, -2, 8], [10, 3, 7], [26, -3, 6], [40, 5, 5]].slice(0, 2 + Math.min(2, lvl));
+    ctx.strokeStyle = '#8a8d92'; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(-22, 7); ctx.lineTo(44, 7); ctx.stroke(); ctx.strokeStyle = '#6a6d72'; ctx.lineWidth = 0.6; ctx.beginPath(); ctx.moveTo(-22, 9); ctx.lineTo(44, 9); ctx.stroke();
+    for (const [x, y, rr] of tanks) {
+      ctx.fillStyle = 'rgba(0,0,0,.25)'; ctx.beginPath(); ctx.arc(x! + 1.5, y! + 1.5, rr!, 0, 7); ctx.fill();
+      ctx.fillStyle = tank[0]!; ctx.beginPath(); ctx.arc(x!, y!, rr!, 0, 7); ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,.35)'; ctx.beginPath(); ctx.arc(x! - rr! * 0.3, y! - rr! * 0.3, rr! * 0.45, 0, 7); ctx.fill();
+      ctx.strokeStyle = tank[1]!; ctx.lineWidth = 0.7; ctx.beginPath(); ctx.arc(x!, y!, rr! * 0.6, 0, 7); ctx.stroke();
+      ctx.strokeStyle = '#5a5d62'; ctx.lineWidth = 0.3; ctx.beginPath(); ctx.moveTo(x! + rr! * 0.7, y! - rr! * 0.7); ctx.lineTo(x!, y!); ctx.stroke(); // ladder to the top
+    }
+    ctx.fillStyle = 'rgba(0,0,0,.3)'; ctx.fillRect(-19, -9, 5, 5); ctx.fillStyle = '#6a6e74'; ctx.fillRect(-20, -10, 4, 4); ctx.strokeStyle = '#a0a4aa'; ctx.lineWidth = 0.3; ctx.strokeRect(-20, -10, 4, 4); // cracking tower
+    ctx.fillStyle = '#5b6066'; ctx.fillRect(50, -10, 2, 14);
+    const f = Math.sin(tm * 9) * 0.8; ctx.fillStyle = 'rgba(255,170,40,.9)'; ctx.beginPath(); ctx.moveTo(49, -10); ctx.quadraticCurveTo(51 + f, -18, 53, -10); ctx.fill();
+    ctx.fillStyle = 'rgba(255,240,150,.9)'; ctx.beginPath(); ctx.moveTo(50, -10); ctx.quadraticCurveTo(51 + f * 0.6, -14, 52, -10); ctx.fill();
+    extras(ctx, tm, H, [[-53, -6], [-53, 6], [-14, 10], [52, 9]], ['barrels', 'barrels', 'worker', 'lamp', 'crates']);
   },
   textile: (ctx, tm, H, lvl) => { // a long weaving shed, wool bales in, rolls of coloured cloth out
-    hall(ctx, tm, -14, 52, '#a8705a', '#5e4038', true, lvl);
-    for (let k = 0; k < 3; k++) { ctx.fillStyle = '#f2eee4'; ctx.beginPath(); ctx.ellipse(-50 + k * 5, 8, 2.4, 2, 0, 0, 7); ctx.fill(); }
-    const cols = ['#c0392b', '#2f6f9a', '#e8a33c', '#5a9a4a'];
-    for (let k = 0; k < 2 + lvl; k++) { ctx.fillStyle = cols[k % 4]!; ctx.fillRect(18 + (k % 3) * 8, 6 - Math.floor(k / 3) * 5, 7, 3.4); ctx.fillStyle = 'rgba(255,255,255,.3)'; ctx.fillRect(18 + (k % 3) * 8, 6 - Math.floor(k / 3) * 5, 7, 0.8); }
-    void H;
+    worksGround(ctx, H, '#928472');
+    const [w, r] = pick(H(2), HALL_LOOKS.textile!);
+    hall(ctx, tm, -12, 48, w, r, true, lvl);
+    for (let k = 0; k < 4; k++) { ctx.fillStyle = 'rgba(0,0,0,.2)'; ctx.beginPath(); ctx.ellipse(-50.4 + (k % 2) * 5, 6.6 - (k > 1 ? 4 : 0), 2.4, 2, 0, 0, 7); ctx.fill(); ctx.fillStyle = '#f2eee4'; ctx.beginPath(); ctx.ellipse(-51 + (k % 2) * 5, 6 - (k > 1 ? 4 : 0), 2.4, 2, 0, 0, 7); ctx.fill(); ctx.strokeStyle = '#b8a888'; ctx.lineWidth = 0.3; ctx.stroke(); }
+    const cols = ['#c0392b', '#2f6f9a', '#e8a33c', '#5a9a4a', '#8a4aa8'], o = Math.floor(H(3) * 5);
+    for (let k = 0; k < 2 + lvl; k++) { const x = 20 + (k % 3) * 8, y = 6 - Math.floor(k / 3) * 5; ctx.fillStyle = 'rgba(0,0,0,.25)'; ctx.fillRect(x + 0.6, y + 0.6, 7, 3.4); ctx.fillStyle = cols[(k + o) % 5]!; ctx.fillRect(x, y, 7, 3.4); ctx.fillStyle = 'rgba(255,255,255,.3)'; ctx.fillRect(x, y, 7, 0.8); ctx.fillStyle = 'rgba(0,0,0,.25)'; ctx.fillRect(x + 6.2, y, 0.8, 3.4); }
+    extras(ctx, tm, H, [[-52, -9], [46, -9], [50, 8], [16, -9]], ['crates', 'worker', 'workers', 'lamp', 'tree', 'flowers', 'cart']);
   },
   cannery: (ctx, tm, H, lvl) => { // a white-washed packing shed by the water, a steam boiler, fish boxes in, stacks of tins out
-    hall(ctx, tm, -18, 44, '#e6e2d6', '#3f6a8a', true, lvl);
-    for (let k = 0; k < 3; k++) { ctx.fillStyle = '#5a8aa8'; ctx.fillRect(-50 + k * 5, 6, 4, 3); ctx.fillStyle = 'rgba(255,255,255,.5)'; ctx.fillRect(-50 + k * 5, 6, 4, 0.8); }
-    for (let k = 0; k < 3 + lvl * 2; k++) { const u = 20 + (k % 4) * 4, v = 7 - Math.floor(k / 4) * 3; ctx.fillStyle = '#c0c6cc'; ctx.beginPath(); ctx.arc(u, v, 1.5, 0, 7); ctx.fill(); ctx.fillStyle = '#c0392b'; ctx.fillRect(u - 1.5, v - 0.4, 3, 0.8); }
-    void H;
+    worksGround(ctx, H, '#8e8a80');
+    const [w, r] = pick(H(2), HALL_LOOKS.cannery!);
+    hall(ctx, tm, -16, 42, w, r, true, lvl);
+    for (let k = 0; k < 4; k++) { const x = -52 + (k % 2) * 5, y = 6 - (k > 1 ? 4 : 0); ctx.fillStyle = '#5a8aa8'; ctx.fillRect(x, y, 4, 3); ctx.fillStyle = 'rgba(255,255,255,.5)'; ctx.fillRect(x, y, 4, 0.8); ctx.fillStyle = '#c0c6cc'; ctx.fillRect(x + 0.8, y + 1.2, 2.4, 0.8); }
+    for (let k = 0; k < 3 + lvl * 2; k++) { const uu = 20 + (k % 4) * 4, vv = 7 - Math.floor(k / 4) * 3; ctx.fillStyle = 'rgba(0,0,0,.2)'; ctx.beginPath(); ctx.arc(uu + 0.5, vv + 0.5, 1.5, 0, 7); ctx.fill(); ctx.fillStyle = '#c0c6cc'; ctx.beginPath(); ctx.arc(uu, vv, 1.5, 0, 7); ctx.fill(); ctx.fillStyle = pick(H(3), ['#c0392b', '#2f6f9a', '#e8a33c']); ctx.fillRect(uu - 1.5, vv - 0.4, 3, 0.8); }
+    ctx.fillStyle = 'rgba(0,0,0,.3)'; ctx.beginPath(); ctx.ellipse(41, -6, 6, 3, 0, 0, 7); ctx.fill(); ctx.fillStyle = '#4a4e56'; ctx.beginPath(); ctx.ellipse(40, -7, 6, 3, 0, 0, 7); ctx.fill(); ctx.fillStyle = '#6a6e76'; ctx.fillRect(34, -8, 12, 0.6); puff(ctx, 45, -9, tm, false); // steam boiler
+    extras(ctx, tm, H, [[-52, -9], [52, 2], [52, 10], [10, 11]], ['crates', 'barrels', 'worker', 'workers', 'lamp', 'cart']);
   },
 } satisfies Record<string, Art>;
+
+/** Farm: farmhouse, a barn with its doors open, a silo or two, the home field of ripe wheat, hens and hay bales. */
+function farmArt(ctx: CanvasRenderingContext2D, tm: number, H: (k: number) => number, lvl: number) {
+  const [bw, br] = pick(H(2), [['#a8402e', '#5e5048'], ['#e8e0cc', '#7a3a30'], ['#8a6a4a', '#4a4e52'], ['#a8402e', '#3e3a38']] as const);
+  const [hw, hr] = pick(H(3), [['#efe6d2', '#8a3a30'], ['#e8d8b8', '#4a5a6a'], ['#d8c8a8', '#5e4a36']] as const);
+  // farmyard
+  ctx.fillStyle = '#9a8a66'; ctx.beginPath(); ctx.roundRect(-58, -13, 48, 26, 4); ctx.fill();
+  for (let k = 0; k < 24; k++) { ctx.fillStyle = 'rgba(60,50,30,.35)'; ctx.fillRect(-56 + H(300 + k) * 44, -11 + H(310 + k) * 22, 0.7, 0.6); }
+  cottage(ctx, -50, 5, 12, 11, { wall: hw, roof: hr, chimney: 0.5, tm, smoke: true });
+  cottage(ctx, -33, -3, 15, 16, { wall: bw, roof: br, door: true });
+  ctx.fillStyle = '#3a2a1e'; ctx.fillRect(-35.6, 3.2, 5.2, 1.6); // the barn doors open
+  // silos, more with level
+  for (let s = 0; s < Math.min(2, lvl); s++) {
+    const u = -18 + s * -0.0, v = -6 + s * 9;
+    ctx.fillStyle = 'rgba(0,0,0,.3)'; ctx.beginPath(); ctx.arc(u + 1.6, v + 1.8, 4.2, 0, 7); ctx.fill();
+    ctx.fillStyle = pick(H(4), ['#c9c2b0', '#b8bcc0', '#a8402e']); ctx.beginPath(); ctx.arc(u, v, 4.2, 0, 7); ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,.3)'; ctx.beginPath(); ctx.arc(u - 1.2, v - 1.2, 2, 0, 7); ctx.fill();
+    ctx.strokeStyle = 'rgba(0,0,0,.25)'; ctx.lineWidth = 0.3; ctx.beginPath(); ctx.arc(u, v, 2.8, 0, 7); ctx.stroke();
+    ctx.fillStyle = '#6a6458'; ctx.beginPath(); ctx.arc(u, v, 0.9, 0, 7); ctx.fill();
+  }
+  // the home field by the barn: ripe wheat in rows, ears swaying, a hedge along its far side
+  ctx.fillStyle = '#d9b54e'; ctx.fillRect(-9, -13, 66, 26);
+  ctx.strokeStyle = '#b8902e'; ctx.lineWidth = 1.1;
+  for (let r = -10; r < 13; r += 3.2) { ctx.beginPath(); for (let u = -9; u <= 57; u += 5) ctx.lineTo(u, r + Math.sin(u * 0.35) * 0.4); ctx.stroke(); }
+  ctx.fillStyle = '#f3dc8a';
+  for (let k = 0; k < 44; k++) { const u = -7 + H(100 + k) * 62, v = -11 + H(200 + k) * 22; ctx.fillRect(u + Math.sin(tm * 1.8 + u * 0.08) * 0.9, v, 0.9, 2); }
+  // a harvested strip with bales, on some farms
+  if (H(5) > 0.4) { const u0 = 20 + H(6) * 24; ctx.fillStyle = '#c8a860'; ctx.fillRect(u0, -13, 10, 26); for (let k = 0; k < 3; k++) hayBale(ctx, u0 + 3 + (k % 2) * 4, -8 + k * 7); }
+  ctx.strokeStyle = '#3f6a2e'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(-9, 13.4); ctx.lineTo(57, 13.4); ctx.stroke();
+  for (let k = 0; k < 9; k++) bush(ctx, -7 + k * 7.6, 13.4, 1.8, k % 2 ? '#4f7f38' : '#3b6329');
+  extras(ctx, tm, H, [[-50, -7], [-22, 9], [-44, 11], [-56, -2]], ['hens', 'hens', 'dog', 'cart', 'tree', 'flowers', 'worker', 'bales']);
+}
+
+/** Sheep farm: farmhouse, a shearing shed, a pasture inside dry-stone walls, sheep grazing, a dog and the shepherd. */
+function woolArt(ctx: CanvasRenderingContext2D, tm: number, H: (k: number) => number, lvl: number) {
+  const [hw, hr] = pick(H(3), [['#efe6d2', '#5e4a36'], ['#d8cfc0', '#4a5a6a'], ['#c8b898', '#7a3a30']] as const);
+  ctx.fillStyle = '#8a8a5e'; ctx.beginPath(); ctx.roundRect(-58, -13, 32, 26, 4); ctx.fill();
+  cottage(ctx, -50, -4, 12, 11, { wall: hw, roof: hr, chimney: -0.5, tm, smoke: true });
+  cottage(ctx, -36, 6, 14, 10, { wall: '#9c7a52', roof: '#5e4a36', walls: 'logs', door: true });
+  // pasture walls
+  stoneWall(ctx, -22, -12, 56, -12); stoneWall(ctx, -22, 12, 56, 12); stoneWall(ctx, -22, -12, -22, 3); stoneWall(ctx, 56, -12, 56, 12);
+  // a water trough and a tree for shade
+  ctx.fillStyle = '#5a4630'; ctx.fillRect(-16, 6, 7, 2.4); ctx.fillStyle = '#6fa0c0'; ctx.fillRect(-15.4, 6.5, 5.8, 1.4);
+  bush(ctx, 46 - H(7) * 50, -6 + H(8) * 4, 4.2, '#3f6f30');
+  const sheep = 6 + Math.floor(H(9) * 4) + lvl * 2;
+  for (let k = 0; k < sheep; k++) {
+    const u = -16 + H(k) * 68 + Math.sin(tm * 0.3 + k) * 1.5, v = -8 + H(k + 30) * 17;
+    const black = H(k + 60) > 0.9;
+    ctx.fillStyle = 'rgba(0,0,0,.2)'; ctx.beginPath(); ctx.ellipse(u + 0.6, v + 0.7, 2.6, 1.8, 0, 0, 7); ctx.fill();
+    ctx.fillStyle = black ? '#3a3632' : '#f2eee4'; ctx.beginPath(); ctx.ellipse(u, v, 2.6, 1.8, 0, 0, 7); ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,.35)'; ctx.beginPath(); ctx.arc(u - 0.8, v - 0.5, 0.9, 0, 7); ctx.fill();
+    ctx.fillStyle = '#2a2622'; ctx.beginPath(); ctx.arc(u + 2.4, v, 0.9, 0, 7); ctx.fill();
+  }
+  dog(ctx, -6 + H(10) * 20, 9, '#2a2624');
+  person(ctx, -10 + H(11) * 10, -9, '#5a6a3a', '#3a2a1e');
+  extras(ctx, tm, H, [[-52, 9], [-30, -9]], ['hens', 'flowers', 'cart', 'tree', 'sacks']);
+}
+
+/** Oil well: a lattice derrick, nodding pumpjacks (more with level), storage tanks with ladders, pipes and drums. */
+function oilArt(ctx: CanvasRenderingContext2D, tm: number, H: (k: number) => number, lvl: number) {
+  worksGround(ctx, H, '#6e675a');
+  for (let k = 0; k < 4; k++) { ctx.fillStyle = 'rgba(20,18,16,.35)'; ctx.beginPath(); ctx.ellipse(-40 + H(950 + k) * 80, -8 + H(960 + k) * 16, 3 + H(970 + k) * 3, 1.4 + H(980 + k), 0, 0, 7); ctx.fill(); } // oil stains
+  // derrick: four legs, cross bracing, the crown block on top
+  const du = -42, dv = -1, s = 8;
+  ctx.fillStyle = 'rgba(0,0,0,.25)'; ctx.fillRect(du - s + 3, dv - s + 3, s * 2, s * 2);
+  ctx.strokeStyle = '#3a3e44'; ctx.lineWidth = 0.7; ctx.strokeRect(du - s, dv - s, s * 2, s * 2);
+  ctx.strokeStyle = '#5a6068'; ctx.lineWidth = 0.4;
+  for (const [a, b] of [[-1, -1], [1, -1], [1, 1], [-1, 1]] as const) { ctx.beginPath(); ctx.moveTo(du + a * s, dv + b * s); ctx.lineTo(du + a * 1.6, dv + b * 1.6); ctx.stroke(); }
+  for (let k = 1; k < 4; k++) { const t = k / 4, q = s - (s - 1.6) * t; ctx.strokeRect(du - q, dv - q, q * 2, q * 2); }
+  ctx.fillStyle = '#d0a020'; ctx.fillRect(du - 1.8, dv - 1.8, 3.6, 3.6);
+  // pumpjacks
+  for (let p = 0; p < Math.min(3, lvl); p++) {
+    const pu = -20 + p * 16, pv = p % 2 ? 6 : -4;
+    ctx.fillStyle = 'rgba(0,0,0,.25)'; ctx.fillRect(pu - 7, pv + 2, 15, 2.4);
+    ctx.fillStyle = '#5b6066'; ctx.fillRect(pu - 8, pv + 1, 15, 2.4);
+    const a = Math.sin(tm * 2 + p * 1.7) * 0.35; ctx.save(); ctx.translate(pu, pv); ctx.rotate(a);
+    ctx.fillStyle = pick(H(12), ['#2b2b38', '#3a2a2a', '#2a3a2e']); ctx.fillRect(-8, -1.3, 14, 2.6); ctx.fillStyle = '#d0a020'; ctx.fillRect(5, -2.6, 3.4, 5.2); ctx.restore();
+    ctx.fillStyle = '#3a3a48'; ctx.fillRect(pu - 1, pv - 1, 2, 4);
+  }
+  // storage tanks
+  const tc = pick(H(13), ['#c9ccd1', '#e8e2d0', '#c84a3a']);
+  for (let t = 0; t < 1 + Math.min(2, lvl); t++) {
+    const tu = 30 + (t % 2) * 16, tv = t < 2 ? -3 + t * 2 : 8, rr = t < 2 ? 8 : 4.5;
+    ctx.fillStyle = 'rgba(0,0,0,.28)'; ctx.beginPath(); ctx.arc(tu + 1.6, tv + 1.6, rr, 0, 7); ctx.fill();
+    ctx.fillStyle = tc; ctx.beginPath(); ctx.arc(tu, tv, rr, 0, 7); ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,.3)'; ctx.beginPath(); ctx.arc(tu - rr * 0.3, tv - rr * 0.3, rr * 0.45, 0, 7); ctx.fill();
+    ctx.strokeStyle = 'rgba(0,0,0,.3)'; ctx.lineWidth = 0.6; ctx.beginPath(); ctx.arc(tu, tv, rr * 0.65, 0, 7); ctx.stroke();
+  }
+  ctx.strokeStyle = '#4a4e56'; ctx.lineWidth = 0.9; ctx.beginPath(); ctx.moveTo(-34, 10); ctx.lineTo(26, 10); ctx.stroke();
+  extras(ctx, tm, H, [[-54, 9], [12, -10], [-6, 10], [54, 10]], ['barrels', 'barrels', 'worker', 'lamp', 'crates', 'workers']);
+}
 
 const ART: Record<Building['kind'], Art> = {
   ...FACTORY_ART,
   wood: (ctx, tm, H, lvl) => lumberCamp(ctx, tm, H, lvl),
   dock: (ctx, tm, H, lvl) => dockArt(ctx, tm, H, lvl),
-  farm: (ctx, tm, H) => { // barn, silo, golden field rows
-    house(ctx, -36, -1, 20, 14, '#a8402e', '#6e2a20'); ctx.fillStyle = '#efe6d2'; ctx.fillRect(-38, 3, 4, 3.5);
-    ctx.fillStyle = '#c9c2b0'; ctx.beginPath(); ctx.arc(-18, -2, 5, 0, 7); ctx.fill(); ctx.fillStyle = '#8a8478'; ctx.beginPath(); ctx.arc(-18, -2, 2.4, 0, 7); ctx.fill();
-    // the home field by the barn: ripe wheat in rows, ears swaying, a hedge along its far side
-    ctx.fillStyle = '#d9b54e'; ctx.fillRect(-7, -13, 64, 26);
-    ctx.strokeStyle = '#b8902e'; ctx.lineWidth = 1.1;
-    for (let r = -10; r < 13; r += 3.2) { ctx.beginPath(); for (let u = -7; u <= 57; u += 5) ctx.lineTo(u, r + Math.sin(u * 0.35) * 0.4); ctx.stroke(); }
-    ctx.fillStyle = '#f3dc8a';
-    for (let k = 0; k < 40; k++) { const u = -5 + H(100 + k) * 60, v = -11 + H(200 + k) * 22; ctx.fillRect(u + Math.sin(tm * 1.8 + u * 0.08) * 0.9, v, 0.9, 2); }
-    ctx.strokeStyle = '#3f6a2e'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(-7, 13); ctx.lineTo(57, 13); ctx.stroke();
-    for (let k = 0; k < 9; k++) { ctx.fillStyle = k % 2 ? '#4f7f38' : '#3b6329'; ctx.beginPath(); ctx.arc(-5 + k * 7.5, 13, 1.8, 0, 7); ctx.fill(); }
-  },
+  farm: (ctx, tm, H, lvl) => farmArt(ctx, tm, H, lvl),
   stone: (ctx, tm, H, lvl) => quarry(ctx, tm, H, lvl),
   coal: (ctx, tm, H, lvl) => pithead(ctx, tm, H, lvl, ['#2a2725', '#3e3a36', '#14120f']),
   iron: (ctx, tm, H, lvl) => pithead(ctx, tm, H, lvl, ['#7a4a3a', '#9a5e48', '#5a3328']),
-  oil: (ctx, tm) => { // pumpjack nodding, a storage tank
-    ctx.fillStyle = '#5b6066'; ctx.fillRect(-14, 6, 26, 3);
-    const a = Math.sin(tm * 2) * 0.35; ctx.save(); ctx.translate(-2, 0); ctx.rotate(a);
-    ctx.fillStyle = '#2b2b38'; ctx.fillRect(-14, -1.5, 26, 3); ctx.fillStyle = '#d0a020'; ctx.fillRect(10, -3, 4, 6); ctx.restore();
-    ctx.fillStyle = '#3a3a48'; ctx.fillRect(-3, -1, 2, 8);
-    ctx.fillStyle = '#c9ccd1'; ctx.beginPath(); ctx.arc(32, 0, 9, 0, 7); ctx.fill(); ctx.strokeStyle = '#8a8d92'; ctx.lineWidth = 0.8; ctx.beginPath(); ctx.arc(32, 0, 6, 0, 7); ctx.stroke();
-  },
-  wool: (ctx, tm, H) => { // barn and grazing sheep
-    house(ctx, -38, 0, 18, 12, '#9c7a52', '#5e4a36');
-    ctx.strokeStyle = '#7a5a3a'; ctx.lineWidth = 0.7; ctx.strokeRect(-22, -11, 76, 22);
-    for (let k = 0; k < 7; k++) {
-      const u = -16 + H(k) * 64 + Math.sin(tm * 0.3 + k) * 1.5, v = -8 + H(k + 9) * 16;
-      ctx.fillStyle = '#f2eee4'; ctx.beginPath(); ctx.ellipse(u, v, 2.6, 1.8, 0, 0, 7); ctx.fill();
-      ctx.fillStyle = '#2a2622'; ctx.beginPath(); ctx.arc(u + 2.4, v, 0.9, 0, 7); ctx.fill();
-    }
-  },
+  oil: (ctx, tm, H, lvl) => oilArt(ctx, tm, H, lvl),
+  wool: (ctx, tm, H, lvl) => woolArt(ctx, tm, H, lvl),
 };
 
 /** Wood chips, sawdust and a trodden earth yard under a building's props. */
@@ -197,7 +368,8 @@ function lumberCamp(ctx: CanvasRenderingContext2D, tm: number, H: (k: number) =>
   yardGround(ctx, -58, 58, '#8a7350', H, 'rgba(235,205,150,.7)');
   // stumps of felled trees around the edge
   for (let k = 0; k < 6; k++) { const u = -52 + H(10 + k) * 104, v = k % 2 ? -11 : 11; logEnd(ctx, u, v, 1.6); }
-  cottage(ctx, -44, 1, 22, 18, { wall: '#8a5e36', roof: '#5a4030', walls: 'logs', chimney: -0.8, tm, smoke: true });
+  const [cw, cr] = pick(H(3), [['#8a5e36', '#5a4030'], ['#7a5234', '#4a5048'], ['#9a6a40', '#6a3a2e'], ['#6e4a2e', '#3e4a3a']] as const);
+  cottage(ctx, -44, 1, 22, 18, { wall: cw, roof: cr, walls: 'logs', chimney: -0.8, tm, smoke: true });
   // a lean-to woodshed on the cabin's side, split firewood under it
   ctx.fillStyle = '#4a3424'; ctx.fillRect(-32, -6, 6, 13);
   for (let r = 0; r < 4; r++) for (let k = 0; k < 2; k++) { ctx.fillStyle = r % 2 ? '#c99a5b' : '#b8864a'; ctx.fillRect(-31.5 + k * 2.6, -5 + r * 3, 2.2, 2.4); }
@@ -270,7 +442,8 @@ function quarry(ctx: CanvasRenderingContext2D, tm: number, H: (k: number) => num
     ctx.fillStyle = '#d6d0c2'; ctx.fillRect(u, v, 2.8, 2.4);
     ctx.fillStyle = 'rgba(255,255,255,.35)'; ctx.fillRect(u, v, 2.8, 0.5);
   }
-  cottage(ctx, -38, 6, 12, 10, { wall: '#c8bfae', roof: '#5b6066', chimney: 0.6, tm, smoke: true });
+  const [qw, qr] = pick(H(3), [['#c8bfae', '#5b6066'], ['#d8cdb4', '#7a3a30'], ['#b8b0a0', '#4a5a6a']] as const);
+  cottage(ctx, -38, 6, 12, 10, { wall: qw, roof: qr, chimney: 0.6, tm, smoke: true });
   person(ctx, -30, -6, '#7a4a3a');
 }
 
@@ -281,7 +454,8 @@ function quarry(ctx: CanvasRenderingContext2D, tm: number, H: (k: number) => num
 function pithead(ctx: CanvasRenderingContext2D, tm: number, H: (k: number) => number, lvl: number, heap: [string, string, string]) {
   yardGround(ctx, -58, 58, '#6e665a', H, 'rgba(30,26,22,.55)');
   // engine house with its round chimney
-  cottage(ctx, -44, 3, 20, 15, { wall: '#9a4a34', roof: '#3e3a38', walls: 'brick', storeys: 2, door: true });
+  const [mw, mr] = pick(H(3), [['#9a4a34', '#3e3a38'], ['#8a5a44', '#4a4e56'], ['#a85a3a', '#5a4a40'], ['#8e8478', '#3e3a38']] as const);
+  cottage(ctx, -44, 3, 20, 15, { wall: mw, roof: mr, walls: 'brick', storeys: 2, door: true });
   const cu = -52, cv = -8;
   ctx.fillStyle = 'rgba(0,0,0,.3)'; ctx.beginPath(); ctx.arc(cu + 2.4, cv + 2.6, 3.4, 0, 7); ctx.fill();
   ctx.fillStyle = '#8a3c2a'; ctx.beginPath(); ctx.arc(cu, cv, 3.4, 0, 7); ctx.fill();

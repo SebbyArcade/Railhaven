@@ -127,3 +127,93 @@ export function fence(ctx: Ctx, u0: number, v0: number, u1: number, v1: number, 
   ctx.fillStyle = col;
   for (let k = 0; k <= n; k++) { const t = k / n; ctx.fillRect(u0 + (u1 - u0) * t - 0.3, v0 + (v1 - v0) * t - 0.3, 0.6, 0.6); }
 }
+
+/** a wooden barrel seen from above: staves, two iron hoops */
+export function barrel(ctx: Ctx, u: number, v: number, col = '#7a5230') {
+  ctx.fillStyle = 'rgba(0,0,0,.28)'; ctx.beginPath(); ctx.arc(u + 0.7, v + 0.8, 1.5, 0, 7); ctx.fill();
+  ctx.fillStyle = col; ctx.beginPath(); ctx.arc(u, v, 1.5, 0, 7); ctx.fill();
+  ctx.strokeStyle = '#2e2620'; ctx.lineWidth = 0.3; ctx.beginPath(); ctx.arc(u, v, 1.5, 0, 7); ctx.stroke(); ctx.beginPath(); ctx.arc(u, v, 0.9, 0, 7); ctx.stroke();
+  ctx.fillStyle = 'rgba(255,255,255,.2)'; ctx.beginPath(); ctx.arc(u - 0.5, v - 0.5, 0.6, 0, 7); ctx.fill();
+}
+
+/** a full sack, tied at the neck */
+export function sack(ctx: Ctx, u: number, v: number, col = '#d8c8a0') {
+  ctx.fillStyle = 'rgba(0,0,0,.25)'; ctx.beginPath(); ctx.ellipse(u + 0.6, v + 0.7, 1.7, 1.2, 0, 0, 7); ctx.fill();
+  ctx.fillStyle = col; ctx.beginPath(); ctx.ellipse(u, v, 1.7, 1.25, 0, 0, 7); ctx.fill();
+  ctx.fillStyle = 'rgba(0,0,0,.2)'; ctx.fillRect(u + 1, v - 0.3, 0.5, 0.6);
+}
+
+/** a wooden crate with a cross brace */
+export function crate(ctx: Ctx, u: number, v: number, s = 2.8, col = '#9a7444') {
+  ctx.fillStyle = 'rgba(0,0,0,.28)'; ctx.fillRect(u + 0.6, v + 0.7, s, s);
+  ctx.fillStyle = col; ctx.fillRect(u, v, s, s);
+  ctx.strokeStyle = 'rgba(40,26,12,.55)'; ctx.lineWidth = 0.25; ctx.strokeRect(u, v, s, s);
+  ctx.beginPath(); ctx.moveTo(u, v); ctx.lineTo(u + s, v + s); ctx.stroke();
+}
+
+/** a street lamp: a post and a glowing lantern */
+export function lamp(ctx: Ctx, u: number, v: number, tm: number) {
+  ctx.fillStyle = 'rgba(0,0,0,.25)'; ctx.fillRect(u + 0.4, v + 0.4, 3, 0.5);
+  ctx.fillStyle = '#2e2a26'; ctx.beginPath(); ctx.arc(u, v, 0.7, 0, 7); ctx.fill();
+  const g = 0.75 + 0.25 * Math.sin(tm * 3 + u);
+  ctx.fillStyle = `rgba(255,214,120,${0.25 * g})`; ctx.beginPath(); ctx.arc(u, v, 2.6, 0, 7); ctx.fill();
+  ctx.fillStyle = '#ffe2a0'; ctx.beginPath(); ctx.arc(u, v, 0.45, 0, 7); ctx.fill();
+}
+
+/** a two-wheeled handcart, maybe loaded */
+export function cart(ctx: Ctx, u: number, v: number, col = '#8a6038', load?: string) {
+  ctx.fillStyle = 'rgba(0,0,0,.25)'; ctx.fillRect(u - 3 + 0.7, v - 2 + 0.8, 6, 4);
+  ctx.fillStyle = col; ctx.fillRect(u - 3, v - 2, 6, 4);
+  ctx.strokeStyle = 'rgba(40,26,12,.6)'; ctx.lineWidth = 0.3; ctx.strokeRect(u - 3, v - 2, 6, 4);
+  if (load) { ctx.fillStyle = load; ctx.fillRect(u - 2.4, v - 1.4, 4.8, 2.8); ctx.fillStyle = 'rgba(255,255,255,.2)'; ctx.fillRect(u - 2.4, v - 1.4, 4.8, 0.7); }
+  ctx.fillStyle = '#2e2a26'; ctx.fillRect(u - 1.6, v - 2.7, 3.2, 0.8); ctx.fillRect(u - 1.6, v + 1.9, 3.2, 0.8);
+  ctx.strokeStyle = '#5a3a22'; ctx.lineWidth = 0.4; ctx.beginPath(); ctx.moveTo(u + 3, v - 1); ctx.lineTo(u + 6, v - 1); ctx.moveTo(u + 3, v + 1); ctx.lineTo(u + 6, v + 1); ctx.stroke();
+}
+
+/** a pointed conifer seen from above */
+export function pine(ctx: Ctx, u: number, v: number, r: number) {
+  ctx.fillStyle = 'rgba(0,0,0,.25)'; ctx.beginPath(); ctx.arc(u + r * 0.4, v + r * 0.5, r, 0, 7); ctx.fill();
+  for (const [s, c] of [[1, '#2c5a2a'], [0.68, '#3a7034'], [0.36, '#4f8a42']] as const) {
+    ctx.fillStyle = c; ctx.beginPath();
+    for (let k = 0; k < 7; k++) { const a = k / 7 * 6.283, rr = r * s * (k % 2 ? 0.72 : 1); ctx.lineTo(u + Math.cos(a) * rr, v + Math.sin(a) * rr); }
+    ctx.closePath(); ctx.fill();
+  }
+}
+
+/** a little bed of flowers */
+export function flowers(ctx: Ctx, u: number, v: number, seed: (k: number) => number) {
+  ctx.fillStyle = '#4a7a34'; ctx.beginPath(); ctx.ellipse(u, v, 3.2, 1.6, 0, 0, 7); ctx.fill();
+  const cols = ['#e8505a', '#f2d24a', '#f4f0e6', '#c46ad8', '#ff9a3c'];
+  for (let k = 0; k < 7; k++) { ctx.fillStyle = cols[Math.floor(seed(k) * cols.length)]!; ctx.fillRect(u - 2.6 + seed(k + 10) * 5, v - 1 + seed(k + 20) * 2, 0.7, 0.7); }
+}
+
+/** a dry-stone wall along a line */
+export function stoneWall(ctx: Ctx, u0: number, v0: number, u1: number, v1: number) {
+  const len = Math.hypot(u1 - u0, v1 - v0), n = Math.max(2, Math.round(len / 1.3));
+  ctx.strokeStyle = 'rgba(0,0,0,.25)'; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.moveTo(u0 + 0.5, v0 + 0.6); ctx.lineTo(u1 + 0.5, v1 + 0.6); ctx.stroke();
+  ctx.strokeStyle = '#9a948a'; ctx.lineWidth = 1.3; ctx.beginPath(); ctx.moveTo(u0, v0); ctx.lineTo(u1, v1); ctx.stroke();
+  for (let k = 0; k <= n; k++) { const t = k / n; ctx.fillStyle = k % 3 ? '#b8b2a6' : '#7e786e'; ctx.fillRect(u0 + (u1 - u0) * t - 0.45, v0 + (v1 - v0) * t - 0.45, 0.9, 0.8); }
+}
+
+/** a hen pecking */
+export function hen(ctx: Ctx, u: number, v: number, tm: number, col = '#f4efe2') {
+  const p = Math.sin(tm * 4 + u * 3) > 0.6 ? 0.4 : 0;
+  ctx.fillStyle = 'rgba(0,0,0,.2)'; ctx.beginPath(); ctx.ellipse(u + 0.4, v + 0.5, 0.9, 0.5, 0, 0, 7); ctx.fill();
+  ctx.fillStyle = col; ctx.beginPath(); ctx.ellipse(u, v, 0.9, 0.6, 0, 0, 7); ctx.fill();
+  ctx.fillStyle = '#d8402e'; ctx.fillRect(u + 0.7 + p, v - 0.4, 0.4, 0.3);
+}
+
+/** a dog lying or trotting */
+export function dog(ctx: Ctx, u: number, v: number, col = '#3a2c22') {
+  ctx.fillStyle = 'rgba(0,0,0,.2)'; ctx.beginPath(); ctx.ellipse(u + 0.5, v + 0.6, 1.6, 0.7, 0, 0, 7); ctx.fill();
+  ctx.fillStyle = col; ctx.beginPath(); ctx.ellipse(u, v, 1.5, 0.65, 0, 0, 7); ctx.fill();
+  ctx.beginPath(); ctx.arc(u + 1.5, v - 0.2, 0.6, 0, 7); ctx.fill();
+  ctx.fillStyle = '#efe6d2'; ctx.fillRect(u + 1.4, v + 0.1, 0.5, 0.3);
+}
+
+/** a round hay bale */
+export function hayBale(ctx: Ctx, u: number, v: number) {
+  ctx.fillStyle = 'rgba(0,0,0,.25)'; ctx.beginPath(); ctx.arc(u + 0.7, v + 0.8, 1.9, 0, 7); ctx.fill();
+  ctx.fillStyle = '#d8b45a'; ctx.beginPath(); ctx.arc(u, v, 1.9, 0, 7); ctx.fill();
+  ctx.strokeStyle = 'rgba(140,100,30,.6)'; ctx.lineWidth = 0.25; ctx.beginPath(); ctx.arc(u, v, 1.2, 0, 7); ctx.stroke(); ctx.beginPath(); ctx.arc(u, v, 0.5, 0, 7); ctx.stroke();
+}
