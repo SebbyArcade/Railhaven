@@ -47,3 +47,27 @@ describe('sound follows the screen', () => {
     }
   });
 });
+
+describe('one-off sounds for things that just happened', () => {
+  it('hears a new building, its upgrade, new rails and a filled order once each, and nothing when nothing changed', async () => {
+    const { cueMemo, cues } = await import('../src/audio/cues.ts');
+    const g = newGame(4242), a = g.s.sites[0]!, m = cueMemo(g);
+    const c = g.s.camera; c.x = (a.x + 0.5) * TILE; c.y = (a.y + 0.5) * TILE; c.z = 1.8;
+    expect(cues(g, view, m)).toEqual([]);
+    const s = nearestSpot(g, 'wood', a.x, a.y)!, b = build(g, bestPlacement(g, 'wood', s.x, s.y).place!);
+    if (typeof b === 'string') throw new Error(b);
+    trackChanged(g);
+    const got = cues(g, view, m).map(q => q.kind);
+    expect(got).toContain('build');
+    expect(cues(g, view, m)).toEqual([]); // heard once, not every check
+    b.lvl++;
+    expect(cues(g, view, m).map(q => q.kind)).toEqual(['upgrade']);
+    g.s.orders = (g.s.orders ?? 0) + 1;
+    expect(cues(g, view, m).map(q => q.kind)).toEqual(['order']);
+    // zoomed right out, your own building work is still heard a little
+    c.z = 0.3; b.lvl++;
+    const up = cues(g, view, m)[0]!;
+    expect(up.kind).toBe('upgrade');
+    expect(up.vol).toBeGreaterThan(0.3);
+  });
+});

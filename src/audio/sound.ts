@@ -1,15 +1,28 @@
 import type { Hear, Scene } from './scene.ts';
+import type { Cue } from './cues.ts';
 
 /**
  * Music and sound effects, all made in code with Web Audio (no sound files, so the game stays one file).
  * Effects follow what is on screen (see scene.ts) and fade out when zoomed out; the music keeps playing.
  */
 
-export interface SoundSettings { music: boolean; sfx: boolean }
+export interface SoundSettings {
+  music: boolean; sfx: boolean;
+  /** volume steps 1-5 (3 is the normal level) */
+  musicVol: number; sfxVol: number;
+  /** the quick 🔇 button on the map: silences everything without changing the rest */
+  muted: boolean;
+}
 const KEY = 'railhaven-sound';
+const step = (v: unknown) => typeof v === 'number' && v >= 1 && v <= 5 ? Math.round(v) : 3;
+/** How loud each volume step is, against the normal level. */
+export const VOL_STEPS = [0, 0.35, 0.65, 1, 1.4, 1.85];
 
 export function loadSettings(): SoundSettings {
-  try { const s = JSON.parse(localStorage.getItem(KEY) ?? '{}'); return { music: s.music !== false, sfx: s.sfx !== false }; } catch { return { music: true, sfx: true }; }
+  try {
+    const s = JSON.parse(localStorage.getItem(KEY) ?? '{}');
+    return { music: s.music !== false, sfx: s.sfx !== false, musicVol: step(s.musicVol), sfxVol: step(s.sfxVol), muted: s.muted === true };
+  } catch { return { music: true, sfx: true, musicVol: 3, sfxVol: 3, muted: false }; }
 }
 
 const rnd = (a: number, b: number) => a + Math.random() * (b - a);
@@ -64,27 +77,34 @@ export class Sound {
     if (this.ac.state === 'suspended') void this.ac.resume();
   }
 
-  /** Turn music or effects on or off (remembered on this device). */
-  set(k: keyof SoundSettings, on: boolean) {
-    this.settings[k] = on; localStorage.setItem(KEY, JSON.stringify(this.settings)); this.apply();
+  /** Turn music, effects or everything on or off (remembered on this device). */
+  set(k: 'music' | 'sfx' | 'muted', on: boolean) {
+    this.settings[k] = on; this.keep();
   }
+  /** Volume step 1-5 for the music or the effects. */
+  volume(k: 'musicVol' | 'sfxVol', v: number) {
+    this.settings[k] = step(v); if (k === 'musicVol') this.settings.music = true; else this.settings.sfx = true; this.settings.muted = false; this.keep();
+  }
+  private keep() { try { localStorage.setItem(KEY, JSON.stringify(this.settings)); } catch { /* storage full: still applies now */ } this.apply(); }
   private apply() {
-    if (!this.ac) return; const t = this.ac.currentTime;
-    this.musicBus.gain.setTargetAtTime(this.settings.music ? 0.16 : 0, t, 0.3);
-    this.sfxBus.gain.setTargetAtTime(this.settings.sfx ? 0.8 : 0, t, 0.2);
+    if (!this.ac) return; const t = this.ac.currentTime, S = this.settings;
+    this.musicBus.gain.setTargetAtTime(S.music ? 0.16 * VOL_STEPS[S.musicVol]! : 0, t, 0.3);
+    this.sfxBus.gain.setTargetAtTime(S.sfx ? 0.8 * VOL_STEPS[S.sfxVol]! : 0, t, 0.2);
+    this.master.gain.setTargetAtTime(S.muted ? 0 : 0.7, t, 0.08);
   }
 
   /** Stop all sound while the game is paused or hidden. */
   pause(paused: boolean) {
     if (!this.ac) return;
     if (paused && this.ac.state === 'running') { const ac = this.ac; this.master.gain.setTargetAtTime(0, ac.currentTime, 0.03); setTimeout(() => { if (this.ac?.state === 'running') void ac.suspend(); }, 150); }
-    else if (!paused && this.ac.state === 'suspended') { void this.ac.resume(); this.master.gain.setTargetAtTime(0.7, this.ac.currentTime + 0.05, 0.1); this.barAt = Math.max(this.barAt, this.ac.currentTime + 0.2); }
+    else if (!paused && this.ac.state === 'suspended') { void this.ac.resume(); this.master.gain.setTargetAtTime(this.settings.muted ? 0 : 0.7, this.ac.currentTime + 0.05, 0.1); this.barAt = Math.max(this.barAt, this.ac.currentTime + 0.2); }
   }
 
   /** Call every frame with what is audible now. */
   update(sc: Scene) {
     const ac = this.ac; if (!ac || ac.state !== 'running') return;
     const now = ac.currentTime;
+    if (this.settings.muted) { this.barAt = now + 0.3; return; } // nothing to hear: make nothing
     if (this.settings.music) this.music(now); else this.barAt = now + 0.3;
     this.ambience(sc, now);
     if (!this.settings.sfx) return;
@@ -202,6 +222,46 @@ export class Sound {
     f.type = 'bandpass'; f.frequency.value = 2200; f.Q.value = 1.5;
     g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.05 * vol, t + 0.2); g.gain.setValueAtTime(0.05 * vol, t + 1.2); g.gain.linearRampToValueAtTime(0, t + 1.5);
     o.connect(f); f.connect(g); g.connect(this.out(pan)); o.start(t); o.stop(t + 1.6);
+  }
+
+  /** One-off sounds for things that just happened (see cues.ts). */
+  cue(list: Cue[]) {
+    const ac = this.ac; if (!ac || ac.state !== 'running' || !this.settings.sfx || this.settings.muted || !list.length) return;
+    const t = ac.currentTime + 0.03, done = new Set<string>();
+    for (const c of list) {
+      if (done.has(c.kind)) continue; done.add(c.kind); // ten rails laid at once still clank once
+      const v = c.vol, p = c.pan;
+      switch (c.kind) {
+        case 'build': // three hammer blows and the thump of a beam settling
+          for (let i = 0; i < 3; i++) { this.ping(t + i * 0.2, rnd(850, 1000), 0.08, 0.1 * v, p, 'triangle'); this.burst(t + i * 0.2, 0.05, 0.18 * v, p, 'bandpass', 1600, 1.5); }
+          this.burst(t + 0.68, 0.3, 0.25 * v, p, 'lowpass', 500); break;
+        case 'upgrade': // a ratchet winding up, then a bright ding
+          for (let i = 0; i < 5; i++) this.burst(t + i * 0.06, 0.03, 0.12 * v, p, 'bandpass', 2400 + i * 200, 3);
+          this.ping(t + 0.35, 1568, 0.9, 0.08 * v, p); this.ping(t + 0.35, 2349, 0.6, 0.03 * v, p); break;
+        case 'remove': this.burst(t, 0.7, 0.22, 0, 'lowpass', 700); this.burst(t + 0.05, 0.3, 0.1, 0, 'bandpass', 1800); break;
+        case 'rails': // a rail dropped onto sleepers, and a spike driven home
+          this.ping(t, 1250, 0.35, 0.07 * v, p, 'triangle'); this.ping(t, 1870, 0.25, 0.03 * v, p); this.burst(t, 0.06, 0.16 * v, p, 'bandpass', 1300, 1.2);
+          this.ping(t + 0.22, 1050, 0.25, 0.05 * v, p, 'triangle'); this.burst(t + 0.22, 0.05, 0.12 * v, p, 'bandpass', 1100, 1.2); break;
+        case 'unrails': this.ping(t, 700, 0.3, 0.06, 0, 'triangle', 0.85); this.burst(t, 0.2, 0.12, 0, 'lowpass', 900); break;
+        case 'train': this.whistle(t, 0.13, 0); break;
+        case 'ship': this.horn(t, 0.16, 0); break;
+        case 'order': this.chime([0, 4, 7], t, 0.09); break;
+        case 'grow': this.chime([0, 4, 7, 12, 16], t, 0.1); break;
+        case 'level': this.chime([0, 4, 7, 12], t, 0.1); this.chime([5, 9, 12, 17], t + 0.55, 0.1); this.chime([7, 11, 14, 19], t + 1.1, 0.12); break;
+        case 'break': this.burst(t, 0.1, 0.18 * v, p, 'bandpass', 1800, 0.7); this.burst(t + 0.03, 0.9, 0.25 * v, p, 'lowpass', 450); break;
+        case 'fire': { // a whoomph as it catches
+          const ac2 = this.ac!, s2 = ac2.createBufferSource(), f = ac2.createBiquadFilter(), g = ac2.createGain();
+          s2.buffer = this.noise; s2.loop = true; f.type = 'bandpass'; f.Q.value = 0.8; f.frequency.setValueAtTime(300, t); f.frequency.exponentialRampToValueAtTime(1800, t + 0.6);
+          g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.25 * v, t + 0.15); g.gain.exponentialRampToValueAtTime(0.001, t + 0.9); g.gain.linearRampToValueAtTime(0, t + 0.92);
+          s2.connect(f); f.connect(g); g.connect(this.out(p)); s2.start(t); s2.stop(t + 1); break;
+        }
+      }
+    }
+  }
+  /** A little bell arpeggio in the key of the season's music (steps in semitones above its root). */
+  private chime(steps: number[], t: number, vol: number) {
+    const key = SEASON_MUSIC[this.season]!.key + 12;
+    steps.forEach((st, i) => { const f = midi(key + st); this.ping(t + i * 0.09, f, 1.1, vol, (i / Math.max(1, steps.length - 1) - 0.5) * 0.4); this.ping(t + i * 0.09, f * 2, 0.5, vol * 0.25, 0); });
   }
 
   /** Each sound source plays little events on its own clock. */
