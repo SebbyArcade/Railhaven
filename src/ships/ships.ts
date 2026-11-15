@@ -41,7 +41,8 @@ export const SHIP_IDLE = 6;
 export const SHIP_HOLD = 20;
 
 /** Goods waiting at a dock for a ship to another dock. */
-export interface SeaLoad { good: Good; n: number; to: number }
+/** goods for dock `to`; `then`: that dock passes them on to this one by the next ship (two sea routes) */
+export interface SeaLoad { good: Good; n: number; to: number; then?: number }
 
 export interface CargoShip {
   id: number;
@@ -108,8 +109,8 @@ const dockOf = (g: Game, id: number) => g.s.buildings?.find(b => b.id === id && 
 /** Units of a good on their way by sea to a dock: waiting at docks, aboard ships, and landed there but not yet collected. */
 export function seaBound(g: Game, dock: number, k: Good): number {
   let n = 0;
-  for (const b of g.s.buildings ?? []) for (const q of b.outq ?? []) if (q.to === dock && q.good === k) n += q.n;
-  for (const s of g.s.ships ?? []) for (const q of s.hold) if (q.to === dock && q.good === k) n += q.n;
+  for (const b of g.s.buildings ?? []) for (const q of b.outq ?? []) if ((q.to === dock || q.then === dock) && q.good === k) n += q.n;
+  for (const s of g.s.ships ?? []) for (const q of s.hold) if ((q.to === dock || q.then === dock) && q.good === k) n += q.n;
   return n + (dockOf(g, dock)?.landed?.[k] ?? 0);
 }
 
@@ -136,6 +137,13 @@ function sail(g: Game, s: CargoShip, from: Building, to: Building) {
   if (s.path.length < 2) { s.to = undefined; s.path = undefined; s.wait = SHIP_IDLE; }
 }
 
+/** Goods a ship unloads at a dock: landed for this island's trains, or queued for the next ship when they go one route further. */
+function passOn(at: Building, q: SeaLoad) {
+  if (q.then === undefined || q.then === at.id) { (at.landed ??= {})[q.good] = (at.landed[q.good] ?? 0) + q.n; return; }
+  const w = (at.outq ??= []).find(x => x.to === q.then && x.good === q.good && x.then === undefined);
+  if (w) w.n += q.n; else at.outq.push({ good: q.good, n: q.n, to: q.then });
+}
+
 /** Move the ships: unload and load at docks, sail the routes. */
 export function tickShips(g: Game, dt: number) {
   const ships = g.s.ships; if (!ships?.length) return;
@@ -155,7 +163,7 @@ export function tickShips(g: Game, dt: number) {
     }
     // unload what is for this dock
     const here = s.hold.filter(q => q.to === at.id);
-    if (here.length) { for (const q of here) (at.landed ??= {})[q.good] = (at.landed[q.good] ?? 0) + q.n; s.hold = s.hold.filter(q => q.to !== at.id); g.s.shipLoads = (g.s.shipLoads ?? 0) + 1; }
+    if (here.length) { for (const q of here) passOn(at, q); s.hold = s.hold.filter(q => q.to !== at.id); g.s.shipLoads = (g.s.shipLoads ?? 0) + 1; }
     if ((s.wait -= dt) > 0) continue;
     const routes = lanesFrom(g, at.id, L());
     // load for the route with the most goods waiting
@@ -168,7 +176,7 @@ export function tickShips(g: Game, dt: number) {
       for (const q of at.outq ?? []) {
         if (q.to !== best || room <= 0) continue;
         const n = Math.min(q.n, room); q.n -= n; room -= n;
-        const h = s.hold.find(x => x.to === best && x.good === q.good); if (h) h.n += n; else s.hold.push({ good: q.good, n, to: best });
+        const h = s.hold.find(x => x.to === best && x.good === q.good && x.then === q.then); if (h) h.n += n; else s.hold.push({ good: q.good, n, to: best, ...(q.then !== undefined ? { then: q.then } : {}) });
       }
       at.outq = (at.outq ?? []).filter(q => q.n > 0);
       sail(g, s, at, dockOf(g, best)!); s.wait = 0;
