@@ -33,6 +33,14 @@ describe('achievements', () => {
     for (const l of [...PAINTS, ...THEMES]) expect(l.xp).toBeLessThanOrEqual(TOTAL_XP);
   });
 
+  it('Fresh Start counts a map only once it reaches Railway level 2', () => {
+    const p = emptyProfile();
+    for (const seed of [1, 2, 3]) { const g = newGame(seed); g.s.t = 3600; checkMedals(g, p); }
+    expect(p.seeds.length).toBe(0);
+    for (const seed of [1, 2, 3]) { const g = newGame(seed); g.s.rlv = 2; checkMedals(g, p); }
+    expect(p.medals.games3).toBeTruthy();
+  });
+
   it('a rush finished in the game rules earns Rush Job', () => {
     const g = newGame(7), p = emptyProfile();
     g.s.rushDone = 1;

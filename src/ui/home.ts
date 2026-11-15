@@ -83,7 +83,7 @@ export function homeHtml(page: string | undefined, ix: SlotIndex, slotId = 0, de
       + MEDALS.filter(m => m.g === gr.k).map(m => {
         const at = p.medals[m.id], [v, n] = g ? m.prog(g, p) : [0, 1], f = at ? 1 : Math.min(1, v / n);
         return `<div class="row${at ? ' won' : ''}"><span class="ico">${at ? m.icon : '🔒'}</span><div class="grow"><div class="line"><span>${m.name}</span><span class="chip2${at ? ' ok' : ''}">+${m.xp} XP</span></div><small>${m.how}</small>`
-          + (at ? `<small>🏅 Earned ${lastPlayed(at)}</small>` : n > 1 ? `<div class="bar"><i style="width:${Math.round(100 * f)}%;background:#6fbf73"></i></div><small>${Math.min(v, n)} of ${n} in this game${m.id === 'order500' || m.id === 'games3' ? ' (all games)' : ''}</small>` : '') + `</div></div>`;
+          + (at ? `<small>🏅 Earned ${lastPlayed(at)}</small>` : n > 1 ? `<div class="bar"><i style="width:${Math.round(100 * f)}%;background:#6fbf73"></i></div><small>${Math.min(v, n).toLocaleString('en-US')} of ${n.toLocaleString('en-US')} ${['order500', 'order2000', 'games3'].includes(m.id) ? 'across all your games' : 'in this game'}</small>` : '') + `</div></div>`;
       }).join('') + back('medals');
   }
   if (page === 'looks' && p) {

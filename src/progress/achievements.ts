@@ -50,6 +50,8 @@ const dockIslands = (g: Game) => new Set(docks(g).map(b => g.world.islandOf[b.y 
 const explored = (g: Game) => { let n = 0; for (const v of g.s.fog) for (let b = v; b; b &= b - 1) n++; return n / (g.world.n * g.world.n); };
 const doubled = (g: Game) => g.s.track.filter(t => t[2]).length;
 const TOP_LVL = RLV.length - 1;
+/** Fresh Start: a map counts once it reaches this Railway level, so starting and quitting doesn't count */
+export const FRESH_LVL = 2;
 const KINDS = Object.keys(INDUSTRIES) as IndustryKind[];
 const kindsBuilt = (g: Game) => new Set(blds(g).map(b => b.kind)).size;
 const mostOfOne = (g: Game) => Math.max(0, ...KINDS.map(k => blds(g).filter(b => b.kind === k).length));
@@ -136,7 +138,7 @@ export const MEDALS: Medal[] = [
   { id: 'reach60', g: 'track', icon: '📏', name: 'Long Haul', how: 'Run a line 60 squares out from Ashford, along the rails', xp: 25, prog: g => [reach(g), 60] },
   { id: 'reach150', g: 'track', icon: '🧵', name: 'End of the Line', how: 'Run a line 150 squares out from Ashford, along the rails', xp: 50, prog: g => [reach(g), 150] },
   { id: 'double250', g: 'track', icon: '═', name: 'Double the Line', how: 'Double 250 squares of track in one game', xp: 25, prog: g => [doubled(g), 250] },
-  { id: 'games3', g: 'railway', icon: '🗂', name: 'Fresh Start', how: 'Play three different maps', xp: 10, prog: (_g, p) => [p.seeds.length, 3] },
+  { id: 'games3', g: 'railway', icon: '🗂', name: 'Fresh Start', how: `Play three different maps to Railway level ${FRESH_LVL}`, xp: 25, prog: (_g, p) => [p.seeds.length, 3] },
 ];
 
 export const TOTAL_XP = MEDALS.reduce((a, m) => a + m.xp, 0);
@@ -147,7 +149,7 @@ export function checkMedals(g: Game, p: Profile, now = Date.now()): Medal[] {
   const o = g.s.orders ?? 0;
   if (g.s.achOrd === undefined) { g.s.achOrd = o; p.orders += o; } // a game from before achievements counts its orders once
   else if (o > g.s.achOrd) { p.orders += o - g.s.achOrd; g.s.achOrd = o; }
-  if (g.s.t > 60 && !p.seeds.includes(g.s.seed)) p.seeds.push(g.s.seed); // a map counts once it has been played a minute
+  if ((g.s.rlv ?? 0) >= FRESH_LVL && !p.seeds.includes(g.s.seed)) p.seeds.push(g.s.seed); // a map counts once it is really played: Railway level 2
   const got: Medal[] = [];
   for (const m of MEDALS) {
     if (p.medals[m.id]) continue;
