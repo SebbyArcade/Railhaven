@@ -17,6 +17,7 @@ import { footprint } from './buildings/industries.ts';
 import { type Card, cardHtml } from './ui/cards.ts';
 import { type MapView, VIEWS } from './ui/mapviews.ts';
 import { gameReport } from './ui/report.ts';
+import { SEASONS, seasonOf } from './world/season.ts';
 import { buyFleet, FLEET, type FleetKey, fleetLvl, refundOf, removeBuilding, rushOf, sellOffer, sellStock, toggleRush, upgradeBuilding } from './economy/upgrades.ts';
 import { foundTown, sizeName, tickTowns, upgradeTown } from './economy/towns.ts';
 import { buyTrainAt, tickTrains } from './economy/dispatch.ts';
@@ -338,7 +339,7 @@ const OLD_KEY = 'railhaven90';
 let importReport: string[] | null = null, myCode: string | null = null;
 const oldSave = () => { try { return localStorage.getItem(OLD_KEY); } catch { return null; } };
 $('newGame').onclick = () => { if (tools.card?.kind === 'game') { closeCard(); return; } menuOpen = false; tools.mode = 'pan'; tools.cancel(); myCode = null; openCard({ kind: 'game', id: 0 }); };
-function startGame(g: Game) { game = g; tools.cancel(); closeCard(); renderer = new Renderer(game, tools); saveTo(localStorage, game); }
+function startGame(g: Game) { game = g; lastSeason = -1; tools.cancel(); closeCard(); renderer = new Renderer(game, tools); saveTo(localStorage, game); }
 async function bringOver(text: string) {
   try {
     toast('🚂 Bringing your game over…', 8000);
@@ -390,11 +391,13 @@ function updateUi() {
   if (bar) { $('ctext').textContent = bar.text; ($('ok') as HTMLButtonElement).disabled = !bar.can; $('ok').textContent = bar.ok; }
 }
 
+let lastSeason = -1;
 let last0 = 0, last = performance.now(), saveT = 0, lastMenu = 0, lastCard = 0, newsAt = 0;
 function frame(now: number) {
   const dt = Math.min(0.1, (now - last) / 1000); last = now;
   if (idle() && pausedEl.style.display !== 'flex') { pausedEl.style.display = 'flex'; saveTo(localStorage, game); }
   if (!document.hidden && !idle()) { game.s.t += dt; game.sys.tick(dt); tickProduction(game, dt); tickTowns(game, dt); tickTrains(game, dt); if (Math.floor(game.s.t / 5) !== Math.floor((game.s.t - dt) / 5)) checkStuck(game); if (tickBreaks(game)) breaksChanged(game); }
+  { const se = seasonOf(game.s.t); if (se !== lastSeason) { if (lastSeason >= 0) (game.news ??= []).push(`${SEASONS[se]} has come`); lastSeason = se; } }
   if (game.news?.length && now > newsAt && !(tools.card?.kind === 'story' && tools.card.page === 'act')) { toast(game.news.shift()!, 4000); newsAt = now + 4200; }
   if (Math.floor(now / 1000) !== lastCard) {
     lastCard = Math.floor(now / 1000);
