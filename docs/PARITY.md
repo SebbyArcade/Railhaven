@@ -49,8 +49,8 @@ that makes sense. Details for each line: `legacy/CHANGES.md` (search the version
 
 ## Stage 4: islands and sea
 - [ ] Scouting: drawn routes from towns/docks, pay per square, refunds, boats over sea
-- [ ] Docks/landings, dock upgrades (berths, storage, cranes, warehouse), fishing boats, shellfish
-- [ ] Ships: buy at docks, roaming, sea lanes only over mapped water, storms, ferrying trains
+- [ ] Docks/landings, dock upgrades (berths, storage, cranes, warehouse), fishing boats, shellfish (done: docks and landings, reach by sea, 3 levels of reach, sea charting, landings start their own railway; to do: berths/storage/cranes, fishing, shellfish)
+- [ ] Ships: buy at docks, roaming, sea lanes only over mapped water, storms, ferrying trains (done: ship a train over to a landing)
 - [ ] Island specialties (+50%), resources per island, regional capitals, trade orders, long-haul imports
 - [ ] Landmarks (old halt, lookout, falls, lighthouse, ranger hut, ruins) with small perks; shipwrecks; maps to buy
 - [ ] Town parks/projects, town specialties

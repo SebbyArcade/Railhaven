@@ -9,12 +9,13 @@ export const MAX_LVL = 3;
 
 /** Price to take a building up one level: industries 1.5× then 3× their base price, factories $3,000 then $7,500. */
 export function levelPrice(b: Building): number {
+  if (b.kind === 'dock') return [8000, 15000][b.lvl - 1] ?? Infinity;
   if (isFactory(b.kind)) return [3000, 7500][b.lvl - 1] ?? Infinity;
   return Math.round(INDUSTRIES[b.kind].price * ([1.5, 3][b.lvl - 1] ?? Infinity) / 50) * 50;
 }
 
 /** What the next level gives, in plain words. */
-export const levelGain = (b: Building) => isFactory(b.kind) ? 'works faster, holds more' : '+50% output, +40 storage';
+export const levelGain = (b: Building) => b.kind === 'dock' ? `reaches ${[70, 110][b.lvl - 1] ?? ''} squares by sea` : isFactory(b.kind) ? 'works faster, holds more' : '+50% output, +40 storage';
 
 export function upgradeBuilding(g: Game, b: Building): string {
   if (b.lvl >= MAX_LVL) return 'It is at full size: build a second one to make more';

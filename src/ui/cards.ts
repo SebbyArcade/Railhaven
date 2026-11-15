@@ -3,7 +3,8 @@ import { bufOf, type Building, capOf, GOODS, type Good, INDUSTRIES, type Industr
 import { factoryState } from '../economy/production.ts';
 import { FOUND_PRICE, orderDone, orderOf, reward, sizeName, steadyGoods, stepOf, townLinked, upgradePrice } from '../economy/towns.ts';
 import { type Dest, destName, type Ship, shipPlan, siteOf } from '../economy/shipping.ts';
-import { trainStatus } from '../economy/dispatch.ts';
+import { FERRY_FEE, trainPrice, trainStatus } from '../economy/dispatch.ts';
+import { dockRange, islandOfB, seaDist } from '../ships/docks.ts';
 import { FLEET, type FleetKey, fleetLvl, levelGain, levelPrice, MAX_LVL, MAX_RUSH, refundOf, RUSH_FEE, rushOf, sellOffer, trainCap } from '../economy/upgrades.ts';
 import type { Train } from '../trains/train.ts';
 import { fmtMoney } from './hud.ts';
@@ -74,7 +75,43 @@ function plotCard(g: Game, p: Site): string {
   return h;
 }
 
+function dockCard(g: Game, b: Building): string {
+  const linked = isLinked(g, b), home = islandOfB(g, b) === g.world.home, isl = g.world.islands[islandOfB(g, b)]?.name ?? 'this island';
+  let h = `<div class="head"><b class="big">⚓</b><div><h2>${home ? 'Dock' : `Landing · ${esc(isl)}`}</h2><span class="chip2">Level ${b.lvl}</span> <span class="chip2">🌊 reaches ${dockRange(b)} squares</span></div></div>`;
+  if (!linked) h += home ? `<div class="warn">🔌 Not on the railway yet: lay track from your line to one end of its yard</div>` : `<div class="warn">🌊 No dock of yours reaches this landing</div>`;
+  else h += `<div class="gift">🌊 Charts the sea ${dockRange(b)} squares out: shores in reach come out of the fog</div>`;
+  // islands this dock reaches, nearest first
+  const d = seaDist(g, b), n = g.world.n, near = new Map<number, number>();
+  for (let i = 0; i < n * n; i++) {
+    const v = d[i]!; if (v < 0 || v > dockRange(b)) continue;
+    for (const j of [i + 1, i - 1, i + n, i - n]) { const k = g.world.islandOf[j]; if (k === undefined || k < 0 || !g.world.islands[k]!.name || k === islandOfB(g, b)) continue; if (!near.has(k) || near.get(k)! > v) near.set(k, v); }
+  }
+  const list = [...near].sort((p, q) => p[1] - q[1]).slice(0, 5);
+  if (list.length) {
+    h += `<h3>🏝 Islands in reach</h3>`;
+    for (const [k, v] of list) {
+      const has = (g.s.buildings ?? []).some(o => o.kind === 'dock' && islandOfB(g, o) === k);
+      h += `<div class="row"><b class="ico">🏝</b><div class="grow"><div class="line"><span>${esc(g.world.islands[k]!.name!)}</span><span>${v} squares</span></div><small>${has ? '⚓ You have a landing there' : '🏗 Build → Dock on its shore to land there'}</small></div></div>`;
+    }
+  } else if (linked) h += `<div class="note">🌊 No other island within reach yet: a bigger dock sails farther</div>`;
+  if (!home) {
+    const p = trainPrice(g) + FERRY_FEE, can = linked && g.s.money >= p;
+    h += `<div class="note">🚂 ${g.s.trains.filter(t => islandOfTrain(g, t) === islandOfB(g, b)).length} trains on ${esc(isl)}. Trains stay on their island.</div>`;
+    h += `<button class="act" data-act="trainat" data-id="${b.id}" ${can ? '' : 'disabled'}>🚂 Ship a train over · ${fmtMoney(p)}</button>`;
+  }
+  if (b.lvl < MAX_LVL) {
+    const p = levelPrice(b), can = g.s.money >= p;
+    h += `<button class="act" data-act="lvl" data-id="${b.id}" ${can ? '' : 'disabled'}>⬆ Level ${b.lvl + 1}: ${levelGain(b)} · ${fmtMoney(p)}</button>`;
+  }
+  h += `<button class="act warnb" data-act="remove" data-id="${b.id}">🗑 Remove · get ${fmtMoney(refundOf(b))}</button>`;
+  return h;
+}
+
+/** The island a train is on (from the square under its engine). */
+const islandOfTrain = (g: Game, t: Train) => g.world.islandOf[g.net.pieces[t.trail.at(-1)!.piece]!.squares.at(-1)!];
+
 function buildingCard(g: Game, b: Building): string {
+  if (b.kind === 'dock') return dockCard(g, b);
   const d = INDUSTRIES[b.kind], k = d.makes, G = GOODS[k], cap = capOf(b), linked = isLinked(g, b), fac = isFactory(b.kind);
   const plan = shipPlan(g);
   let h = `<div class="head"><b class="big">${d.icon}</b><div><h2>${d.name}</h2><span class="chip2">Level ${b.lvl}</span> <span class="chip2">${G.icon} ${Math.round(outputOf(g, b) * 60)}/min</span></div></div>`;

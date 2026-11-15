@@ -1,4 +1,6 @@
 import type { Game, GameState, Site } from './state.ts';
+import { chartSea, islandOfB, linkedDocks } from './ships/docks.ts';
+const isHomeDock = (g: Game, b: import('./buildings/industries.ts').Building) => islandOfB(g, b) === g.world.home;
 import { doubleSquares, hallsOf } from './buildings/stations.ts';
 import { generateWorld, refreshIslands, refreshWater, TILE } from './world/terrain.ts';
 import { generateSites } from './world/sites.ts';
@@ -110,6 +112,7 @@ export function trackChanged(g: Game) {
   g.net = makeNetwork(g.track, g.world.n, g.s.sites, g.s.buildings);
   g.dist = new Map();
   g.sys.setNetwork(g.net);
+  for (const b of linkedDocks(g)) if (chartSea(g, b)) { (g.news ??= []).push(`⚓ The ${isHomeDock(g, b) ? 'dock' : 'landing'} charts the sea around it: new shores are out of the fog`); }
   g.s.trains.forEach((t, k) => { relocate(g.net, t, where[k]!); });
   g.s.breaks = g.s.breaks?.filter(b => g.track.has(b.square));
   g.sys.blocked = blockedPieces(g); g.sys.anyLane = platformPieces(g);
