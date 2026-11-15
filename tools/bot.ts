@@ -127,7 +127,7 @@ function think() {
   // upgrades with spare money
   if (g.s.money > 15000) {
     for (const k of ['wag', 'eng', 'rep'] as const) { const p = FLEET[k].price[fleetLvl(g, k)]; if (p !== undefined && g.s.money > p * 2 && !buyFleet(g, k)) { log.push(`  fleet ${FLEET[k].name}`); return; } }
-    for (const b of g.s.buildings ?? []) if (b.lvl < 3 && g.s.money > levelPrice(b) * 3 && !upgradeBuilding(g, b)) { log.push(`  ${info(b.kind).name} level ${b.lvl}`); return; }
+    for (const b of g.s.buildings ?? []) if (b.lvl < 3 && g.s.money > levelPrice(b) * 3 && !upgradeBuilding(g, b)) { trackChanged(g); log.push(`  ${info(b.kind).name} level ${b.lvl}`); return; }
   }
 }
 

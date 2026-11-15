@@ -1,6 +1,6 @@
 import type { Game, GameState, Resource, Site } from '../state.ts';
 import { loadGame, newGame, trackChanged } from '../game.ts';
-import { build, capOf, type Building, footprint, INDUSTRIES, type IndustryKind, isFactory, isLinked, placeError, placementsAt, priceOf, buildingSquares, yardSquares, type Good } from '../buildings/industries.ts';
+import { build, growsTracks, stripError, capOf, type Building, footprint, INDUSTRIES, type IndustryKind, isFactory, isLinked, placeError, placementsAt, priceOf, buildingSquares, yardSquares, type Good } from '../buildings/industries.ts';
 import { stationLinkError } from '../buildings/stations.ts';
 import { orderOf, sizeCap } from '../economy/towns.ts';
 import { railLevel } from '../economy/dispatch.ts';
@@ -145,6 +145,7 @@ export function importLegacy(o: any): ImportResult {
     b.paid = value; b.lvl = Math.max(1, Math.min(3, ob.lvl ?? 1)); b.stock = Math.min(capOf(b), Math.max(0, ob.stock ?? 0));
     if (ob.inp && isFactory(kind)) for (const [k, v] of Object.entries(ob.inp)) (b.inbuf ??= {})[k as Good] = Math.min(30 + 20 * b.lvl, v as number);
     if (kind === 'dock' && ob.fish) b.fish = Math.min(3, ob.fish);
+    if (growsTracks(kind) && b.lvl >= 2 && !stripError(g, b)) b.tracks = b.lvl + 1; // its extra loading tracks, where there is room
     trackChanged(g);
     // it was on the railway in the old game: join its yard to the line again with a short stretch of track (free)
     if (ob.linked && !isLinked(g, b)) joinedSq += joinToLine(g, b);
