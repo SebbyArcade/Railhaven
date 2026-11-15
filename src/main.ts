@@ -444,7 +444,7 @@ $('ok').onclick = () => tools.confirm();
 $('undo').onclick = () => tools.undo();
 $('turn').onclick = () => tools.turn();
 $('near').onclick = () => { if (tools.nearestFit() && tools.preview) { const c = game.s.camera, sx = (tools.preview.x + 1.5) * 32, sy = (tools.preview.y + 1.5) * 32; if (Math.abs(sx - c.x) * c.z > view.w * 0.4 || Math.abs(sy - c.y) * c.z > view.h * 0.3) { c.x = sx; c.y = sy; } } };
-$('cancel').onclick = () => { tools.cancel(); };
+$('cancel').onclick = () => { tools.cancel(); if (tools.mode === 'train') tools.mode = 'pan'; }; // the Buy train bar shows for as long as Train is on, so ✕ turns Train off
 
 function updateUi() {
   for (const b of document.querySelectorAll<HTMLButtonElement>('#bar [data-mode]')) b.classList.toggle('on', b.dataset.mode === tools.mode);
