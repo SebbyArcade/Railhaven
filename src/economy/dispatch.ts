@@ -7,6 +7,7 @@ import { shedSiding } from '../buildings/shed.ts';
 import { bldDist, bldOf, destName, destSquares, dockKey, factoryRoom, payFor, type Plan, railDist, type Ship, shipPlan, siteOf } from './shipping.ts';
 import { isDock } from '../ships/docks.ts';
 import { tickShips } from '../ships/ships.ts';
+import { tickScouts } from '../world/explore.ts';
 import { fleetMulOf, minLoad, rushDelivered, trainCap } from './upgrades.ts';
 import { V_MAX } from '../trains/train.ts';
 import { deliverToTown, orderDone, reward, sizeName, stepOf } from './towns.ts';
@@ -167,7 +168,7 @@ function nearestTown(g: Game, t: Train): { kind: 'town'; id: number } | null {
 
 /** Goods trains run themselves: each idle train collects the best waiting load and takes it where the plan says. */
 export function tickTrains(g: Game, dt: number) {
-  tickShips(g, dt);
+  tickShips(g, dt); tickScouts(g, dt);
   let plan: Plan | null = null;
   const P = () => (plan ??= shipPlan(g));
   const fm = fleetMul(g.s.trains.length) * fleetMulOf(g, 'rep');

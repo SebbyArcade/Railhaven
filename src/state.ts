@@ -68,6 +68,10 @@ export interface GameState {
   /** goods being rushed (at most three) */
   rush?: { to: { kind: 'town' | 'bld'; id: number }; good: import('./buildings/industries.ts').Good; left: number }[];
   rlv?: number;
+  /** landmarks and shipwrecks (placed from the seed on first use) */
+  pois?: import('./world/explore.ts').Poi[];
+  /** scouts out exploring */
+  scouts?: import('./world/explore.ts').Scout[];
   /** cargo ships */
   ships?: import('./ships/ships.ts').CargoShip[];
   /** money earned and spent, for the report */

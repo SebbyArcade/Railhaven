@@ -1,4 +1,5 @@
 import type { Game } from '../state.ts';
+import { MAX_SCOUTS, scoutCost, scoutStarts, scoutStepError, sendScout } from '../world/explore.ts';
 import { trackChanged } from '../game.ts';
 import { type BuiltStroke, buildPlan, extendPlan, isAnchor, type PaintPlan, planCost, planError, startPlan, undoStroke } from '../track/paint.ts';
 import { removeSquare } from '../track/edit.ts';
@@ -11,7 +12,7 @@ import { badSquares, bestPlacement, build, footprint, INDUSTRIES, type IndustryK
 
 type Placement = ReturnType<typeof placementsAt>[number];
 
-export type Mode = 'pan' | 'rail' | 'double' | 'remove' | 'train' | 'build';
+export type Mode = 'pan' | 'rail' | 'double' | 'remove' | 'train' | 'build' | 'scout';
 
 export const MODE_HINT: Record<Mode, string> = {
   pan: '',
@@ -20,6 +21,7 @@ export const MODE_HINT: Record<Mode, string> = {
   remove: '✂ Tap a track square to remove it.',
   train: '🚂 Trains roll out of the engine shed and run themselves: each takes the best waiting load where it is needed.',
   build: '🏗 Drag the outline where you want it: blue squares are its loading tracks, green its building. ⟳ Turn rotates it.',
+  scout: '🔭 Tap a glowing town (scouts on foot) or dock (a boat), then drag or tap to draw the route into the fog.',
 };
 
 /** The build tools: what the player is doing, and the confirm bar it needs. */
@@ -44,6 +46,8 @@ export class Tools {
   /** the outline squares that can't be used (drawn red; the rest keep their colours) */
   previewBad = new Set<number>();
   private dragOff: [number, number] | null = null;
+  /** Scout mode: the route being drawn (from a town on foot, or a dock by boat) */
+  scout: { path: number[]; boat: boolean; name: string } | null = null;
 
   constructor(private g: () => Game) {}
 
@@ -52,7 +56,7 @@ export class Tools {
     this.cancel();
   }
 
-  cancel() { this.plan = null; this.dbl.clear(); this.removeAt = null; this.preview = null; this.previewErr = ''; this.dragOff = null; if (this.mode !== 'build') this.buildKind = null; }
+  cancel() { this.scout = null; this.plan = null; this.dbl.clear(); this.removeAt = null; this.preview = null; this.previewErr = ''; this.dragOff = null; if (this.mode !== 'build') this.buildKind = null; }
 
   /** choose what to build: glowing squares show where it fits */
   chooseBuild(k: IndustryKind): { x: number; y: number } | null {
@@ -156,7 +160,32 @@ export class Tools {
       this.dragOver(i); return true;
     }
     if (this.mode === 'double') { if (!g.track.has(i)) return false; this.dbl.add(i); return true; }
+    if (this.mode === 'scout') {
+      if (this.scout && this.scout.path.includes(i)) { this.scout.path = this.scout.path.slice(0, this.scout.path.indexOf(i) + 1); return true; }
+      const st = this.scoutStartAt(i); if (st) { this.scout = { path: [st.sq], boat: st.boat, name: st.name }; return true; }
+      return false;
+    }
     return false;
+  }
+
+  /** A place scouts can leave from, at or right next to square i. */
+  private scoutStartAt(i: number) {
+    const g = this.g(), n = g.world.n;
+    return scoutStarts(g).find(s => Math.abs((s.sq % n) - (i % n)) <= 1 && Math.abs(((s.sq / n) | 0) - ((i / n) | 0)) <= 1) ?? null;
+  }
+
+  /** Run the scout route on to square i: straight steps, across then down (stops at the first square it can't take, and says why). */
+  private scoutTo(i: number) {
+    const g = this.g(), n = g.world.n, sc = this.scout!;
+    let cur = sc.path.at(-1)!;
+    const tx = i % n, ty = (i / n) | 0;
+    while (cur !== i) {
+      const cx = cur % n, cy = (cur / n) | 0;
+      const nx = cx !== tx ? cur + Math.sign(tx - cx) : cur + Math.sign(ty - cy) * n;
+      const e = scoutStepError(g, sc.path, nx, sc.boat);
+      if (e) { this.refuse(nx, e); return; }
+      sc.path.push(nx); cur = nx;
+    }
   }
 
   dragOver(i: number) {
@@ -171,6 +200,7 @@ export class Tools {
       if (this.plan.refused) { this.refuse(this.plan.refused.square, this.plan.refused.why); this.plan.refused = undefined; }
     }
     if (this.mode === 'double' && g.track.has(i)) this.dbl.add(i);
+    if (this.mode === 'scout' && this.scout && this.scout.path.at(-1) !== i) this.scoutTo(i);
   }
 
   tapSquare(i: number): boolean {
@@ -189,6 +219,12 @@ export class Tools {
       if (this.preview && footprint(n, this.preview).includes(i)) { this.dragOff = null; return true; } // a tap on the outline itself: leave it
       this.moveTo(i % n, (i / n) | 0);
       return true;
+    }
+    if (this.mode === 'scout') {
+      if (this.scout && this.scout.path.length && !this.scoutStartAt(i)) { this.scoutTo(i); return true; }
+      const st = this.scoutStartAt(i);
+      if (st) { this.scout = { path: [st.sq], boat: st.boat, name: st.name }; toast(st.boat ? '⛵ Now draw where the boat should sail' : `🚶 Now draw where the scout should walk from ${st.name}`); return true; }
+      toast(scoutStarts(g).length ? 'Scouts leave from a glowing town or dock on your railway' : 'Join a town to your railway first: scouts leave from there'); return true;
     }
     if (this.mode === 'remove') { this.removeAt = g.track.has(i) ? i : null; if (!g.track.has(i)) toast('No track here'); return true; }
     if (this.mode === 'train') return true;
@@ -253,6 +289,11 @@ export class Tools {
       const p = trainPrice(g);
       return { text: g.s.shed ? `🚂 Buy train ${g.s.trains.length + 1} · ${fmtMoney(p)}` : '🏚 Lay a straight bit of line near Ashford: the engine shed goes beside it', ok: '✓ Buy', can: !!g.s.shed && p <= g.s.money };
     }
+    if (this.mode === 'scout' && this.scout) {
+      const k = this.scout.path.length - 1, c = scoutCost(k, this.scout.boat), out = (g.s.scouts ?? []).length;
+      if (!k) return { text: `${this.scout.boat ? '⛵ Boat' : '🚶 Scout'} from ${this.scout.name}: draw the route`, ok: '✓ Send', can: false };
+      return { text: `${this.scout.boat ? '⛵' : '🚶'} ${k} squares · ${fmtMoney(c)} · next square +${fmtMoney(scoutCost(k + 1, this.scout.boat) - c)}${out ? ` · ${out}/${MAX_SCOUTS} out` : ''}`, ok: '✓ Send', can: c <= g.s.money && out < MAX_SCOUTS };
+    }
     if (this.mode === 'build' && this.preview && this.previewErr) {
       return { text: `⚠ ${this.previewErr}`, ok: '✓ Build', can: false, turn: true, near: !lockedText(g, this.preview.kind) };
     }
@@ -291,6 +332,9 @@ export class Tools {
     } else if (this.mode === 'train') {
       const t = buyTrain(g); if (typeof t === 'string') { toast(t); return; }
       this.selected = t.id; toast(`🚂 Train ${t.id} is out of the shed and looking for a load`);
+    } else if (this.mode === 'scout' && this.scout) {
+      const s = sendScout(g, this.scout.path, this.scout.boat); if (typeof s === 'string') { toast(s); return; }
+      toast(s.boat ? '⛵ The boat sets sail' : '🚶 The scout sets off'); this.scout = null;
     } else if (this.mode === 'remove' && this.removeAt !== null) {
       const i = this.removeAt;
       if (g.s.trains.some(t => t.trail.some(s => g.net.pieces[s.piece]!.squares.includes(i)))) { toast('A train is on this track'); return; }

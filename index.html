@@ -13,6 +13,7 @@
   #toast { position: fixed; left: 50%; top: calc(max(8px, env(safe-area-inset-top)) + 54px); transform: translateX(-50%); background: rgba(28,22,16,.94); border: 1px solid #c99a5b; border-radius: 12px; padding: 8px 14px; font-size: 14px; opacity: 0; transition: opacity .3s; pointer-events: none; max-width: 86vw; text-align: center; }
   #bar { position: fixed; bottom: max(10px, env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%); display: flex; gap: 6px; }
   #bar button { background: #3a2a18; color: #ffe9c4; border: 1px solid #c99a5b; border-radius: 12px; padding: 8px 10px; font-size: 14px; font-weight: 600; min-width: 52px; }
+  @media (max-width: 480px) { #bar { gap: 3px; width: 98vw; } #bar button { flex: 1; padding: 7px 1px; font-size: 12px; min-width: 0; } }
   #bar button.on { background: #e8a33c; color: #2a1c0c; border-color: #ffd27a; }
   #hint { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(max(10px, env(safe-area-inset-bottom)) + 56px); width: min(92vw, 520px); background: rgba(28,22,16,.9); border: 1px solid #6b5132; border-radius: 12px; padding: 8px 12px; font-size: 13px; display: none; box-sizing: border-box; }
   #confirm { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(max(10px, env(safe-area-inset-bottom)) + 108px); width: min(92vw, 520px); background: #2a1f14; border: 2px solid #c99a5b; border-radius: 14px; padding: 8px 10px; display: none; align-items: center; gap: 8px; box-sizing: border-box; }
@@ -81,6 +82,7 @@
   <button data-mode="double">═ Double</button>
   <button data-mode="remove">✂ Remove</button>
   <button data-mode="train">🚂 Train</button>
+  <button data-mode="scout">🔭 Scout</button>
   <button id="newGame">🗺 New</button>
 </div>
 <script type="module" src="/src/main.ts"></script>
