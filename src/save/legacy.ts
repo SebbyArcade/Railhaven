@@ -9,7 +9,7 @@ import { placeTrain } from '../trains/train.ts';
 import { buildPlan, extendPlan, startPlan } from '../track/paint.ts';
 import { squareCost } from '../track/rules.ts';
 import { buyShip, SHIP_PRICE } from '../ships/ships.ts';
-import { linkedDocks } from '../ships/docks.ts';
+import { DOCK_RANGE, linkedDocks } from '../ships/docks.ts';
 import { emptyFog } from '../world/fog.ts';
 import { TILE } from '../world/terrain.ts';
 
@@ -71,9 +71,36 @@ export function importLegacy(o: any): ImportResult {
     const near = [1, -1, n, -n].some(d => sq.has(i + d));
     if (near) sq.add(i);
   });
+  // a line that joined the old station from the side at one end of the hall: bend it round into the hall's end instead
+  // (two squares of track: one beside the line, one in front of the hall's end)
+  const land = (i: number) => base.world.terr[i] !== 0 && base.world.terr[i] !== 4 && !oldSites.some(o => o.y * n + o.x === i);
+  for (const t of sites) {
+    if (t.kind !== 'town') continue;
+    const c = t.y * n + t.x; if (!sq.has(c)) continue;
+    const hz = sq.has(c + 1) || sq.has(c - 1) || !(sq.has(c + n) || sq.has(c - n)), step = hz ? 1 : n, side = hz ? n : 1;
+    for (const k of [-1, 1]) {
+      const e = c + k * step; if (!sq.has(e)) continue;
+      for (const j of [e + side, e - side]) {
+        if (!sq.has(j)) continue;
+        const j2 = j + k * step, a = c + 2 * k * step;
+        if ((sq.has(j2) || land(j2)) && (sq.has(a) || land(a))) { sq.add(j2); sq.add(a); }
+      }
+    }
+  }
   const tmap = new Map<number, { links: number; dbl?: boolean }>();
   const nb = (i: number, d: number) => d === 0 ? (i % n < n - 1 ? i + 1 : -1) : d === 1 ? i + n : d === 2 ? (i % n > 0 ? i - 1 : -1) : i - n;
   for (const i of sq) { let links = 0; for (let d = 0; d < 4; d++) if (sq.has(nb(i, d))) links |= 1 << d; tmap.set(i, dbl.has(i) ? { links, dbl: true } : { links }); }
+  // the old game let a line join a station from the side; here a hall runs one way. Where track meets a town square from
+  // both directions, keep the way that leads on to more of the railway and cut the short stubs the other way
+  const reachOf = (from: number[], skip: number) => { const seen = new Set<number>([skip, ...from]), q = [...from]; for (let h = 0; h < q.length && seen.size < 600; h++) for (let d = 0; d < 4; d++) { const j = nb(q[h]!, d); if (j >= 0 && sq.has(j) && !seen.has(j)) { seen.add(j); q.push(j); } } return seen.size; };
+  for (const t of sites) {
+    if (t.kind !== 'town') continue;
+    const c = t.y * n + t.x, m = tmap.get(c); if (!m) continue;
+    const ew = [0, 2].filter(d => m.links & (1 << d)), ns = [1, 3].filter(d => m.links & (1 << d));
+    if (!ew.length || !ns.length) continue;
+    const r = (ds: number[]) => reachOf(ds.map(d => nb(c, d)), c);
+    for (const d of r(ew) >= r(ns) ? ns : ew) { m.links &= ~(1 << d); const o = tmap.get(nb(c, d)); if (o) o.links &= ~(1 << ((d + 2) % 4)); }
+  }
   for (const i of sq) for (let d = 0; d < 2; d++) {
     const j = nb(i, d); if (!sq.has(j)) continue;
     if (stationLinkError(tmap, n, sites, i, j)) { tmap.get(i)!.links &= ~(1 << d); tmap.get(j)!.links &= ~(1 << ((d + 2) % 4)); }
@@ -99,9 +126,18 @@ export function importLegacy(o: any): ImportResult {
   const A = (b: any) => Math.hypot(b.x - ash.x, b.y - ash.y);
   const rank = (b: any) => KINDS[b.type] === 'dock' ? 0 : MINES.has(KINDS[b.type]!) ? 1 : 2;
   const order = [...olds].sort((a, b) => rank(a) - rank(b) || A(a) - A(b));
-  let joinedSq = 0;
+  let joinedSq = 0; const upgraded: Building[] = [];
   for (const ob of order) {
-    const kind = KINDS[ob.type]!, best = placeNear(g, kind, ob.x, ob.y) ?? (kind === 'dock' ? dockOnIsland(g, ob.x, ob.y) : null);
+    // a dock looks for open water first (a straight shore reaches further), then a ragged coast
+    const kind = KINDS[ob.type]!, findDock = () => placeNear(g, kind, ob.x, ob.y, true) ?? dockOnIsland(g, ob.x, ob.y, true) ?? placeNear(g, kind, ob.x, ob.y) ?? dockOnIsland(g, ob.x, ob.y);
+    let best = kind === 'dock' ? findDock() : placeNear(g, kind, ob.x, ob.y);
+    // the old game's sea reach was measured differently: a landing it reached may be just past a dock's reach here, so
+    // that dock gets the next level for free (the nearest one that makes the landing fit)
+    if (!best && kind === 'dock') for (const a of linkedDocks(g).filter(d => d.lvl < DOCK_RANGE.length).sort((p, q) => Math.hypot(p.x - ob.x, p.y - ob.y) - Math.hypot(q.x - ob.x, q.y - ob.y))) {
+      a.lvl++; best = findDock();
+      if (best) { upgraded.push(a); break; }
+      a.lvl--;
+    }
     const value = ob.paid ?? INDUSTRIES[kind].price;
     if (!best) { refund += value; missed.push(INDUSTRIES[kind].name); continue; }
     g.s.money += priceOf(g, kind);
@@ -120,7 +156,7 @@ export function importLegacy(o: any): ImportResult {
   g.s.money = 0;
   trackChanged(g);
   report.push(`🏘 ${towns.length} towns with their sizes · 🛤 ${tmap.size} squares of track`);
-  report.push(`🏭 ${placed} of ${olds.length} buildings placed near where they stood${joinedSq ? ` (${joinedSq} squares of track added to join their yards)` : ''}${missed.length ? ` · ${missed.length} didn't fit (${[...new Set(missed)].join(', ')}): ${fmt(refund)} paid back` : ''}`);
+  report.push(`🏭 ${placed} of ${olds.length} buildings placed near where they stood${joinedSq ? ` (${joinedSq} squares of track added to join their yards)` : ''}${upgraded.length ? ` · ${upgraded.length} dock${upgraded.length > 1 ? 's' : ''} raised a level to reach ${upgraded.length > 1 ? 'their landings' : 'its landing'}` : ''}${missed.length ? ` · ${missed.length} didn't fit (${[...new Set(missed)].join(', ')}): ${fmt(refund)} paid back` : ''}`);
 
   // town orders: what was already delivered toward the current order
   for (const t of g.s.sites) {
@@ -163,16 +199,24 @@ function buyShipFree(g: Game, d: Building): boolean {
   return true;
 }
 
+/** Pier squares over water. */
+const pierSea = (g: Game, p: Parameters<typeof buildingSquares>[1]) => buildingSquares(g.world.n, p).filter(i => !g.world.terr[i]).length;
+
+/** The island an old port served: the land under it, or the land next to it when the port square is water. */
+function portIsland(g: Game, x: number, y: number): number {
+  const n = g.world.n, w = g.world; let isl = w.islandOf[y * n + x] ?? -1;
+  if (isl < 0) for (const d of [1, -1, n, -n]) { const j = w.islandOf[y * n + x + d]!; if (j >= 0) { isl = j; break; } }
+  return isl;
+}
+
 /** A dock that didn't fit by the old port: the nearest spot on the same island's shore (within 30 squares) that fits. */
-function dockOnIsland(g: Game, x: number, y: number) {
-  const n = g.world.n, w = g.world, k = w.islandOf[y * n + x] ?? -1;
-  // the old port square may be water: its island is the land next to it
-  let isl = k; if (isl < 0) for (const d of [1, -1, n, -n]) { const j = w.islandOf[y * n + x + d]!; if (j >= 0) { isl = j; break; } }
+function dockOnIsland(g: Game, x: number, y: number, openWater = false) {
+  const n = g.world.n, w = g.world, isl = portIsland(g, x, y);
   let best: ReturnType<typeof placementsAt>[number] | null = null, bd = Infinity;
   for (let dy = -30; dy <= 30; dy++) for (let dx = -30; dx <= 30; dx++) {
     const d = Math.hypot(dx, dy); if (d >= bd || d > 30) continue;
     const i = (y + dy) * n + x + dx; if (w.terr[i] !== 0 || ![1, -1, n, -n].some(e => w.islandOf[i + e] === isl)) continue; // pier squares: water by this island
-    for (const p of placementsAt('dock', x + dx, y + dy)) if (!placeError(g, p)) { best = p; bd = d; break; }
+    for (const p of placementsAt('dock', x + dx, y + dy)) if ((!openWater || pierSea(g, p) === 4) && !placeError(g, p)) { best = p; bd = d; break; }
   }
   return best;
 }
@@ -211,7 +255,7 @@ function joinToLine(g: Game, b: Building, island = false): number {
 }
 
 /** Where a building that stood on square (x, y) fits best: yard on existing track, close to the old spot. */
-function placeNear(g: Game, kind: IndustryKind, x: number, y: number) {
+function placeNear(g: Game, kind: IndustryKind, x: number, y: number, openWater = false) {
   const n = g.world.n;
   let best: ReturnType<typeof placementsAt>[number] | null = null, bs = -Infinity;
   // a mine needs a deposit of its kind under its building row (placeError checks): look around the old one, then
@@ -219,13 +263,16 @@ function placeNear(g: Game, kind: IndustryKind, x: number, y: number) {
   const R = MINES.has(kind) ? 3 : kind === 'dock' ? 10 : 5;
   const res = INDUSTRIES[kind].makes;
   const seen = new Set<string>();
+  const isl = kind === 'dock' ? portIsland(g, x, y) : -1;
   const centres = MINES.has(kind) ? [[x, y], ...g.s.sites.filter(s => s.kind === 'dep' && s.res === res && Math.hypot(s.x - x, s.y - y) <= 10 && (s.x !== x || s.y !== y)).map(s => [s.x, s.y])] : [[x, y]];
   for (const [cx, cy] of centres) for (let dy = -R - 1; dy <= R + 1; dy++) for (let dx = -R - 1; dx <= R + 1; dx++) {
     if (best && (cx !== x || cy !== y)) break; // a spot by the old deposit wins
     const px = cx! + dx - x, py = cy! + dy - y;
     for (const p of placementsAt(kind, x + px, y + py)) {
       const key = `${p.x},${p.y},${+p.horizontal},${p.side}`; if (seen.has(key)) continue; seen.add(key); // each spot is reached from all 4 of its squares
+      if (openWater && pierSea(g, p) < 4) continue;
       if (placeError(g, p)) continue;
+      if (kind === 'dock' && g.world.islandOf[yardSquares(n, p)[0]!] !== isl) continue; // a dock stays on the island it served
       const ys = yardSquares(n, p), on = ys.filter(i => g.track.has(i)).length;
       const step = p.horizontal ? 1 : n, touch = [ys[0]! - step, ys.at(-1)! + step].filter(i => g.track.has(i)).length;
       const linkedEnd = [ys[0]! - step, ys.at(-1)! + step].filter(i => g.linked?.has(i)).length;

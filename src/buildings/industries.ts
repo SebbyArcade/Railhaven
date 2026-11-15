@@ -201,7 +201,8 @@ function squareError(g: Game, b: Pick<Building, 'x' | 'y' | 'horizontal' | 'side
   if (x < 1 || y < 1 || x >= n - 1 || y >= n - 1) return 'Too close to the edge of the map';
   if (!isRevealed(g, i)) return 'Part of this spot is still in the fog: explore it first';
   const pier = b.kind === 'dock' && inRow;
-  if (pier && t[i] !== T.Water) return 'A dock\'s pier stands over the water: turn it so the green row is on the sea';
+  // a ragged coast is fine: the pier needs at least 2 of its 4 squares over the water, and stands on the shore for the rest
+  if (pier && t[i] !== T.Water && (t[i] === T.Mountain || buildingSquares(n, b).filter(j => t[j] === T.Water).length < 2)) return t[i] === T.Mountain ? 'A dock\'s pier can\'t stand on mountain: slide it along the coast' : 'A dock\'s pier stands over the water: turn it so at least half of the green row is on the sea';
   if (t[i] === T.Water && !pier) return b.kind === 'dock' ? 'A dock\'s yard track goes on the shore: turn it so the blue row is on land' : 'Part of this spot is water: pick dry land';
   if (t[i] === T.Mountain && !(MINES.has(b.kind) && inRow)) return MINES.has(b.kind) ? 'The blue loading track needs flat land: turn it so the green row is on the mountain and the blue row beside it' : 'The yard track can\'t go on mountain: turn it to the flat land';
   const taken = takenSquares(g).has(i); // buildings, towns, the shed and track: the checks below only matter on these squares
