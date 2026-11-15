@@ -60,7 +60,7 @@ export const inputsOf = (k: IndustryKind) => Object.keys(info(k).in ?? {}) as Go
 export const bufOf = (b: Building) => 30 + 20 * b.lvl;
 /** Why this kind can't be built yet (Railway level), or '' */
 export const lockedText = (g: Game, k: IndustryKind) => (info(k).unlock ?? 0) > (g.s.rlv ?? 0) ? `🔒 Unlocks at Railway level ${info(k).unlock}` : '';
-const MINES = new Set<IndustryKind>(['stone', 'coal', 'iron', 'oil']);
+export const MINES = new Set<IndustryKind>(['stone', 'coal', 'iron', 'oil']);
 
 /**
  * A building and its yard. The yard is a row of four track squares (two loading tracks, entered at the ends);

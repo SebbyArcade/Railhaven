@@ -14,7 +14,8 @@ import { drawFields } from './fields.ts';
 import { shedSquare } from '../buildings/shed.ts';
 import { hallsOf } from '../buildings/stations.ts';
 import { landDistance } from '../track/rules.ts';
-import { buildingSquares, footprint, isLinked, yardSquares } from '../buildings/industries.ts';
+import { buildingSquares, footprint, type IndustryKind, isLinked, yardSquares } from '../buildings/industries.ts';
+import { buildNoGo, railNoGo } from '../buildings/nogo.ts';
 import { turnSquares } from '../ui/tools.ts';
 import { townLinked } from '../economy/towns.ts';
 import { TerrainCache } from './terrainCache.ts';
@@ -99,6 +100,7 @@ export class Renderer {
     }
     drawTownBadges(ctx, g, this.plan, cam.z, tm);
     if (!this.tools?.view) drawAlerts(ctx, g, this.alerts, cam.z, tm);
+    this.drawNoGo(ctx, tm, x0, y0, x1, y1);
     this.drawOverlay(ctx, tm);
     drawStorm(ctx, g, tm);
     drawFog(ctx, g, x0, y0, x1, y1, cam.z, tm);
@@ -109,6 +111,24 @@ export class Renderer {
     const st = g.s.storm, fl = st && Math.hypot(st.x * TILE - cam.x, st.y * TILE - cam.y) * cam.z < Math.max(view.w, view.h) ? stormFlash(g, tm) : 0;
     if (fl) { ctx.fillStyle = `rgba(235,240,255,${fl})`; ctx.fillRect(0, 0, view.w, view.h); } // lightning
     const v = this.tools?.view; if (v) drawView(ctx, g, v, view, this.views.get(g, v, tm), tm, this.arrows);
+  }
+
+  private noGo = { key: '', at: -9, set: [] as number[] };
+  /** Rails and Build mode: a faint red tint on every square in view where the player can't build. */
+  private drawNoGo(ctx: CanvasRenderingContext2D, tm: number, x0: number, y0: number, x1: number, y1: number) {
+    const t = this.tools, g = this.g, n = g.world.n;
+    const k = t?.mode === 'rail' || t?.mode === 'double' ? 'rail' : t?.mode === 'build' && t.buildKind ? t.buildKind : '';
+    if (!k) return;
+    const key = `${k}/${x0},${y0},${x1},${y1}/${g.track.size}/${g.s.buildings?.length ?? 0}/${g.s.parks?.length ?? 0}`;
+    if (key !== this.noGo.key || tm - this.noGo.at > 1) { // the fog and buildings change slowly: once a second is plenty
+      const set: number[] = [];
+      for (let y = Math.max(0, y0); y <= Math.min(n - 1, y1); y++) for (let x = Math.max(0, x0); x <= Math.min(n - 1, x1); x++) {
+        const i = y * n + x; if (k === 'rail' ? railNoGo(g, i) : buildNoGo(g, k as IndustryKind, i)) set.push(i);
+      }
+      this.noGo = { key, at: tm, set };
+    }
+    ctx.fillStyle = 'rgba(225,60,40,.17)'; ctx.strokeStyle = 'rgba(225,60,40,.22)'; ctx.lineWidth = 1;
+    for (const i of this.noGo.set) { const x = (i % n) * TILE, y = ((i / n) | 0) * TILE; ctx.fillRect(x, y, TILE, TILE); ctx.strokeRect(x + 0.5, y + 0.5, TILE - 1, TILE - 1); }
   }
 
   private drawOverlay(ctx: CanvasRenderingContext2D, tm: number) {
