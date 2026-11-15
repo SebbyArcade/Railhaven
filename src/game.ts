@@ -22,7 +22,7 @@ export const START_DEPOSIT_REVEAL = 4;
 
 /** Rebuild the world from the seed and apply saved terrain edits. */
 export function buildWorld(s: GameState) {
-  const world = generateWorld(s.seed, MAP_N, s.mapV ?? 1); // saves from before sister islands keep their maps
+  const world = generateWorld(s.seed, MAP_N, s.mapV ?? 1, s.rings ?? 0); // saves from before sister islands keep their maps
   const edits = Object.entries(s.terrainEdits);
   if (edits.length) {
     for (const [i, t] of edits) world.terr[+i] = t;

@@ -24,12 +24,17 @@ export interface World {
   islands: IslandInfo[];
   /** id of the home island (Ashford's) */ home: number;
   /** centre square (Ashford) */ cx: number; cy: number;
+  /** 🗺 on a map grown by expeditions: where the first map (n0 squares) sits inside it */
+  box?: { o: number; n0: number };
 }
 
 const ISLAND_NAMES = ['Ashford Isle', 'Gull Rock', 'Brackenholm', 'Saltreach', 'Mossy Key', 'Emberfell', 'Cinder Isle',
   'Fernhallow', 'Westerly', 'Ironback', 'Lantern Isle', 'Cobble Key', 'Thornby', 'Starling Isle', 'Kelpmoor', 'Duskwater',
   'Hollowmere', 'Copperhead', 'Pinecrest', 'Wrenhaven', 'Ashgrove', 'Tern Island', 'Bramblecay', 'Foxmoor', 'Rookhold',
-  'Sunreach', 'Harrier Isle', 'Marigold Key', 'Stonebay', 'Northwatch', 'Quill Isle', 'Driftwood', 'Oakmere', 'Farthing Isle'];
+  'Sunreach', 'Harrier Isle', 'Marigold Key', 'Stonebay', 'Northwatch', 'Quill Isle', 'Driftwood', 'Oakmere', 'Farthing Isle',
+  // far seas, reached by 🗺 expeditions
+  'Albatross Isle', 'Coral Reach', 'Mistral Key', 'Saffron Isle', 'Fargone', 'Whalesong', 'Ambergris', 'Seafire',
+  'Longshore', 'Kittiwake', 'Glimmerholm', 'Tempest Rock', 'Juniper Key', 'Silverstrand', 'Ospreyholm', 'Horizon Isle'];
 
 /** Map maker versions: 1 = the old game's maps; 2 adds sister islands (pairs of islands 1-3 squares apart, bridgeable). */
 export const MAP_VERSION = 2;
@@ -43,8 +48,8 @@ type Disc = { x: number; y: number; r: number };
  * the home island in the middle, up to 29 more islands farther out, open land around Ashford.
  * Version 2 also places a few sister islands right beside outer islands, so a short strait bridge can join them.
  */
-export function generateWorld(seed: number, n = MAP_N, version = 1): World {
-  const C = n >> 1;
+export function generateWorld(seed: number, n0 = MAP_N, version = 1, rings = 0): World {
+  const C = n0 >> 1, n = n0; // the first map is n0 squares; each 🗺 expedition ring adds RING_W squares of sea all round
   const at = (x: number, y: number) => y * n + x;
   const H = (x: number, y: number, s = 0) => hash(seed, x, y, s);
   const V = (x: number, y: number, s: number) => vnoise(seed, x, y, s);
@@ -67,14 +72,52 @@ export function generateWorld(seed: number, n = MAP_N, version = 1): World {
   };
   if (version >= 2) addSisters(isl, n, H, terrAt);
 
-  const terr = new Uint8Array(n * n);
-  for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) terr[at(x, y)] = terrAt(x, y, isl);
-
-  const w: World = { seed, n, terr, deep: new Uint8Array(n * n), ocean: new Uint8Array(n * n),
-    islandOf: new Int16Array(n * n).fill(-1), islands: [], home: 0, cx: C, cy: C };
+  if (rings <= 0) {
+    const terr = new Uint8Array(n * n);
+    for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) terr[at(x, y)] = terrAt(x, y, isl);
+    const w: World = { seed, n, terr, deep: new Uint8Array(n * n), ocean: new Uint8Array(n * n),
+      islandOf: new Int16Array(n * n).fill(-1), islands: [], home: 0, cx: C, cy: C };
+    refreshWater(w);
+    refreshIslands(w);
+    return w;
+  }
+  // 🗺 a grown map: the first map is drawn exactly as before (same squares, same islands), shifted by O squares,
+  // and each ring of sea round it gets its own new islands
+  const O = rings * RING_W, N = n0 + 2 * O, all = [...isl];
+  for (let k = 1; k <= rings; k++) addRing(all, n0, k, H);
+  const terr = new Uint8Array(N * N);
+  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+    const xo = x - O, yo = y - O, inner = xo >= 0 && yo >= 0 && xo < n0 && yo < n0;
+    terr[y * N + x] = terrAt(xo, yo, inner ? isl : all);
+  }
+  const w: World = { seed, n: N, terr, deep: new Uint8Array(N * N), ocean: new Uint8Array(N * N),
+    islandOf: new Int16Array(N * N).fill(-1), islands: [], home: 0, cx: C + O, cy: C + O, box: { o: O, n0 } };
   refreshWater(w);
   refreshIslands(w);
   return w;
+}
+
+/** 🗺 Squares of sea each expedition ring adds on every side of the map. */
+export const RING_W = 40;
+/** Most new islands one ring brings. */
+export const RING_ISLANDS = 7;
+
+/**
+ * The islands of expedition ring k, in the first map's coordinates: in the band between the old edge (k-1 rings out)
+ * and the new one, each kept 1.3 radii + 3 squares clear of both edges so no land touches the older map, and apart
+ * from every other island like the first map's.
+ */
+function addRing(isl: Disc[], n0: number, k: number, H: (x: number, y: number, s?: number) => number) {
+  const a0 = -(k - 1) * RING_W, b0 = n0 + (k - 1) * RING_W, a1 = -k * RING_W, b1 = n0 + k * RING_W;
+  let made = 0;
+  for (let t = 0; t < 600 && made < RING_ISLANDS; t++) {
+    const r = 9 + Math.floor(H(t, k, 81) * 4), m = Math.ceil(r * 1.3) + 3;
+    const x = Math.round(a1 + m + H(t, k, 82) * (b1 - a1 - 2 * m)), y = Math.round(a1 + m + H(t, k, 83) * (b1 - a1 - 2 * m));
+    // clear of the older map: at least m squares outside its box
+    if (x > a0 - m && x < b0 + m && y > a0 - m && y < b0 + m) continue;
+    if (isl.some(o => Math.hypot(o.x - x, o.y - y) < o.r + r + 7)) continue;
+    isl.push({ x, y, r }); made++;
+  }
 }
 
 const D4 = [[1, 0], [-1, 0], [0, 1], [0, -1]] as const;
@@ -175,8 +218,23 @@ export function refreshIslands(w: World): void {
   const { n, terr, islandOf } = w;
   islandOf.fill(-1);
   const list: IslandInfo[] = [];
-  for (let i = 0; i < n * n; i++) {
+  // on a grown map the first map's squares are labelled first, in their old order, so its islands keep their numbers
+  // and each expedition ring's squares after that, ring by ring, so every ring's islands keep theirs too
+  const bx = w.box, order: number[] = [], ringStart: number[] = [];
+  if (bx) {
+    const R = bx.o / RING_W, seen = new Uint8Array(n * n);
+    for (let r = 0; r <= R; r++) {
+      ringStart.push(order.length);
+      const a = bx.o - r * RING_W, b = bx.o + bx.n0 + r * RING_W;
+      for (let y = a; y < b; y++) for (let x = a; x < b; x++) { const i = y * n + x; if (!seen[i]) { seen[i] = 1; order.push(i); } }
+    }
+  } else for (let i = 0; i < n * n; i++) order.push(i);
+  const ringOf: number[] = []; let ring = 0;
+  for (let h0 = 0; h0 < order.length; h0++) {
+    const i = order[h0]!;
+    while (ring + 1 < ringStart.length && h0 >= ringStart[ring + 1]!) ring++;
     if (!terr[i] || islandOf[i]! >= 0) continue;
+    ringOf[list.length] = ring;
     const q = [i], k = list.length; islandOf[i] = k;
     let sx = 0, sy = 0;
     for (let h = 0; h < q.length; h++) {
@@ -186,7 +244,8 @@ export function refreshIslands(w: World): void {
     const cx = sx / q.length, cy = sy / q.length;
     list.push({ size: q.length, cx, cy, dist: Math.hypot(cx - w.cx, cy - w.cy) });
   }
-  const big = list.map((_, k) => k).filter(k => list[k]!.size >= 40).sort((a, b) => list[a]!.dist - list[b]!.dist);
+  // names go nearest the centre first; on a grown map the first map's islands keep theirs and the new ones follow
+  const big = list.map((_, k) => k).filter(k => list[k]!.size >= 40).sort((a, b) => ringOf[a]! - ringOf[b]! || list[a]!.dist - list[b]!.dist);
   big.forEach((k, j) => { list[k]!.name = j === 0 ? ISLAND_NAMES[0] : ISLAND_NAMES[1 + (j - 1) % (ISLAND_NAMES.length - 1)]; });
   w.islands = list;
   w.home = islandOf[w.cy * n + w.cx]!;

@@ -9,6 +9,8 @@ import { type Dest, destinationsOf, destName, type Ship, shipPlan, siteOf } from
 import { FERRY_FEE, islandOfTrain, spareTrains, trainPrice, trainStatus } from '../economy/dispatch.ts';
 import { JAM_AFTER } from '../economy/jams.ts';
 import { dockRange, isDock, islandName, islandOfB, seaDist } from '../ships/docks.ts';
+import { EXPEDITION_DOCK, expeditionError, expeditionPrice } from '../world/expedition.ts';
+import { RING_ISLANDS } from '../world/terrain.ts';
 import { lanesFrom, SHIP_HOLD, SHIP_PRICE, SHIP_UP, type ShipUpKey, shipCap, shipSpeed, shipUpLvl, waitingAt } from '../ships/ships.ts';
 import { catchOf, FISHING } from '../economy/upgrades.ts';
 import { islandSpec, SPEC_TEXT, specMul } from '../world/specialty.ts';
@@ -198,7 +200,21 @@ function dockCard(g: Game, b: Building, page?: string): string {
     }
     if (!list.length) h += `<div class="note">🌊 No other island within reach yet: a bigger dock sails farther</div>`;
     if (b.lvl < MAX_LVL) { const p = levelPrice(b); h += `<button class="act" data-act="lvl" data-id="${b.id}" ${g.s.money >= p ? '' : 'disabled'}>⬆ Level ${b.lvl + 1}: ${levelGain(b)} · ${fmtMoney(p)}</button>`; }
+    if (b.lvl >= EXPEDITION_DOCK) h += `<button class="act alt" data-act="page" data-page="exp">🗺 Expedition to the far seas ›</button>`;
+    else h += `<small class="why">🗺 A level ${EXPEDITION_DOCK} dock can send expeditions to new islands past the edge of the sea</small>`;
     return h + back;
+  }
+  if (page === 'exp') {
+    // 🗺 expeditions: past the edge of the known sea
+    const ep = expeditionPrice(g), er = expeditionError(g, b), done = g.s.rings ?? 0;
+    h += `<h3>🗺 Expedition to the far seas</h3>`;
+    h += `<div class="row"><b class="ico">🧭</b><div class="grow"><b>A new ring of islands</b><small>About ${RING_ISLANDS} new islands all round the map, past the edge of your sea</small></div></div>`;
+    h += `<div class="row"><b class="ico">🏘</b><div class="grow"><b>A town on each</b><small>Lay track to it and it starts its own orders</small></div></div>`;
+    h += `<div class="row"><b class="ico">⛏</b><div class="grow"><b>Rich deposits</b><small>Coal, stone, iron and oil, richer than at home</small></div></div>`;
+    h += `<div class="chips"><span class="chip2">💰 ${fmtMoney(ep)}</span><span class="chip2">🗺 sent so far: ${done}</span><span class="chip2">next one ${fmtMoney(ep * 2)}</span></div>`;
+    h += `<button class="act" data-act="expedition" data-id="${b.id}" ${er ? 'disabled' : ''}>🗺 Send an expedition · ${fmtMoney(ep)}</button>`;
+    if (er) h += `<small class="why">${er}</small>`;
+    return h + `<button class="act back" data-act="page" data-page="isl">‹ Back</button>`;
   }
   if (page === 'trains') {
     const p = trainPrice(g) + FERRY_FEE, mine = g.s.trains.filter(t => islandOfTrain(g, t) === islandOfB(g, b));
@@ -222,7 +238,7 @@ function dockCard(g: Game, b: Building, page?: string): string {
   h += `<div class="tiles">`
     + tile('sea', '⛴', 'Sea routes', routes.length ? `${routes.length} route${routes.length === 1 ? '' : 's'} · 🚢 ${ships}${waiting ? ` · 📦 ${waiting}` : ''}` : 'none yet', waiting > 0 && !ships)
     + tile('fish', '🎣', 'Fishing', l ? `🐟 ${Math.round(c.fish * 60)}/min${c.shellfish ? ` · 🦞 ${Math.round(c.shellfish * 60)}` : ''}` : 'no boats yet')
-    + tile('isl', '🏝', 'Islands', `${nIsl} in reach${b.lvl < MAX_LVL ? ' · ⬆ reach' : ''}`)
+    + tile('isl', '🏝', 'Islands', `${nIsl} in reach${b.lvl < MAX_LVL ? ' · ⬆ reach' : ' · 🗺 expedition'}`)
     + tile('trains', '🚂', 'Trains', `${nTr} on ${esc(isl)}`, !home && nTr === 0)
     + `</div>`;
   if (linked) { const m = buildingSquares(g.world.n, b)[1]!; h += mapBtn(g, m % g.world.n, (m / g.world.n) | 0, MAP_R_SEA); }

@@ -94,6 +94,8 @@ export interface GameState {
   shipU?: Partial<Record<'spd' | 'hold', number>>;
   /** cargo ships */
   ships?: import('./ships/ships.ts').CargoShip[];
+  /** 🗺 expedition rings sent: the map has grown by this many rings of sea */
+  rings?: number;
   /** town parks and town projects, one square each */
   parks?: import('./buildings/parks.ts').Park[];
   /** money earned and spent, for the report */

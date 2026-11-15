@@ -27,6 +27,7 @@ import { tickProduction } from './economy/production.ts';
 import type { Game } from './state.ts';
 import { footprint } from './buildings/industries.ts';
 import { type Card, cardHtml } from './ui/cards.ts';
+import { sendExpedition } from './world/expedition.ts';
 import { buyPark, buyProject, type ParkKind, parksOf, projectOf } from './buildings/parks.ts';
 import { type MapView, VIEWS } from './ui/mapviews.ts';
 import { gameReport } from './ui/report.ts';
@@ -216,6 +217,18 @@ cardEl.onclick = e => {
   if (b.dataset.act === 'swap') { const why = swapMission(game, +b.dataset.m!); toast(why || `🎯 New mission: ${msOf(game).main?.title}`); renderCard(); return; }
   const bld = game.s.buildings?.find(x => x.id === +(b.dataset.id ?? -1));
   if (b.dataset.act === 'page' && tools.card) { openCard({ ...tools.card, page: b.dataset.page || undefined } as Card); return; }
+  if (b.dataset.act === 'expedition' && bld) {
+    // a big spend that grows the map for good: ask with a second tap (the artifact frame blocks confirm())
+    if (!expArmed || performance.now() - expArmed > 4000) { expArmed = performance.now(); b.textContent = '⚠ Tap again to send it: the map grows for good'; b.classList.add('sure'); return; }
+    expArmed = 0;
+    const r = sendExpedition(game, bld); if (typeof r === 'string') { toast(r); return; }
+    startGame(r.g, false);
+    const near = r.fresh.filter(t => t.kind === 'town').sort((p, q) => Math.hypot(p.x - bld.x, p.y - bld.y) - Math.hypot(q.x - bld.x, q.y - bld.y))[0]; // the nearest new town
+    if (near) Object.assign(game.s.camera, { x: near.x * 32 + 16, y: near.y * 32 + 16, z: 0.6 });
+    const msg = `🗺 The expedition is back! ${r.islands.length} new islands charted: ${r.islands.join(', ')}. ${r.towns} towns wait to be linked.`;
+    setTimeout(() => toast(msg, 7000), 800); // after the new map's own notes
+    return;
+  }
   if (b.dataset.act === 'fish' && bld) { const why = buyFishing(game, bld); toast(why || `🎣 ${FISHING[(bld.fish ?? 1) - 1]!.name} at the dock`); renderCard(); return; }
   if (b.dataset.act === 'ship' && bld) { const s = buyShip(game, bld); toast(typeof s === 'string' ? s : '🚢 A cargo ship is ready at the dock: it sails where goods wait'); renderCard(); return; }
   if (b.dataset.act === 'shipover' && bld) { const t = shipTrainTo(game, bld); toast(typeof t === 'string' ? t : `⛴ Train ${t.id} came over by boat and is looking for a load`); renderCard(); return; }
@@ -427,6 +440,7 @@ const oldSave = () => { try { return localStorage.getItem(OLD_KEY); } catch { re
 const openHome = () => { menuOpen = false; tools.mode = 'pan'; tools.cancel(); myCode = null; saveTo(localStorage, game); snapPic(); openCard({ kind: 'game', id: 0 }); };
 $('newGame').onclick = () => { if (tools.card?.kind === 'game') { closeCard(); return; } openHome(); };
 /** Play another game: a new one goes into a new slot (refused when all are taken); one opened from a slot is already in place. */
+let expArmed = 0;
 function startGame(g: Game, newSlot = true) {
   if (newSlot && slotsOk) { saveTo(localStorage, game); snapPic(); const why = addSlot(localStorage, saveJson(g), g); if (why) { toast('⚠ ' + why, 5000); return false; } }
   game = g; lastSeason = -1; tools.cancel(); closeCard(); renderer = new Renderer(game, tools); saveTo(localStorage, game); return true;
