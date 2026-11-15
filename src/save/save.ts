@@ -1,5 +1,5 @@
 import type { Game, GameState } from '../state.ts';
-import { loadGame } from '../game.ts';
+import { loadGame, prepareSave } from '../game.ts';
 
 export const SAVE_KEY = 'railhaven2';
 export const SAVE_VERSION = 1;
@@ -27,7 +27,7 @@ export function deserialize(json: string): GameState {
 
 export interface Storage { getItem(k: string): string | null; setItem(k: string, v: string): void }
 
-export function saveTo(store: Storage, g: Game) { store.setItem(SAVE_KEY, serialize(g.s)); }
+export function saveTo(store: Storage, g: Game) { prepareSave(g); store.setItem(SAVE_KEY, serialize(g.s)); }
 
 export function loadFrom(store: Storage): Game | null {
   const raw = store.getItem(SAVE_KEY);
