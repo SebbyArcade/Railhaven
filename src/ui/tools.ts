@@ -1,3 +1,4 @@
+import { restoreShed, type Shed } from '../buildings/shed.ts';
 import { shipPlace } from '../ships/ships.ts';
 import type { Game } from '../state.ts';
 import { MAX_SCOUTS, scoutCost, scoutStarts, scoutStepError, sendScout } from '../world/explore.ts';
@@ -38,7 +39,7 @@ export class Tools {
   dbl = new Set<number>();
   removeAt: number | null = null;
   /** the building just built: Undo takes it back with a full refund (until the next build, or for a minute) */
-  lastBuild: { id: number; paid: number; at: number; before: [number, number | null][] } | null = null;
+  lastBuild: { id: number; paid: number; at: number; before: [number, number | null][]; shed?: Shed | null } | null = null;
   /** when the outline was last tapped (a second tap soon after builds it) */
   private outlineTapAt = 0;
   /** what removing that square would cut off the railway ('' when nothing) */
@@ -313,7 +314,8 @@ export class Tools {
   undo() {
     const g = this.g(), ub = this.undoBuilding();
     if (ub) { // take back the building just built, with all its money
-      const { paid, before } = this.lastBuild!, err = removeBuilding(g, ub); if (err) { toast(err); return; }
+      const { paid, before, shed } = this.lastBuild!, err = removeBuilding(g, ub); if (err) { toast(err); return; }
+      restoreShed(g, shed); // the shed goes back where it stood if the building moved it
       takeBackYard(g, before);
       g.s.money += paid - refundOf(ub); this.lastBuild = null;
       trackChanged(g); g.terrainDirty?.([...footprint(g.world.n, ub), ...before.map(([i]) => i)]);
@@ -386,8 +388,9 @@ export class Tools {
     } else if (this.mode === 'build' && this.preview) {
       const fog0 = g.s.fog.slice(), m0 = g.s.money, ys = yardSquares(g.world.n, this.preview), st = this.preview.horizontal ? 1 : g.world.n;
       const before = [ys[0]! - st, ...ys, ys.at(-1)! + st].map(i => [i, g.track.get(i)?.links ?? null] as [number, number | null]); // the yard's squares and the squares past its ends, as they were
+      const shed0 = g.s.shed ? { ...g.s.shed } : null;
       const b = build(g, this.preview); if (typeof b === 'string') { toast(b); return; }
-      this.lastBuild = { id: b.id, paid: m0 - g.s.money, at: performance.now(), before };
+      this.lastBuild = { id: b.id, paid: m0 - g.s.money, at: performance.now(), before, shed: shed0 };
       trackChanged(g); g.terrainDirty?.(footprint(g.world.n, b));
       if (!g.s.fog.every((v, k) => v === fog0[k])) { this.lastBuild = null; toast(`${INDUSTRIES[b.kind].icon} ${INDUSTRIES[b.kind].name} built: it uncovered new land, so it can't be undone`, 3500); this.preview = null; this.previewErr = ''; this.glowKey = ''; return; }
       toast(isLinked(g, b) ? `${INDUSTRIES[b.kind].icon} ${INDUSTRIES[b.kind].name} built · ↶ Undo if it's the wrong spot` : `${INDUSTRIES[b.kind].icon} Built! Now lay track from your railway to one end of its yard · ↶ Undo if it's the wrong spot`);

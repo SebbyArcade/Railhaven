@@ -1,3 +1,4 @@
+import { restoreShed, type Shed } from '../buildings/shed.ts';
 import type { Game } from '../state.ts';
 import { bridgeJoinsIslands, squareCost } from './rules.ts';
 import { layPath } from './edit.ts';
@@ -83,6 +84,8 @@ export interface BuiltStroke {
   cost: number;
   /** fog squares the new track uncovered: such a stroke can't be undone */
   revealed: number;
+  /** where the engine shed stood before (null: no shed), so Undo puts it back if the new track moved it */
+  shed?: Shed | null;
 }
 
 /** Track uncovers the land around it, this many squares out. */
@@ -93,6 +96,7 @@ export function buildPlan(g: Game, p: PaintPlan): BuiltStroke | string {
   if (e) return e;
   const n = g.world.n, cost = planCost(g, p), fresh = p.path.filter(i => !g.track.has(i));
   const before: BuiltStroke['before'] = [...new Set(p.path)].map(i => { const o = g.track.get(i); return [i, o && { ...o }]; });
+  const shed = g.s.shed ? { ...g.s.shed } : null;
   g.s.money -= cost;
   layPath(g.track, n, p.path);
   // a yard whose end touches the new track joins it there, as if the track were laid into it
@@ -105,11 +109,13 @@ export function buildPlan(g: Game, p: PaintPlan): BuiltStroke | string {
   }
   let revealed = 0;
   for (const i of fresh) revealed += reveal(g, i % n, (i / n) | 0, TRACK_REVEAL);
-  return { before, cost, revealed };
+  return { before, cost, revealed, shed };
 }
 
 /** Put the track back as it was before a stroke and refund it. */
 export function undoStroke(g: Game, b: BuiltStroke) {
+  const moved = b.shed !== undefined && JSON.stringify(b.shed) !== JSON.stringify(g.s.shed ?? null);
+  if (moved) restoreShed(g, b.shed); // take up the siding the shed got when it moved, before the old track comes back
   for (const [i, o] of b.before) { if (o) g.track.set(i, { ...o }); else g.track.delete(i); }
   g.s.money += b.cost;
 }
