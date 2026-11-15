@@ -1,5 +1,6 @@
 import type { Game } from '../state.ts';
-import { capOf, inputsOf, isFactory, isLinked, outputOf } from '../buildings/industries.ts';
+import { capOf, inputsOf, isFactory, isLinked, outputOf, yardSquares } from '../buildings/industries.ts';
+import { specMul } from '../world/specialty.ts';
 import { catchOf } from './upgrades.ts';
 
 /**
@@ -11,8 +12,8 @@ export function tickProduction(g: Game, dt: number) {
     if (!isLinked(g, b)) continue;
     if (b.kind === 'dock') { // fishing boats land their catch at the dock, up to what it holds
       if (!b.fish) continue;
-      const c = catchOf(b.fish), l = (b.landed ??= {});
-      for (const k of ['fish', 'shellfish'] as const) if (c[k]) l[k] = Math.min(capOf(b), (l[k] ?? 0) + c[k] * dt);
+      const c = catchOf(b.fish), l = (b.landed ??= {}), m = specMul(g, g.world.islandOf[yardSquares(g.world.n, b)[0]!]!, 'fish');
+      for (const k of ['fish', 'shellfish'] as const) if (c[k]) l[k] = Math.min(capOf(b), (l[k] ?? 0) + c[k] * m * dt);
       continue;
     }
     const room = capOf(b) - b.stock;

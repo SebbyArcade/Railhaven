@@ -7,6 +7,7 @@ import { FERRY_FEE, trainPrice, trainStatus } from '../economy/dispatch.ts';
 import { dockRange, islandName, islandOfB, seaDist } from '../ships/docks.ts';
 import { lanesFrom, SHIP_PRICE, SHIP_SPEED, waitingAt } from '../ships/ships.ts';
 import { catchOf, FISHING } from '../economy/upgrades.ts';
+import { islandSpec, SPEC_TEXT, specMul } from '../world/specialty.ts';
 import { FLEET, type FleetKey, fleetLvl, levelGain, levelPrice, MAX_LVL, MAX_RUSH, refundOf, RUSH_FEE, rushOf, sellOffer, trainCap } from '../economy/upgrades.ts';
 import type { Train } from '../trains/train.ts';
 import { fmtMoney } from './hud.ts';
@@ -132,6 +133,7 @@ function dockCard(g: Game, b: Building, page?: string): string {
   if (!linked) h += home ? `<div class="warn">🔌 Not on the railway yet: lay track from your line to one end of its yard</div>` : `<div class="warn">🌊 No dock of yours reaches this landing</div>`;
   else if (waiting && !ships) h += `<div class="warn">🚢 ${waiting} goods wait for a ship: buy one under Sea routes</div>`;
   else h += `<div class="gift">🌊 Charts the sea ${dockRange(b)} squares out: shores in reach come out of the fog</div>`;
+  const sp = islandSpec(g, islandOfB(g, b)); if (sp) h += `<div class="note">★ ${SPEC_TEXT[sp]}: ${sp === 'fish' ? 'fishing boats here catch' : `${INDUSTRIES[sp].name}s here make`} 50% more</div>`;
   const tile = (pg: string, icon: string, title: string, sub: string, alert = false) => `<button class="tile${alert ? ' alert' : ''}" data-act="page" data-page="${pg}"><b>${icon} ${title}</b><small>${sub}</small></button>`;
   const nIsl = near().length, nTr = g.s.trains.filter(t => islandOfTrain(g, t) === islandOfB(g, b)).length;
   h += `<div class="tiles">`
@@ -151,7 +153,8 @@ function buildingCard(g: Game, b: Building, page?: string): string {
   if (b.kind === 'dock') return dockCard(g, b, page);
   const d = INDUSTRIES[b.kind], k = d.makes, G = GOODS[k], cap = capOf(b), linked = isLinked(g, b), fac = isFactory(b.kind);
   const plan = shipPlan(g);
-  let h = `<div class="head"><b class="big">${d.icon}</b><div><h2>${d.name}</h2><span class="chip2">Level ${b.lvl}</span> <span class="chip2">${G.icon} ${Math.round(outputOf(g, b) * 60)}/min</span></div></div>`;
+  const sm = fac ? 1 : specMul(g, islandOfB(g, b), b.kind);
+  let h = `<div class="head"><b class="big">${d.icon}</b><div><h2>${d.name}</h2><span class="chip2">Level ${b.lvl}</span> <span class="chip2">${G.icon} ${Math.round(outputOf(g, b) * 60)}/min</span>${sm > 1 ? ' <span class="chip2">★ island specialty +50%</span>' : ''}</div></div>`;
   if (!linked) h += `<div class="warn">🔌 Not on the railway yet: lay track from your line to one end of its yard</div>`;
   if (fac) {
     const st = factoryState(g, b);

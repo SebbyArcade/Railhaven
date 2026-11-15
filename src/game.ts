@@ -103,6 +103,18 @@ export function prepareSave(g: Game) {
   for (const t of g.s.trains) t.at = snapshot(g.net, t);
 }
 
+/** A landing's crew surveys its island: iron and oil deposits there come into view (and the news says what was found). */
+function surveyLandings(g: Game) {
+  const n = g.world.n;
+  for (const b of linkedDocks(g)) {
+    if (isHomeDock(g, b)) continue;
+    const k = g.world.islandOf[yardSquares(n, b)[0]!];
+    const found = g.s.sites.filter(s => s.kind === 'dep' && s.hidden && g.world.islandOf[s.y * n + s.x] === k);
+    for (const s of found) { s.hidden = false; reveal(g, s.x, s.y, 2); }
+    if (found.length) (g.news ??= []).push(`🔎 The landing crew surveyed ${g.world.islands[k!]?.name ?? 'the island'}: ${[...new Set(found.map(s => s.res === 'iron' ? '🧲 iron' : s.res === 'oil' ? '🛢 oil' : s.res))].join(' and ')} found`);
+  }
+}
+
 /** After the track changed: rebuild the rails and put every train back where it stood. */
 export function trackChanged(g: Game) {
   const where = g.s.trains.map(t => snapshot(g.net, t));
@@ -113,6 +125,7 @@ export function trackChanged(g: Game) {
   g.dist = new Map();
   g.sys.setNetwork(g.net);
   for (const b of linkedDocks(g)) if (chartSea(g, b)) { (g.news ??= []).push(`⚓ The ${isHomeDock(g, b) ? 'dock' : 'landing'} charts the sea around it: new shores are out of the fog`); }
+  surveyLandings(g);
   g.s.trains.forEach((t, k) => { relocate(g.net, t, where[k]!); });
   g.s.breaks = g.s.breaks?.filter(b => g.track.has(b.square));
   g.sys.blocked = blockedPieces(g); g.sys.anyLane = platformPieces(g);

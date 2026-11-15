@@ -18,6 +18,7 @@ import { drawWaterLive } from './terrainArt.ts';
 import { drawTrack } from './track.ts';
 import { drawTrains } from './trains.ts';
 import { drawShips } from './ships.ts';
+import { islandSpec, SPEC_TEXT } from '../world/specialty.ts';
 import type { Tools } from '../ui/tools.ts';
 import { bodyPoint } from '../trains/train.ts';
 import { type Ship, shipPlan } from '../economy/shipping.ts';
@@ -126,6 +127,7 @@ export class Renderer {
       const X = (o.cx + 0.5) * TILE, Y = (o.cy + 0.5) * TILE - TILE * (k === g.world.home ? 6 : 1.5), f = Math.round(15 / z);
       ctx.font = `italic 700 ${f}px Georgia,serif`; ctx.lineWidth = 4 / z; ctx.strokeStyle = 'rgba(20,18,14,.75)';
       ctx.strokeText(o.name, X, Y); ctx.fillStyle = k === g.world.home ? 'rgba(255,226,160,.95)' : 'rgba(200,215,235,.85)'; ctx.fillText(o.name, X, Y);
+      const sp = islandSpec(g, k); if (sp) { const t = `★ ${SPEC_TEXT[sp]}`; ctx.font = `600 ${Math.round(f * 0.6)}px system-ui`; ctx.strokeText(t, X, Y + f * 0.9); ctx.fillStyle = 'rgba(255,214,120,.9)'; ctx.fillText(t, X, Y + f * 0.9); }
     });
   }
 }

@@ -30,6 +30,8 @@ export interface Site {
   steady?: Partial<Record<string, number>>;
   /** the current order was filled and its reward paid */
   filled?: boolean;
+  /** town: its current order adds seafood (it is by the sea and a fishing dock worked its island when the order began) */
+  sea0?: boolean;
 }
 
 /** Everything that is saved. Plain JSON. */
@@ -85,6 +87,8 @@ export interface Game {
   linked?: Set<number>;
   /** rail distances from buildings and towns (cleared when the track changes) */
   dist?: Map<string, Int32Array>;
+  /** island specialties (cache) */
+  spec?: Map<number, import('./world/specialty.ts').Specialty | null>;
   /** towns with the sea nearby (cache) */
   coast?: Map<number, boolean>;
   /** squares sailed from each dock (cache) */
