@@ -9,7 +9,7 @@ import { TERRAIN_NAMES } from './world/terrain.ts';
 import { attachInput } from './ui/input.ts';
 import { fmtMoney, toast, updateHud } from './ui/hud.ts';
 import { MODE_HINT, type Mode, Tools } from './ui/tools.ts';
-import { INDUSTRIES, type IndustryKind, priceOf } from './buildings/industries.ts';
+import { INDUSTRIES, info, type IndustryKind, isFactory, lockedText, priceOf } from './buildings/industries.ts';
 import { tickProduction } from './economy/production.ts';
 import type { Game } from './state.ts';
 import { footprint } from './buildings/industries.ts';
@@ -89,13 +89,17 @@ cardEl.onclick = e => {
 const menu = $('buildMenu');
 let menuOpen = false;
 function renderMenu() {
-  menu.innerHTML = (Object.keys(INDUSTRIES) as IndustryKind[]).filter(k => k !== 'iron' && k !== 'oil' || game.s.sites.some(s => s.kind === 'dep' && s.res === k && !s.hidden)).map(k => {
-    const d = INDUSTRIES[k], p = priceOf(game, k);
-    return `<button data-k="${k}" class="${tools.buildKind === k ? 'on' : ''}"><b>${d.icon}</b>${d.name}<small>${fmtMoney(p)}</small></button>`;
-  }).join('');
+  const kinds = (Object.keys(INDUSTRIES) as IndustryKind[]).filter(k => k !== 'iron' && k !== 'oil' || game.s.sites.some(s => s.kind === 'dep' && s.res === k && !s.hidden));
+  const tile = (k: IndustryKind) => {
+    const d = info(k), p = priceOf(game, k), lock = lockedText(game, k);
+    return `<button data-k="${k}" class="${tools.buildKind === k ? 'on' : ''}${lock ? ' locked' : ''}"><b>${d.icon}</b>${d.name}<small>${lock ? '🔒 Level ' + d.unlock : fmtMoney(p)}</small></button>`;
+  };
+  menu.innerHTML = kinds.filter(k => !isFactory(k)).map(tile).join('') + `<div class="mhead">🏭 Factories: turn raw goods into products</div>` + kinds.filter(isFactory).map(tile).join('');
 }
 menu.onclick = e => {
   const b = (e.target as HTMLElement).closest('button'); if (!b) return;
+  const lock = lockedText(game, b.dataset.k as IndustryKind);
+  if (lock) { toast(`${lock}: fill more town orders to raise your Railway level`); return; }
   const spot = tools.chooseBuild(b.dataset.k as IndustryKind); menuOpen = false;
   if (!spot) return;
   // the nearest spot is off screen: bring it into view (the camera moves, nothing is built)

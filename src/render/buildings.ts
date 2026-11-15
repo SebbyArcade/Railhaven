@@ -3,7 +3,7 @@ import { capOf, type Building, INDUSTRIES, isLinked } from '../buildings/industr
 import type { Game } from '../state.ts';
 import { TILE } from '../world/terrain.ts';
 
-const CRATE: Record<string, string> = { wood: '#8a5a2e', farm: '#d8b44a', stone: '#9a958c', coal: '#2e2b28', iron: '#8a5a4a', oil: '#3a3a48', wool: '#efeadf' };
+const CRATE: Record<string, string> = { wood: '#8a5a2e', farm: '#d8b44a', stone: '#9a958c', coal: '#2e2b28', iron: '#8a5a4a', oil: '#3a3a48', wool: '#efeadf', sawmill: '#e0b878', brickworks: '#b5523b', gristmill: '#f4efe2', mill: '#9aa0a8', refinery: '#4a4a58', textile: '#5a7ab0' };
 
 /**
  * An industry in its yard, as a little model: a loading platform along the yard, the building and its props on the
@@ -60,7 +60,86 @@ function smoke(ctx: CanvasRenderingContext2D, u: number, v: number, tm: number, 
   for (let k = 0; k < 2; k++) { const p = (tm * 0.5 + k * 0.5) % 1; ctx.fillStyle = dark ? `rgba(60,58,55,${0.45 * (1 - p)})` : `rgba(225,220,210,${0.4 * (1 - p)})`; ctx.beginPath(); ctx.arc(u + p * 3, v - p * 10, 1.4 + p * 3, 0, 7); ctx.fill(); }
 }
 
+/** A factory hall: brick walls, a sawtooth roof of north lights, a tall chimney (busy factories smoke). */
+function hall(ctx: CanvasRenderingContext2D, tm: number, u: number, w: number, wall: string, roof: string, busy: boolean, lvl: number) {
+  const d = 22, v = 0;
+  ctx.fillStyle = 'rgba(0,0,0,.28)'; ctx.fillRect(u - w / 2 + 2, v - d / 2 + 2, w, d);
+  ctx.fillStyle = wall; ctx.fillRect(u - w / 2, v - d / 2, w, d);
+  ctx.strokeStyle = 'rgba(0,0,0,.45)'; ctx.lineWidth = 0.8; ctx.strokeRect(u - w / 2, v - d / 2, w, d);
+  const teeth = Math.max(3, Math.round(w / 7));
+  for (let k = 0; k < teeth; k++) { // each tooth: dark slope and a strip of glass catching the light
+    const x = u - w / 2 + k * (w / teeth);
+    const tw = w / teeth;
+    ctx.fillStyle = roof; ctx.fillRect(x + 0.5, v - d / 2 + 1, tw - 1, d - 2);
+    ctx.fillStyle = 'rgba(255,255,255,.18)'; ctx.fillRect(x + 0.5, v - d / 2 + 1, (tw - 1) * 0.45, d - 2); // the slope facing the light
+    ctx.fillStyle = 'rgba(200,225,240,.9)'; ctx.fillRect(x + tw - 2.4, v - d / 2 + 1, 1.8, d - 2); // north-light glazing
+    ctx.fillStyle = 'rgba(0,0,0,.35)'; ctx.fillRect(x + tw - 0.6, v - d / 2 + 1, 0.6, d - 2);
+  }
+  // chimney: taller by level
+  const cx = u + w / 2 - 4, cy = v - d / 2 + 3, r = 2.6 + lvl * 0.4;
+  ctx.fillStyle = 'rgba(0,0,0,.3)'; ctx.beginPath(); ctx.arc(cx + 2, cy + 2, r, 0, 7); ctx.fill();
+  ctx.fillStyle = '#7a3a2a'; ctx.beginPath(); ctx.arc(cx, cy, r, 0, 7); ctx.fill();
+  ctx.fillStyle = '#2a211c'; ctx.beginPath(); ctx.arc(cx, cy, r * 0.5, 0, 7); ctx.fill();
+  if (busy) smoke(ctx, cx, cy - 2, tm, true);
+}
+
+const FACTORY_ART = {
+  sawmill: (ctx, tm, H, lvl) => { // timber hall, a log pile going in and stacked planks coming out
+    hall(ctx, tm, -26, 36, '#b07a48', '#8a6a52', true, lvl);
+    for (let r = 0; r < 3; r++) for (let k = 0; k < 4 - (r % 2); k++) { const x = 4 + k * 4.4 + (r % 2) * 2.2, y = 8 - r * 3.2; ctx.fillStyle = '#7a4e28'; ctx.beginPath(); ctx.arc(x, y, 1.9, 0, 7); ctx.fill(); ctx.fillStyle = '#c99a5b'; ctx.beginPath(); ctx.arc(x, y, 0.9, 0, 7); ctx.fill(); }
+    for (let k = 0; k < 2 + lvl; k++) { ctx.fillStyle = k % 2 ? '#e0b878' : '#d2a868'; ctx.fillRect(28, 7 - k * 3, 20, 2.4); ctx.fillStyle = 'rgba(0,0,0,.2)'; ctx.fillRect(28, 9.4 - k * 3, 20, 0.6); }
+    const a = tm * 6; ctx.strokeStyle = '#c9ccd1'; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(-4, -8, 3, a, a + 5); ctx.stroke(); // the saw blade
+    void H;
+  },
+  brickworks: (ctx, tm, H, lvl) => { // a round kiln glowing, a drying shed, stacks of red bricks
+    hall(ctx, tm, -30, 28, '#9a4a36', '#5e3428', false, lvl);
+    const glow = 0.5 + 0.5 * Math.sin(tm * 2);
+    ctx.fillStyle = 'rgba(0,0,0,.3)'; ctx.beginPath(); ctx.arc(2, 2, 10, 0, 7); ctx.fill();
+    ctx.fillStyle = '#a0583c'; ctx.beginPath(); ctx.arc(0, 0, 10, 0, 7); ctx.fill();
+    ctx.fillStyle = '#7a3a28'; ctx.beginPath(); ctx.arc(0, 0, 6, 0, 7); ctx.fill();
+    ctx.fillStyle = `rgba(255,${140 + 60 * glow},60,.9)`; ctx.beginPath(); ctx.arc(0, 0, 3, 0, 7); ctx.fill();
+    smoke(ctx, 0, -3, tm, true);
+    for (let k = 0; k < 3 + lvl; k++) { const x = 18 + (k % 3) * 9, y = 6 - Math.floor(k / 3) * 7; ctx.fillStyle = '#b5523b'; ctx.fillRect(x, y - 3, 7, 5); ctx.strokeStyle = 'rgba(60,20,10,.5)'; ctx.lineWidth = 0.4; ctx.strokeRect(x, y - 3, 7, 5); ctx.beginPath(); ctx.moveTo(x, y - 0.5); ctx.lineTo(x + 7, y - 0.5); ctx.stroke(); }
+    void H;
+  },
+  gristmill: (ctx, tm, H, lvl) => { // a windmill with turning sails, the mill house and flour sacks
+    hall(ctx, tm, -28, 30, '#d8cdb4', '#7a6a50', false, lvl);
+    ctx.fillStyle = 'rgba(0,0,0,.3)'; ctx.beginPath(); ctx.arc(14, 2, 8, 0, 7); ctx.fill();
+    ctx.fillStyle = '#efe6d2'; ctx.beginPath(); ctx.arc(12, 0, 8, 0, 7); ctx.fill();
+    ctx.fillStyle = '#6e5a44'; ctx.beginPath(); ctx.arc(12, 0, 4.5, 0, 7); ctx.fill();
+    const a = tm * 1.4; ctx.save(); ctx.translate(12, 0); ctx.rotate(a);
+    for (let k = 0; k < 4; k++) { ctx.rotate(Math.PI / 2); ctx.fillStyle = '#5b4330'; ctx.fillRect(-0.6, 2, 1.2, 14); ctx.fillStyle = 'rgba(240,232,214,.9)'; ctx.fillRect(0.6, 5, 3.2, 10); }
+    ctx.restore();
+    for (let k = 0; k < 2 + lvl; k++) { ctx.fillStyle = '#efe9d8'; ctx.beginPath(); ctx.ellipse(32 + (k % 3) * 6, 7 - Math.floor(k / 3) * 5, 2.6, 2, 0, 0, 7); ctx.fill(); ctx.strokeStyle = '#b8a888'; ctx.lineWidth = 0.4; ctx.stroke(); }
+    void H;
+  },
+  mill: (ctx, tm, H, lvl) => { // a steel works: two smoking stacks, furnace glow, steel beams
+    hall(ctx, tm, -22, 40, '#5a4e56', '#3a343a', true, lvl);
+    const glow = 0.5 + 0.5 * Math.sin(tm * 3);
+    ctx.fillStyle = `rgba(255,${120 + 80 * glow},40,.85)`; ctx.fillRect(-30, 8, 10, 2.4);
+    for (const x of [8, 16]) { ctx.fillStyle = '#4a4248'; ctx.beginPath(); ctx.arc(x, -6, 3.2, 0, 7); ctx.fill(); ctx.fillStyle = '#1e1a1c'; ctx.beginPath(); ctx.arc(x, -6, 1.6, 0, 7); ctx.fill(); smoke(ctx, x, -8, tm + x, true); }
+    for (let k = 0; k < 2 + lvl; k++) { ctx.fillStyle = '#9aa0a8'; ctx.fillRect(26, 8 - k * 3, 22, 2); ctx.fillStyle = '#6a7078'; ctx.fillRect(26, 9.4 - k * 3, 22, 0.6); }
+    void H;
+  },
+  refinery: (ctx, tm, H, lvl) => { // round tanks, pipes and a gas flare
+    hall(ctx, tm, -32, 24, '#7a7e86', '#4a4e56', false, lvl);
+    for (const [x, y, r] of [[-6, -2, 8], [12, 3, 7], [28, -2, 6]] as const) { ctx.fillStyle = 'rgba(0,0,0,.25)'; ctx.beginPath(); ctx.arc(x + 1.5, y + 1.5, r, 0, 7); ctx.fill(); ctx.fillStyle = '#d6d9de'; ctx.beginPath(); ctx.arc(x, y, r, 0, 7); ctx.fill(); ctx.strokeStyle = '#9a9ea6'; ctx.lineWidth = 0.7; ctx.beginPath(); ctx.arc(x, y, r * 0.6, 0, 7); ctx.stroke(); }
+    ctx.strokeStyle = '#8a8d92'; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(-20, 6); ctx.lineTo(40, 6); ctx.stroke();
+    ctx.fillStyle = '#5b6066'; ctx.fillRect(42, -8, 2, 14);
+    const f = Math.sin(tm * 9) * 0.8; ctx.fillStyle = 'rgba(255,170,40,.9)'; ctx.beginPath(); ctx.moveTo(41, -8); ctx.quadraticCurveTo(43 + f, -16, 45, -8); ctx.fill();
+    void lvl; void H;
+  },
+  textile: (ctx, tm, H, lvl) => { // a long weaving shed, wool bales in, rolls of coloured cloth out
+    hall(ctx, tm, -14, 52, '#a8705a', '#5e4038', true, lvl);
+    for (let k = 0; k < 3; k++) { ctx.fillStyle = '#f2eee4'; ctx.beginPath(); ctx.ellipse(-50 + k * 5, 8, 2.4, 2, 0, 0, 7); ctx.fill(); }
+    const cols = ['#c0392b', '#2f6f9a', '#e8a33c', '#5a9a4a'];
+    for (let k = 0; k < 2 + lvl; k++) { ctx.fillStyle = cols[k % 4]!; ctx.fillRect(18 + (k % 3) * 8, 6 - Math.floor(k / 3) * 5, 7, 3.4); ctx.fillStyle = 'rgba(255,255,255,.3)'; ctx.fillRect(18 + (k % 3) * 8, 6 - Math.floor(k / 3) * 5, 7, 0.8); }
+    void H;
+  },
+} satisfies Record<string, Art>;
+
 const ART: Record<Building['kind'], Art> = {
+  ...FACTORY_ART,
   wood: (ctx, tm, H, lvl) => { // log cabin, stacked logs, a sawhorse
     house(ctx, -34, 0, 18, 13, '#8a5e36', '#5a3a22'); smoke(ctx, -38, -5, tm);
     for (let r = 0; r < 3 + lvl; r++) for (let k = 0; k < 4 - (r % 2); k++) { ctx.fillStyle = '#7a4e28'; ctx.beginPath(); ctx.arc(-8 + k * 4.4 + (r % 2) * 2.2, 8 - r * 3.2, 1.9, 0, 7); ctx.fill(); ctx.fillStyle = '#c99a5b'; ctx.beginPath(); ctx.arc(-8 + k * 4.4 + (r % 2) * 2.2, 8 - r * 3.2, 0.9, 0, 7); ctx.fill(); }

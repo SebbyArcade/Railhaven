@@ -54,20 +54,24 @@ describe('industries and yards', () => {
   });
 
   it('a yard placed with its end against existing track joins it', () => {
-    const g = g0(), n = g.world.n, a = g.s.sites[0]!;
-    // a straight line east of Ashford; then a farm whose yard continues it
-    const p = startPlan(g, a.y * n + a.x)!; for (let k = 1; k <= 6; k++) extendPlan(g, p, a.y * n + a.x + k);
-    const r = buildPlan(g, p); if (typeof r === 'string') throw new Error(r);
-    trackChanged(g);
-    const end = a.y * n + a.x + 6;
-    let b = null;
-    for (const side of [1, -1] as const) {
-      const q = { kind: 'farm' as const, x: a.x + 7, y: a.y, horizontal: true, side };
-      if (!placeError(g, q)) { b = build(g, q); break; }
+    let tried = 0;
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+      const g = g0(), n = g.world.n, a = g.s.sites[0]!, at = (k: number) => (a.y + dy * k) * n + a.x + dx * k;
+      // a straight line out of Ashford; then a yard (a sawmill: it fits on any flat land) continuing it
+      const p = startPlan(g, at(0))!; for (let k = 1; k <= 4; k++) extendPlan(g, p, at(k));
+      if (typeof buildPlan(g, p) === 'string') continue;
+      trackChanged(g); g.s.rlv = 1;
+      const horizontal = dx !== 0, x = dx < 0 ? a.x - 8 : dx > 0 ? a.x + 5 : a.x, y = dy < 0 ? a.y - 8 : dy > 0 ? a.y + 5 : a.y;
+      for (const side of [1, -1] as const) {
+        const q = { kind: 'sawmill' as const, x, y, horizontal, side };
+        if (placeError(g, q)) continue;
+        const b = build(g, q); if (typeof b === 'string') continue;
+        trackChanged(g); tried++;
+        expect(g.track.get(at(4))!.links & (1 << (dx > 0 ? 0 : dx < 0 ? 2 : dy > 0 ? 1 : 3))).toBeTruthy();
+        expect(isLinked(g, b)).toBe(true);
+        break;
+      }
     }
-    if (!b || typeof b === 'string') return; // no room on this map: nothing to check
-    trackChanged(g);
-    expect(g.track.get(end)!.links & 1).toBe(1);
-    expect(isLinked(g, b)).toBe(true);
+    expect(tried).toBeGreaterThan(0);
   });
 });

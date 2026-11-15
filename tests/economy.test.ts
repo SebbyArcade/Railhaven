@@ -29,6 +29,24 @@ function farmGame(): { g: Game; b: Building } {
   return { g, b };
 }
 
+/** Lay track from the railway to the nearer end of a building's yard (tries the closest track squares in turn). */
+function link(g: Game, b: Building): boolean {
+  const n = g.world.n, ys = yardSquares(n, b), d = (p: number, q: number) => Math.hypot(p % n - q % n, (p / n | 0) - (q / n | 0));
+  for (const end of [ys[0]!, ys.at(-1)!]) {
+    const step = b.horizontal ? (end === ys[0] ? -1 : 1) : (end === ys[0] ? -n : n);
+    const froms = [...g.track.keys()].filter(i => g.linked!.has(i) && !ys.includes(i)).sort((p, q) => d(p, end) - d(q, end)).slice(0, 15);
+    for (const from of froms) {
+      const p = startPlan(g, from); if (!p) continue;
+      extendPlan(g, p, end + step); extendPlan(g, p, end);
+      if (p.path.at(-1) !== end) continue;
+      if (typeof buildPlan(g, p) === 'string') continue;
+      trackChanged(g);
+      if (g.linked!.has(end)) return true;
+    }
+  }
+  return false;
+}
+
 function run(g: Game, secs: number) {
   for (let k = 0; k < secs * 20; k++) { const dt = 0.05; g.s.t += dt; g.sys.tick(dt); tickProduction(g, dt); tickTowns(g, dt); tickTrains(g, dt); }
 }
@@ -61,5 +79,26 @@ describe('towns, orders and goods trains', () => {
     expect(ash.lvl).toBe(1);
     expect(orderOf(g, ash).stone).toBe(30);
   });
-});
 
+  it('a factory is locked until Railway level 1, then takes wheat from the farm and makes flour', () => {
+    const { g, b: farm } = farmGame(), n = g.world.n, a = g.s.sites[0]!;
+    g.s.money = 1e5;
+    let mill: Building | null = null;
+    expect(build(g, { kind: 'gristmill', x: 0, y: 0, horizontal: true, side: 1 })).toMatch(/Railway level 1/);
+    g.s.rlv = 1;
+    for (let r = 3; r < 10 && !mill; r++) for (let dy = -r; dy <= r && !mill; dy++) for (let dx = -r; dx <= r && !mill; dx++) {
+      const p = bestPlacement(g, 'gristmill', a.x + dx, a.y + dy); if (!p.place) continue;
+      const m = build(g, p.place); if (typeof m === 'string') continue;
+      trackChanged(g);
+      if (link(g, m)) mill = m;
+    }
+    expect(mill).not.toBeNull(); if (!mill) return;
+    void n;
+    a.got = { farm: 30 }; // Ashford has its wheat: the farm's wheat goes to the mill now
+    expect(shipPlan(g).get(farm.id)).toMatchObject({ to: { kind: 'bld', id: mill.id }, why: 'factory' });
+    const t = buyTrain(g); if (typeof t === 'string') throw new Error(t);
+    run(g, 200);
+    expect((mill.inbuf?.farm ?? 0) + mill.stock).toBeGreaterThan(0);
+    expect(mill.stock).toBeGreaterThan(0);
+  });
+});

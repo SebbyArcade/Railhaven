@@ -28,7 +28,7 @@ export function drawTownBadges(ctx: CanvasRenderingContext2D, g: Game, plan: Map
       ctx.strokeStyle = 'rgba(255,255,255,.25)'; ctx.lineWidth = 1.4 * s; ctx.stroke();
       if (f > 0) { ctx.strokeStyle = '#ffc94a'; ctx.beginPath(); ctx.arc(x, Y, r, -Math.PI / 2, -Math.PI / 2 + f * Math.PI * 2); ctx.stroke(); }
       ctx.font = `${9 * s}px system-ui`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(GOODS[k].icon, x, Y + 0.5);
-      const fed = (g.s.buildings ?? []).some(b => INDUSTRIES[b.kind].makes === k && plan.get(b.id)?.to.id === t.id);
+      const fed = (g.s.buildings ?? []).some(b => INDUSTRIES[b.kind].makes === k && plan.get(b.id)?.to.kind === 'town' && plan.get(b.id)?.to.id === t.id);
       if (!fed) { ctx.fillStyle = '#e0584a'; ctx.beginPath(); ctx.arc(x + r * 0.75, Y - r * 0.75, 2.4 * s, 0, 7); ctx.fill(); }
     });
   }
@@ -36,7 +36,8 @@ export function drawTownBadges(ctx: CanvasRenderingContext2D, g: Game, plan: Map
 
 /** A dashed arrow from a building to where it sends its goods (shown while its card is open). */
 export function drawShipArrow(ctx: CanvasRenderingContext2D, g: Game, plan: Map<number, Ship>, id: number, tm: number) {
-  const b = g.s.buildings?.find(x => x.id === id), ship = plan.get(id), to = ship && siteOf(g, ship.to.id);
+  const b = g.s.buildings?.find(x => x.id === id), ship = plan.get(id);
+  const to = ship && (ship.to.kind === 'town' ? siteOf(g, ship.to.id) : (() => { const f = g.s.buildings?.find(x => x.id === ship.to.id); if (!f) return undefined; const m = yardSquares(g.world.n, f)[1]!; return { x: m % g.world.n, y: (m / g.world.n) | 0 }; })());
   if (!b || !to) return;
   const n = g.world.n, ys = yardSquares(n, b), m = ys[1]!, ax = (m % n + (b.horizontal ? 1 : 0.5)) * TILE, ay = ((m / n | 0) + (b.horizontal ? 0.5 : 1)) * TILE;
   const bx = (to.x + 0.5) * TILE, by = (to.y + 0.5) * TILE, cx = (ax + bx) / 2 - (by - ay) * 0.2, cy = (ay + by) / 2 + (bx - ax) * 0.2;

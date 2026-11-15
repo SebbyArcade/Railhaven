@@ -36,11 +36,11 @@ that makes sense. Details for each line: `legacy/CHANGES.md` (search the version
 ## Stage 3: core loop
 - [ ] Industries: lumber camp (forest, trees deplete and regrow), wheat farm (fields), coal/stone/iron mines in mountains, oil well, fishing (docks) (done: all but fishing; to do: trees deplete and regrow)
 - [ ] 2x4 yards with in/out loading tracks, more tracks by level, building art grows by level (done: yards with two loading tracks, art per kind; to do: more tracks by level)
-- [ ] Factories (Sawmill, Brickworks, Gristmill, Steel Mill, Refinery, Cannery, Textile Mill...), 1 raw → 1 product, unlock by Railway level
+- [ ] Factories (Sawmill, Brickworks, Gristmill, Steel Mill, Refinery, Cannery, Textile Mill...), 1 raw → 1 product, unlock by Railway level (done: all but the Cannery, which comes with docks; factory levels come with upgrades)
 - [x] Towns: order ladder Hamlet → Village → Town → City → Metropolis → Megacity → endless; tap to upgrade; steady buying after orders (specialties come with islands)
-- [ ] Shipping plan: each building ships to the nearest place that needs it, arrows on the map, pins (done: plan shared nearest-first, arrow from an open building card; to do: pins, factories as destinations)
+- [ ] Shipping plan: each building ships to the nearest place that needs it, arrows on the map, pins (done: plan shared nearest-first with factories, arrow from an open building card; to do: pins)
 - [x] Pay per unit grows with distance (PAY .41), no passive income, train upkeep
-- [ ] Railway level from orders filled (to level 10), unlocks (done: levels and bonus; to do: unlocks)
+- [ ] Railway level from orders filled (to level 10), unlocks (done: levels, bonus, factory unlocks; to do: the later unlocks)
 - [ ] Engine shed: buy trains (price curve, done), fleet upgrades (wagons, engines, tenders, repairs, wagon types, diesel), per island
 - [ ] Rush a good (max 3, fee 30%)
 - [ ] Remove building (half refund), sell stock, building prices rise per extra of a kind

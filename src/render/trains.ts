@@ -8,7 +8,7 @@ function vehicle(ctx: CanvasRenderingContext2D, net: Network, t: Train, from: nu
   draw(len); ctx.restore();
 }
 
-const CARGO_COL: Record<string, string> = { wood: '#a0703f', farm: '#e6c35a', stone: '#a8a39a', coal: '#2b2b2b', iron: '#8a5a44', oil: '#1b1b22', wool: '#f1ede2' };
+const CARGO_COL: Record<string, string> = { wood: '#a0703f', farm: '#e6c35a', stone: '#a8a39a', coal: '#2b2b2b', iron: '#8a5a44', oil: '#1b1b22', wool: '#f1ede2', planks: '#e0b878', bricks: '#b5523b', flour: '#f4efe2', steel: '#9aa0a8', fuel: '#2a2a34', cloth: '#5a7ab0' };
 const WAGON_COLS = ['#7a4f33', '#6b5a3a', '#5d4a3a', '#7a6248'];
 
 export function drawTrains(ctx: CanvasRenderingContext2D, net: Network, trains: Train[], tm: number) {
