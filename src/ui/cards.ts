@@ -6,8 +6,9 @@ import { factoryState } from '../economy/production.ts';
 import { hasProject, nextParkPrice, orderMul, PARK_PRICE, parkSpot, parksOf, payMul, projectsFor, projectsOf } from '../buildings/parks.ts';
 import { FOUND_PRICE, orderDone, orderOf, reward, sizeName, steadyGoods, stepOf, townLinked, upgradePrice } from '../economy/towns.ts';
 import { type Dest, destinationsOf, destName, type Ship, shipPlan, siteOf } from '../economy/shipping.ts';
-import { FERRY_FEE, trainPrice, trainStatus } from '../economy/dispatch.ts';
-import { dockRange, islandName, islandOfB, seaDist } from '../ships/docks.ts';
+import { FERRY_FEE, islandOfTrain, spareTrains, trainPrice, trainStatus } from '../economy/dispatch.ts';
+import { JAM_AFTER } from '../economy/jams.ts';
+import { dockRange, isDock, islandName, islandOfB, seaDist } from '../ships/docks.ts';
 import { lanesFrom, SHIP_HOLD, SHIP_PRICE, SHIP_UP, type ShipUpKey, shipCap, shipSpeed, shipUpLvl, waitingAt } from '../ships/ships.ts';
 import { catchOf, FISHING } from '../economy/upgrades.ts';
 import { islandSpec, SPEC_TEXT, specMul } from '../world/specialty.ts';
@@ -196,10 +197,16 @@ function dockCard(g: Game, b: Building, page?: string): string {
     if (b.lvl < MAX_LVL) { const p = levelPrice(b); h += `<button class="act" data-act="lvl" data-id="${b.id}" ${g.s.money >= p ? '' : 'disabled'}>⬆ Level ${b.lvl + 1}: ${levelGain(b)} · ${fmtMoney(p)}</button>`; }
     return h + back;
   }
-  if (page === 'trains' && !home) {
-    const p = trainPrice(g) + FERRY_FEE;
-    h += `<div class="note">🚂 ${g.s.trains.filter(t => islandOfTrain(g, t) === islandOfB(g, b)).length} trains on ${esc(isl)}. Trains stay on their island.</div>`;
-    h += `<button class="act" data-act="trainat" data-id="${b.id}" ${linked && g.s.money >= p ? '' : 'disabled'}>🚂 Ship a train over · ${fmtMoney(p)}</button>`;
+  if (page === 'trains') {
+    const p = trainPrice(g) + FERRY_FEE, mine = g.s.trains.filter(t => islandOfTrain(g, t) === islandOfB(g, b));
+    const idle = mine.filter(t => !t.job).length, spare = spareTrains(g, b);
+    h += `<div class="note">🚂 ${mine.length} trains on ${esc(isl)}${idle ? ` · 💤 ${idle} waiting for work` : ''}. Trains stay on their island unless shipped.</div>`;
+    if (spare.length) {
+      const from = islandName(g, islandOfTrain(g, spare[0]!)), n = spare.filter(t => islandOfTrain(g, t) === islandOfTrain(g, spare[0]!)).length;
+      h += `<button class="act" data-act="shipover" data-id="${b.id}" ${linked && g.s.money >= FERRY_FEE ? '' : 'disabled'}>⛴ Bring a spare train from ${esc(from)} (${n} waiting) · ${fmtMoney(FERRY_FEE)}</button>`;
+    }
+    if (!home) h += `<button class="act" data-act="trainat" data-id="${b.id}" ${linked && g.s.money >= p ? '' : 'disabled'}>🚂 Ship a new train over · ${fmtMoney(p)}</button>`;
+    else if (!spare.length) h += `<div class="note">Buy new trains for ${esc(isl)} at the 🏚 Engine shed. Trains waiting for work on other islands can be shipped here.</div>`;
     return h + back;
   }
   // front: one status line, then the tiles
@@ -213,15 +220,13 @@ function dockCard(g: Game, b: Building, page?: string): string {
     + tile('sea', '⛴', 'Sea routes', routes.length ? `${routes.length} route${routes.length === 1 ? '' : 's'} · 🚢 ${ships}${waiting ? ` · 📦 ${waiting}` : ''}` : 'none yet', waiting > 0 && !ships)
     + tile('fish', '🎣', 'Fishing', l ? `🐟 ${Math.round(c.fish * 60)}/min${c.shellfish ? ` · 🦞 ${Math.round(c.shellfish * 60)}` : ''}` : 'no boats yet')
     + tile('isl', '🏝', 'Islands', `${nIsl} in reach${b.lvl < MAX_LVL ? ' · ⬆ reach' : ''}`)
-    + (home ? '' : tile('trains', '🚂', 'Trains', `${nTr} on ${esc(isl)}`, nTr === 0))
+    + tile('trains', '🚂', 'Trains', `${nTr} on ${esc(isl)}`, !home && nTr === 0)
     + `</div>`;
   if (linked) { const m = buildingSquares(g.world.n, b)[1]!; h += mapBtn(g, m % g.world.n, (m / g.world.n) | 0, MAP_R_SEA); }
   h += `<button class="act warnb" data-act="remove" data-id="${b.id}">🗑 Remove · get ${fmtMoney(refundOf(b))}</button>`;
   return h;
 }
 
-/** The island a train is on (from the square under its engine). */
-const islandOfTrain = (g: Game, t: Train) => g.world.islandOf[g.net.pieces[t.trail.at(-1)!.piece]!.squares.at(-1)!];
 
 function buildingCard(g: Game, b: Building, page?: string): string {
   if (b.kind === 'dock') return dockCard(g, b, page);
@@ -312,6 +317,22 @@ function shipUpRows(g: Game): string {
 
 function shedCard(g: Game): string {
   let h = `<div class="head"><b class="big">🏚</b><div><h2>Engine shed</h2><span class="chip2">🚂 ${g.s.trains.length} train${g.s.trains.length === 1 ? '' : 's'}</span> <span class="chip2">📦 ${trainCap(g)} per load</span></div></div>`;
+  // where the trains are: trains never cross the sea by themselves, so a busy island can be short while another has spares
+  const per = new Map<number, Train[]>();
+  for (const t of g.s.trains) { const k = islandOfTrain(g, t); per.set(k, [...(per.get(k) ?? []), t]); }
+  if (per.size > 1 || [...per.keys()].some(k => k !== g.world.home)) {
+    h += `<h3>🏝 Your trains by island</h3>`;
+    for (const [k, ts] of [...per].sort((a, b) => +(b[0] === g.world.home) - +(a[0] === g.world.home) || b[1].length - a[1].length)) {
+      const idle = ts.filter(t => !t.job).length, held = ts.filter(t => (t.stopT ?? 0) >= JAM_AFTER).length, busy = ts.length - idle;
+      const work = (g.s.buildings ?? []).filter(b => !isDock(b) && isLinked(g, b) && islandOfB(g, b) === k).length;
+      const spare = idle >= 3 && idle > work;
+      const dock = spare ? (g.s.buildings ?? []).filter(b => isDock(b) && isLinked(g, b) && islandOfB(g, b) !== k).sort((a, b) => +(islandOfB(g, b) === g.world.home) - +(islandOfB(g, a) === g.world.home))[0] : undefined;
+      h += `<div class="row${spare ? ' alert' : ''}"><b class="ico">${k < 0 ? '🌉' : '🏝'}</b><div class="grow"><div class="line"><span>${esc(k < 0 ? 'On bridges' : islandName(g, k))}</span><span>🚂 ${ts.length}</span></div>`
+        + `<div class="chips"><span class="chip2 ok">🚚 ${busy} working</span>${idle ? ` <span class="chip2">💤 ${idle} waiting</span>` : ''}${held ? ` <span class="chip2 bad">🚦 ${held} held up</span>` : ''}</div>`
+        + (spare ? `<small>More trains than work here: ship some where they're needed</small>` : '') + `</div>`
+        + (dock ? `<button class="mini" data-act="open" data-kind="bld" data-id="${dock.id}" data-page="trains">⛴ Ship ›</button>` : '') + `</div>`;
+    }
+  }
   h += `<h3>🔧 Fleet upgrades (every train)</h3>`;
   for (const k of Object.keys(FLEET) as FleetKey[]) {
     const f = FLEET[k], l = fleetLvl(g, k), p = f.price[l], top = p === undefined;

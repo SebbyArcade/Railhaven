@@ -6,7 +6,7 @@ import { type Building, GOODS, type Good, INDUSTRIES, isLinked, yardSquares } fr
 import { hallOf } from '../buildings/stations.ts';
 import { shedSiding } from '../buildings/shed.ts';
 import { bldDist, bldOf, destName, destSquares, dockKey, factoryRoom, payFor, type Plan, railDist, type Ship, shipPlan, siteOf } from './shipping.ts';
-import { isDock } from '../ships/docks.ts';
+import { isDock, islandOfB } from '../ships/docks.ts';
 import { tickShips } from '../ships/ships.ts';
 import { tickScouts } from '../world/explore.ts';
 import { reachedIslands, tickMissions } from '../progress/missions.ts';
@@ -71,21 +71,51 @@ export function buyTrain(g: Game): Train | string {
 /** Shipping a train over to another island costs this much on top of its price. */
 export const FERRY_FEE = 500;
 
+/** Set a train down on a landing's yard (the whole train on the yard), or null if the yard is busy. */
+function onYard(g: Game, dock: Building, id: number): Train | null {
+  const yard = yardSquares(g.world.n, dock);
+  for (const sq of yard) for (const pid of g.net.bySquare.get(sq) ?? []) for (const dir of [1, -1] as const) {
+    const t = placeTrain(g.net, id, { piece: pid, dir }, 3);
+    const all = t.trail.flatMap(s => g.net.pieces[s.piece]!.squares);
+    if (!all.every(q => yard.includes(q))) continue;
+    if (t.trail.some(s => g.sys.holder.has(s.piece) || g.sys.blocked.has(s.piece))) continue;
+    return t;
+  }
+  return null;
+}
+
 /** Buy a train for a landing's island: it comes over by boat and is set down on the landing's yard. */
 export function buyTrainAt(g: Game, dock: Building): Train | string {
   const price = trainPrice(g) + FERRY_FEE;
   if (!isLinked(g, dock)) return 'This landing is not reached by your docks yet';
   if (price > g.s.money) return `Need $${(price - g.s.money).toLocaleString('en-US')} more for a train and its crossing`;
-  const yard = yardSquares(g.world.n, dock);
-  for (const sq of yard) for (const id of g.net.bySquare.get(sq) ?? []) for (const dir of [1, -1] as const) {
-    const t = placeTrain(g.net, g.s.nextId, { piece: id, dir }, 3);
-    const all = t.trail.flatMap(s => g.net.pieces[s.piece]!.squares);
-    if (!all.every(q => yard.includes(q))) continue; // the whole train on the yard
-    if (t.trail.some(s => g.sys.holder.has(s.piece) || g.sys.blocked.has(s.piece))) continue;
-    g.s.nextId++; g.s.money -= price; g.s.trains.push(t); g.sys.rebuildHolds();
-    return t;
-  }
-  return "The landing's yard is busy: try again in a moment";
+  const t = onYard(g, dock, g.s.nextId); if (!t) return "The landing's yard is busy: try again in a moment";
+  g.s.nextId++; g.s.money -= price; g.s.trains.push(t); g.sys.rebuildHolds();
+  return t;
+}
+
+/** The island a train is on. */
+export const islandOfTrain = (g: Game, t: Train) => g.world.islandOf[headSquare(g, t)]!;
+
+/**
+ * Trains with nothing to do on other islands that have a dock on the railway, the island with the most of them
+ * first: they can be shipped over to a landing (trains can't cross the sea by themselves).
+ */
+export function spareTrains(g: Game, dock: Building): Train[] {
+  const here = islandOfB(g, dock), ports = new Set((g.s.buildings ?? []).filter(b => isDock(b) && isLinked(g, b)).map(b => islandOfB(g, b)));
+  const idle = g.s.trains.filter(t => !t.job && !t.cargo && !t.broke && parked(t) && islandOfTrain(g, t) !== here && ports.has(islandOfTrain(g, t)));
+  const per = new Map<number, number>(); for (const t of idle) per.set(islandOfTrain(g, t), (per.get(islandOfTrain(g, t)) ?? 0) + 1);
+  return idle.sort((a, b) => per.get(islandOfTrain(g, b))! - per.get(islandOfTrain(g, a))!);
+}
+
+/** Ship a train that has nothing to do on another island over to this landing, for the crossing fee. */
+export function shipTrainTo(g: Game, dock: Building): Train | string {
+  if (!isLinked(g, dock)) return 'This landing is not reached by your docks yet';
+  const from = spareTrains(g, dock)[0]; if (!from) return 'No train is waiting for work on another island with a dock';
+  if (FERRY_FEE > g.s.money) return `Need $${(FERRY_FEE - g.s.money).toLocaleString('en-US')} more for the crossing`;
+  const t = onYard(g, dock, from.id); if (!t) return "The landing's yard is busy: try again in a moment";
+  g.s.trains[g.s.trains.indexOf(from)] = t; g.s.money -= FERRY_FEE; g.sys.rebuildHolds();
+  return t;
 }
 
 /** Units of stock (of one good, for docks) already promised to trains on their way to collect. */
@@ -211,6 +241,9 @@ export function tickTrains(g: Game, dt: number) {
   for (const t of g.s.trains) {
     if (t.v > 0) { const c = UPKEEP * fm * dt; g.s.money -= c; g.s.upkeep = (g.s.upkeep ?? 0) + c; }
     const j = t.job;
+    // held up: a train with somewhere to go standing still (not loading, reversing, broken down or resting aside)
+    if (j && (j.phase === 'toLoad' || j.phase === 'toDrop') && t.v === 0 && t.pause <= 0 && !t.broke && !t.rr && t.plan.length) t.stopT = (t.stopT ?? 0) + dt;
+    else if (t.stopT) t.stopT = 0;
     if (!j) {
       if (!parked(t)) continue;
       if ((t.idle = (t.idle ?? 0) - dt) > 0) continue;

@@ -33,7 +33,7 @@ import { gameReport } from './ui/report.ts';
 import { SEASONS, seasonOf } from './world/season.ts';
 import { buyFleet, FLEET, type FleetKey, fleetLvl, refundOf, removeBuilding, rushOf, sellOffer, sellStock, toggleRush, upgradeBuilding } from './economy/upgrades.ts';
 import { foundTown, sizeName, tickTowns, upgradeTown } from './economy/towns.ts';
-import { buyTrainAt, tickTrains } from './economy/dispatch.ts';
+import { buyTrainAt, shipTrainTo, tickTrains } from './economy/dispatch.ts';
 import { buyShip, buyShipUp, SHIP_UP, type ShipUpKey, shipPlace, shipUpLvl } from './ships/ships.ts';
 import { POI, poisOf } from './world/explore.ts';
 import { buyFishing, FISHING } from './economy/upgrades.ts';
@@ -188,7 +188,13 @@ cardEl.onclick = e => {
     const sh = kind === 'ship' ? game.s.ships?.find(x => x.id === id) : undefined;
     const at = kind === 'town' ? game.s.sites.find(s => s.id === id) : kind === 'bld' ? game.s.buildings?.find(x => x.id === id) : sh ? shipPlace(game, sh) : null;
     if (at) { c.x = (at.x + 0.5) * 32; c.y = (at.y + 0.5) * 32; }
-    openCard({ kind, id } as Card); return;
+    openCard({ kind, id, ...(b.dataset.page ? { page: b.dataset.page } : {}) } as Card); return;
+  }
+  if (b.dataset.act === 'dbljam') { // 🚦 from the Orders board: Double mode with the held-up stretch already chosen
+    const sq = (b.dataset.sq ?? '').split(',').map(Number).filter(i => game.track.has(i)); closeCard();
+    tools.mode = 'double'; tools.cancel(); for (const i of sq) tools.dbl.add(i);
+    if (sq.length) { const n = game.world.n, c = game.s.camera; c.x = ((sq[0]! % n) + 0.5) * 32; c.y = (Math.floor(sq[0]! / n) + 0.5) * 32; }
+    toast('═ The held-up stretch is marked: check it and tap ✓ Double, or tap squares to change it'); return;
   }
   if (b.dataset.act === 'lookpoi') { const p = poisOf(game).find(x => x.id === +b.dataset.id!); closeCard(); if (p) { lookAt(p.x, p.y); tools.flash = { square: p.y * game.world.n + p.x, until: performance.now() + 2500 }; } return; }
   if (b.dataset.act === 'areamap') { const why = tools.openMap(+b.dataset.x!, +b.dataset.y!); if (why) { toast(why); return; } closeCard(); const c = game.s.camera; c.x = (+b.dataset.x! + 0.5) * 32; c.y = (+b.dataset.y! + 0.5) * 32; c.z = Math.max(0.1, Math.min(c.z, 0.9 * Math.min(view.w, view.h) / (2 * (tools.mapPv?.r ?? 45) * 32))); return; }
@@ -212,6 +218,7 @@ cardEl.onclick = e => {
   if (b.dataset.act === 'page' && tools.card) { openCard({ ...tools.card, page: b.dataset.page || undefined } as Card); return; }
   if (b.dataset.act === 'fish' && bld) { const why = buyFishing(game, bld); toast(why || `🎣 ${FISHING[(bld.fish ?? 1) - 1]!.name} at the dock`); renderCard(); return; }
   if (b.dataset.act === 'ship' && bld) { const s = buyShip(game, bld); toast(typeof s === 'string' ? s : '🚢 A cargo ship is ready at the dock: it sails where goods wait'); renderCard(); return; }
+  if (b.dataset.act === 'shipover' && bld) { const t = shipTrainTo(game, bld); toast(typeof t === 'string' ? t : `⛴ Train ${t.id} came over by boat and is looking for a load`); renderCard(); return; }
   if (b.dataset.act === 'trainat' && bld) { const t = buyTrainAt(game, bld); if (typeof t === 'string') toast(t); else { toast(`🚂 Train ${t.id} came over by boat and is looking for a load`); } renderCard(); return; }
   if (b.dataset.act === 'lvl' && bld) { const why = upgradeBuilding(game, bld); toast(why || `⬆ ${info(bld.kind).name} is now level ${bld.lvl}${(bld.tracks ?? 2) > 2 ? ` · ${bld.tracks} loading tracks` : ''}`); if (!why) { trackChanged(game); game.terrainDirty?.(footprint(game.world.n, bld)); } renderCard(); return; }
   if (b.dataset.act === 'shut' && bld) { const on = !bld.closed, why = setClosed(bld, on); toast(why || (on ? `⛔ ${INDUSTRIES[bld.kind].name} closed: barriers come down once the last train leaves` : `✅ ${INDUSTRIES[bld.kind].name} open again`)); renderCard(); return; }

@@ -19,7 +19,7 @@ export interface CottageOpts {
   wall: string; roof: string;
   /** log cabin walls, brick, or plain plaster */
   walls?: 'logs' | 'brick' | 'plain';
-  storeys?: 1 | 2;
+  storeys?: 1 | 2 | 3;
   chimney?: number; // chimney position along the roof, -1..1 (omit for none)
   door?: boolean;
   lit?: boolean; // warm windows
@@ -28,7 +28,7 @@ export interface CottageOpts {
 
 /** A little house w wide and d deep centred on (u, v): the roof seen from above, the front wall below it. */
 export function cottage(ctx: Ctx, u: number, v: number, w: number, d: number, o: CottageOpts) {
-  const st = o.storeys ?? 1, wh = d * (st === 2 ? 0.46 : 0.34), rh = d - wh;
+  const st = o.storeys ?? 1, wh = d * (st === 3 ? 0.58 : st === 2 ? 0.46 : 0.34), rh = d - wh;
   const x0 = u - w / 2, y0 = v - d / 2, wy = y0 + rh;
   // shadow on the ground
   ctx.fillStyle = 'rgba(20,16,10,.28)'; ctx.fillRect(x0 + 1.8, y0 + 2.2, w, d);

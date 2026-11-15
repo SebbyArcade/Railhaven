@@ -18,29 +18,41 @@ export function townSize(s: Site): string {
 
 function drawTown(ctx: CanvasRenderingContext2D, g: Game, s: Site, tm: number, zoom: number, hall?: Hall) {
   const X = (s.x + 0.5) * TILE, Y = (s.y + 0.5) * TILE, pop = s.pop ?? 0, H = (a: number, b: number, k: number) => hash(g.s.seed, a, b, k);
-  const houses = pop <= 0 ? 4 : Math.min(18, 4 + Math.floor(Math.sqrt(pop)));
-  const { roofs, walls } = looks.theme; // the town theme picked in Looks (red roofs by default)
   const L = s.lvl ?? 0, ruin = pop <= 0;
-  type Spot = { hx: number; hy: number; w: number; d: number; k: number };
+  // the town spreads as it climbs the ladder: up to 18 houses for a Town, then more for each step after (a Megacity
+  // of 100,000 people once looked like a village)
+  const houses = ruin ? 4 : Math.min(18 + Math.max(0, L - 2) * 7, 64, 4 + Math.floor(Math.sqrt(pop)));
+  const { roofs, walls } = looks.theme; // the town theme picked in Looks (red roofs by default)
+  type Spot = { hx: number; hy: number; w: number; d: number; k: number; tall?: boolean; kind?: 'church' | 'hall' };
   const spots: Spot[] = [];
   // a station beside the town: the town gathers round the station's forecourt, like a real railway town
   const door = hall && !hall.squares.includes(s.y * g.world.n + s.x) ? stationDoor(g.s.seed, hall) : null;
   const CX = door ? door.x : X, CY = door ? door.y : Y;
   const onLane = (hx: number, hy: number, w: number) => !!door && Math.abs(hx - door.x) < w / 2 + 12 && Math.abs(hy - door.y) < 14; // the forecourt stays clear
   if (door) forecourt(ctx, hall!, door, ruin);
+  const place = (k: number, w: number, d: number, r: number, a: number): Spot | null => {
+    for (let tries = 0; tries < 8; tries++) { // houses keep off the rails, the station and each other
+      const rr = r + tries * 12, hx = CX + Math.cos(a) * rr, hy = CY + Math.sin(a) * rr * 0.8;
+      if (!blockedAt(g, hx, hy, w, hall) && !onLane(hx, hy, w) && !spots.some(o => Math.abs(o.hx - hx) < (o.w + w) / 2 + 2.5 && Math.abs(o.hy - hy) < (o.d + d) / 2 + 2.5)) return { hx, hy, w, d, k };
+    }
+    return null;
+  };
+  // a church from City size, a town hall with a clock from Megacity: placed first, near the middle
+  // landmarks try a few directions so the station, the rails and the name board never crowd them out
+  const mark = (k: number, w: number, d: number, a0: number) => { for (let i = 0; i < 6; i++) { const c = place(k, w, d, 26, a0 + i * 1.047); if (c && Math.abs(c.hy - (Y + 30)) > 20) return c; } return null; };
+  if (!ruin && L >= 3) { const c = mark(-1, 13, 12, H(s.x, 1, 77) * 6.283); if (c) spots.push({ ...c, kind: 'church' }); }
+  if (!ruin && L >= 5) { const c = mark(-2, 20, 14, H(s.y, 2, 78) * 6.283); if (c) spots.push({ ...c, kind: 'hall' }); }
   for (let k = 0; k < houses; k++) {
     const a = H(s.x, s.y, k) * 6.283, r = 12 + H(s.y, s.x, k) * (14 + houses * 1.3);
-    const big = !ruin && H(k, s.y, 5) < 0.15 + L * 0.12; // more two-storey houses as the town grows
-    const w = (big ? 11 : 9) + H(k, s.x, 3) * 3, d = big ? 12 : 9.5;
-    let hx = 0, hy = 0, ok = false;
-    for (let tries = 0; tries < 8 && !ok; tries++) { // houses keep off the rails, the station and each other
-      const rr = r + tries * 12; hx = CX + Math.cos(a) * rr; hy = CY + Math.sin(a) * rr * 0.8;
-      ok = !blockedAt(g, hx, hy, w, hall) && !onLane(hx, hy, w) && !spots.some(o => Math.abs(o.hx - hx) < (o.w + w) / 2 + 2.5 && Math.abs(o.hy - hy) < (o.d + d) / 2 + 2.5);
-    }
-    if (ok) spots.push({ hx, hy, w, d, k });
+    // tall brick townhouses in the middle of a City and bigger; more two-storey houses as the town grows
+    const tall = !ruin && L >= 3 && r < 30 + L * 4 && H(k, s.x, 11) < 0.75;
+    const big = !ruin && !tall && H(k, s.y, 5) < 0.15 + L * 0.12;
+    const w = tall ? 12 + H(k, s.x, 3) * 3 : (big ? 11 : 9) + H(k, s.x, 3) * 3, d = tall ? 14 : big ? 12 : 9.5;
+    const p = place(k, w, d, r, a); if (p) spots.push(tall ? { ...p, tall } : p);
   }
   spots.sort((p, q) => p.hy - q.hy); // back to front
-  for (const { hx, hy, w, d, k } of spots) {
+  for (const { hx, hy, w, d, k, tall, kind } of spots) {
+    if (kind) { landmark(ctx, kind, hx, hy, w, d, tm, zoom); continue; }
     const big = d > 10;
     if (ruin) { // tumbled walls, no roof, weeds
       ctx.fillStyle = 'rgba(0,0,0,.2)'; ctx.fillRect(hx - w / 2 + 1.5, hy - d / 2 + 1.5, w, d);
@@ -58,7 +70,11 @@ function drawTown(ctx: CanvasRenderingContext2D, g: Game, s: Site, tm: number, z
       fence(ctx, hx - w / 2 - 1, gy, hx - w / 2 - 1, gy + gh); fence(ctx, hx + w / 2 + 1, gy, hx + w / 2 + 1, gy + gh);
     }
     if (H(k, 4, s.y) < 0.45) bush(ctx, hx + (H(k, 6, 1) < 0.5 ? -1 : 1) * (w / 2 + 3), hy - d / 4, 2.6 + H(k, 7, 2) * 1.2, H(k, 8, 3) < 0.5 ? '#3f6f30' : '#4f8038');
-    cottage(ctx, hx, hy, w, d, {
+    cottage(ctx, hx, hy, w, d, tall ? {
+      wall: ['#b5523b', '#c98a68', '#9c4a34', '#d8c8a8'][(k + s.x) % 4]!, roof: ['#4a5560', '#5a4a42', '#3e3a38'][(k + s.y) % 3]!,
+      walls: (k + s.x) % 4 === 3 ? 'plain' : 'brick', storeys: 3,
+      chimney: H(k, 2, 2) < 0.5 ? -0.7 : 0.7, tm, smoke: k % 3 === 0 && zoom > 1,
+    } : {
       wall: walls[(k * 7 + s.x) % walls.length]!, roof: roofs[(k * 3 + s.y) % roofs.length]!,
       walls: walls[(k * 7 + s.x) % walls.length] === '#c98a68' ? 'brick' : 'plain', storeys: big ? 2 : 1,
       chimney: H(k, 2, 2) < 0.5 ? -0.7 : 0.7, tm, smoke: k % 3 === 0 && zoom > 1,
@@ -85,6 +101,38 @@ function drawTown(ctx: CanvasRenderingContext2D, g: Game, s: Site, tm: number, z
     ctx.fillRect(LX - sw / 2, BT + fs + 8, sw, fs * 0.75 + 5);
     ctx.fillStyle = '#f3e6c8'; ctx.fillText(sz, LX, BT + fs + 8 + (fs * 0.75 + 5) / 2 + 1);
   }
+}
+
+/** A stone church with a spired tower, or a brick town hall with a clock tower, in the miniature style. */
+function landmark(ctx: CanvasRenderingContext2D, kind: 'church' | 'hall', u: number, v: number, w: number, d: number, tm: number, zoom: number) {
+  if (kind === 'church') {
+    cottage(ctx, u + 2, v, w - 4, d, { wall: '#d8d0c0', roof: '#5a5a62', walls: 'plain', storeys: 1, door: false });
+    const tx = u - w / 2 - 1, base = v + d / 2, tw = 5.5, th = d + 6;
+    ctx.fillStyle = 'rgba(20,16,10,.28)'; ctx.fillRect(tx + 1.8, base - th + 2, tw, th);
+    ctx.fillStyle = '#cfc6b4'; ctx.fillRect(tx, base - th, tw, th);
+    ctx.fillStyle = 'rgba(0,0,0,.12)'; ctx.fillRect(tx + tw * 0.6, base - th, tw * 0.4, th);
+    ctx.fillStyle = '#5a3a22'; ctx.fillRect(tx + tw / 2 - 1, base - 3.4, 2, 3.4); // the door at the foot of the tower
+    ctx.fillStyle = '#3a3028'; ctx.fillRect(tx + tw / 2 - 0.8, base - th + 2.2, 1.6, 2.2); // belfry window
+    ctx.fillStyle = '#4a4a52'; ctx.beginPath(); ctx.moveTo(tx - 0.6, base - th); ctx.lineTo(tx + tw / 2, base - th - 9); ctx.lineTo(tx + tw + 0.6, base - th); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,.18)'; ctx.beginPath(); ctx.moveTo(tx - 0.6, base - th); ctx.lineTo(tx + tw / 2, base - th - 9); ctx.lineTo(tx + tw / 2, base - th); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#d8b060'; ctx.fillRect(tx + tw / 2 - 0.3, base - th - 11.5, 0.6, 2.6); ctx.fillRect(tx + tw / 2 - 1, base - th - 10.8, 2, 0.6); // the cross
+    if (zoom > 1.2) person(ctx, u + w / 2 + 2, v + d / 2 + 3, '#3f5a7a');
+    return;
+  }
+  // town hall: a wide brick front, steps, a clock tower in the middle and a flag
+  cottage(ctx, u, v, w, d, { wall: '#c98a68', roof: '#4a5560', walls: 'brick', storeys: 2, door: true });
+  const cx = u, top = v - d / 2, tw = 6, th = 9;
+  ctx.fillStyle = 'rgba(20,16,10,.25)'; ctx.fillRect(cx - tw / 2 + 1.5, top - th + 1.5, tw, th);
+  ctx.fillStyle = '#d8c8a8'; ctx.fillRect(cx - tw / 2, top - th, tw, th);
+  ctx.fillStyle = '#f4ead6'; ctx.beginPath(); ctx.arc(cx, top - th + 3.4, 2, 0, 6.283); ctx.fill();
+  ctx.strokeStyle = '#3a3028'; ctx.lineWidth = 0.4; ctx.beginPath(); ctx.arc(cx, top - th + 3.4, 2, 0, 6.283); ctx.stroke();
+  const hr = (tm / 720) % 1 * 6.283, mn = (tm / 60) % 1 * 6.283; // the hands turn slowly
+  ctx.beginPath(); ctx.moveTo(cx, top - th + 3.4); ctx.lineTo(cx + Math.sin(hr) * 1.2, top - th + 3.4 - Math.cos(hr) * 1.2); ctx.moveTo(cx, top - th + 3.4); ctx.lineTo(cx + Math.sin(mn) * 1.7, top - th + 3.4 - Math.cos(mn) * 1.7); ctx.stroke();
+  ctx.fillStyle = '#4a5560'; ctx.beginPath(); ctx.moveTo(cx - tw / 2 - 0.6, top - th); ctx.lineTo(cx, top - th - 4); ctx.lineTo(cx + tw / 2 + 0.6, top - th); ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = '#5a4a3a'; ctx.lineWidth = 0.5; ctx.beginPath(); ctx.moveTo(cx, top - th - 4); ctx.lineTo(cx, top - th - 9); ctx.stroke();
+  ctx.fillStyle = '#c0392b'; ctx.beginPath(); ctx.moveTo(cx, top - th - 9); ctx.lineTo(cx + 3.6 + Math.sin(tm * 3) * 0.4, top - th - 8); ctx.lineTo(cx, top - th - 7); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = '#d7ccb4'; ctx.fillRect(u - 4, v + d / 2, 8, 2); // front steps
+  if (zoom > 1.2) { person(ctx, u - 6, v + d / 2 + 3, '#a8402e'); person(ctx, u + 5, v + d / 2 + 4, '#5a7a3a'); }
 }
 
 /** A small paved forecourt in front of the station door, in the platform's colours (weedy while the town is in ruins). */
