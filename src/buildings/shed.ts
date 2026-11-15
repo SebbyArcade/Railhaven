@@ -2,6 +2,7 @@ import { DX, DY, type Dir } from '../core/grid.ts';
 import type { Game } from '../state.ts';
 import { isRevealed } from '../world/fog.ts';
 import { hallsOf } from './stations.ts';
+import { footprint } from './industries.ts';
 
 /** The engine shed: a building beside a plain straight stretch of line near Ashford, its doors facing the track. */
 export interface Shed { x: number; y: number; /** direction from the shed to the track */ side: Dir }
@@ -19,7 +20,7 @@ function squareOk(g: Game, x: number, y: number, blocked: Set<number>): Dir | -1
     if (side >= 0) return -1; // track on two sides: no room
     // the track beside must be a plain straight running past the doors (not towards them)
     const along = DX[d] !== 0 ? (1 << 1) | (1 << 3) : (1 << 0) | (1 << 2);
-    if (sq.links !== along || blocked.has(j)) return -1;
+    if (sq.links !== along || blocked.has(j) || !(g.linked?.has(j) ?? true)) return -1; // beside the railway, not a loose yard
     side = d;
   }
   if (side < 0) return -1;
@@ -32,6 +33,7 @@ function squareOk(g: Game, x: number, y: number, blocked: Set<number>): Dir | -1
 export function placeShed(g: Game) {
   const n = g.world.n, a = g.s.sites[0]!, blocked = new Set<number>();
   for (const h of hallsOf(g.track, n, g.s.sites)) for (const i of [...h.squares, ...h.approaches]) blocked.add(i);
+  for (const b of g.s.buildings ?? []) for (const i of footprint(n, b)) blocked.add(i);
   const cur = g.s.shed;
   if (cur && squareOk(g, cur.x, cur.y, blocked) === cur.side) return;
   let best: { x: number; y: number; side: Dir } | undefined, bd = Infinity;

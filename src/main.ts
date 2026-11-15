@@ -7,8 +7,10 @@ import { loadFrom, saveTo } from './save/save.ts';
 import { isRevealed } from './world/fog.ts';
 import { TERRAIN_NAMES } from './world/terrain.ts';
 import { attachInput } from './ui/input.ts';
-import { toast, updateHud } from './ui/hud.ts';
+import { fmtMoney, toast, updateHud } from './ui/hud.ts';
 import { MODE_HINT, type Mode, Tools } from './ui/tools.ts';
+import { INDUSTRIES, type IndustryKind, priceOf } from './buildings/industries.ts';
+import { tickProduction } from './economy/production.ts';
 import type { Game } from './state.ts';
 
 const canvas = document.getElementById('c') as HTMLCanvasElement;
@@ -55,8 +57,22 @@ attachInput(canvas, () => game.s.camera, () => view, () => game.world.n * 32, {
   },
 });
 
+// Build menu: colourful tiles, one per industry
+const menu = $('buildMenu');
+let menuOpen = false;
+function renderMenu() {
+  menu.innerHTML = (Object.keys(INDUSTRIES) as IndustryKind[]).filter(k => k !== 'iron' && k !== 'oil' || game.s.sites.some(s => s.kind === 'dep' && s.res === k && !s.hidden)).map(k => {
+    const d = INDUSTRIES[k], p = priceOf(game, k);
+    return `<button data-k="${k}" class="${tools.buildKind === k ? 'on' : ''}"><b>${d.icon}</b>${d.name}<small>${fmtMoney(p)}</small></button>`;
+  }).join('');
+}
+menu.onclick = e => { const b = (e.target as HTMLElement).closest('button'); if (!b) return; tools.chooseBuild(b.dataset.k as IndustryKind); menuOpen = false; };
+$('buildBtn').onclick = () => {
+  if (tools.mode === 'build' || menuOpen) { menuOpen = false; tools.setMode('pan'); tools.mode = 'pan'; tools.buildKind = null; return; }
+  tools.mode = 'pan'; tools.cancel(); menuOpen = true; renderMenu();
+};
 // toolbar: tapping a tool again closes it
-for (const b of document.querySelectorAll<HTMLButtonElement>('#bar [data-mode]')) b.onclick = () => { tools.setMode(b.dataset.mode as Mode); };
+for (const b of document.querySelectorAll<HTMLButtonElement>('#bar [data-mode]')) b.onclick = () => { menuOpen = false; tools.setMode(b.dataset.mode as Mode); };
 let newArmed = 0;
 $('newGame').onclick = () => {
   // the artifact frame blocks confirm(), so ask with a second tap instead
@@ -70,6 +86,10 @@ $('cancel').onclick = () => { tools.cancel(); };
 
 function updateUi() {
   for (const b of document.querySelectorAll<HTMLButtonElement>('#bar [data-mode]')) b.classList.toggle('on', b.dataset.mode === tools.mode);
+  $('buildBtn').classList.toggle('on', tools.mode === 'build' || menuOpen);
+  menu.style.display = menuOpen ? 'grid' : 'none';
+  if (menuOpen && Math.floor(performance.now() / 1000) !== lastMenu) { lastMenu = Math.floor(performance.now() / 1000); renderMenu(); } // prices refresh live
+  tools.updateGlow(Math.floor(game.s.camera.x / 32), Math.floor(game.s.camera.y / 32));
   const hint = MODE_HINT[tools.mode]; $('hint').textContent = hint; $('hint').style.display = hint ? 'block' : 'none';
   $('undo').style.display = tools.canUndo() ? 'block' : 'none';
   const bar = tools.bar(), cb = $('confirm');
@@ -77,10 +97,10 @@ function updateUi() {
   if (bar) { $('ctext').textContent = bar.text; ($('ok') as HTMLButtonElement).disabled = !bar.can; $('ok').textContent = bar.ok; }
 }
 
-let last = performance.now(), saveT = 0;
+let last = performance.now(), saveT = 0, lastMenu = 0;
 function frame(now: number) {
   const dt = Math.min(0.1, (now - last) / 1000); last = now;
-  if (!document.hidden) { game.s.t += dt; game.sys.tick(dt); if (tickBreaks(game)) breaksChanged(game); }
+  if (!document.hidden) { game.s.t += dt; game.sys.tick(dt); tickProduction(game, dt); if (tickBreaks(game)) breaksChanged(game); }
   saveT += dt; if (saveT > 5) { saveT = 0; saveTo(localStorage, game); }
   renderer.draw(ctx, view, dpr, now / 1000);
   updateHud(hud, game);

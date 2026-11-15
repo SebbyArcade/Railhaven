@@ -2,6 +2,7 @@ import type { Game } from '../state.ts';
 import { bridgeJoinsIslands, squareCost } from './rules.ts';
 import { layPath } from './edit.ts';
 import { stationLinkError } from '../buildings/stations.ts';
+import { yardLinkError } from '../buildings/industries.ts';
 import type { TrackMap, TrackSquare } from './types.ts';
 import { reveal } from '../world/fog.ts';
 
@@ -22,7 +23,7 @@ export interface PaintPlan {
 
 /** Squares new track may start from: existing track, or Ashford for the very first track. */
 export function isAnchor(g: Game, i: number): boolean {
-  if (g.track.has(i)) return true;
+  if (g.track.has(i)) return g.linked ? g.linked.has(i) : true; // a loose yard is not part of the railway yet
   const a = g.s.sites[0]!;
   return i === a.y * g.world.n + a.x;
 }
@@ -44,7 +45,7 @@ export function extendPlan(g: Game, p: PaintPlan, i: number) {
     if (p.path.includes(next)) return; // no loops back onto the stroke itself
     const c = squareCost(g, next);
     if (typeof c === 'string' && !g.track.has(next)) { p.refused = { square: next, why: c }; return; }
-    const st = stationLinkError(withPath(g, p.path), n, g.s.sites, last, next);
+    const st = stationLinkError(withPath(g, p.path), n, g.s.sites, last, next) || yardLinkError(g, last, next);
     if (st) { p.refused = { square: next, why: st }; return; }
     p.path.push(next);
   }
@@ -62,7 +63,7 @@ export function planError(g: Game, p: PaintPlan): string {
   if (p.path.length < 2) return 'Drag or tap next to the track to add squares';
   const cost = planCost(g, p);
   for (let k = 1; k < p.path.length; k++) {
-    const e = stationLinkError(withPath(g, p.path.slice(0, k)), g.world.n, g.s.sites, p.path[k - 1]!, p.path[k]!);
+    const e = stationLinkError(withPath(g, p.path.slice(0, k)), g.world.n, g.s.sites, p.path[k - 1]!, p.path[k]!) || yardLinkError(g, p.path[k - 1]!, p.path[k]!);
     if (e) return e;
   }
   if (cost > g.s.money) return `Need $${(cost - g.s.money).toLocaleString('en-US')} more`;

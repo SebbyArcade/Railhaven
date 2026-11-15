@@ -5,6 +5,7 @@ import type { Network } from './track/network.ts';
 import type { Train, TrainSystem } from './trains/train.ts';
 import type { Shed } from './buildings/shed.ts';
 import type { Break } from './track/breaks.ts';
+import type { Building } from './buildings/industries.ts';
 
 export type Resource = 'wood' | 'farm' | 'stone' | 'coal' | 'iron' | 'oil';
 
@@ -48,6 +49,8 @@ export interface GameState {
   /** broken rails being repaired, and when the next one may happen */
   breaks?: Break[];
   nextBreak?: number;
+  /** industries and factories the player built */
+  buildings?: Building[];
 }
 
 /** The running game: saved state plus the world rebuilt from the seed. */
@@ -58,6 +61,8 @@ export interface Game {
   track: TrackMap;
   net: Network;
   sys: TrainSystem;
+  /** track squares joined to Ashford (rebuilt with the network) */
+  linked?: Set<number>;
   /** set by the renderer: squares whose baked terrain must be redrawn (track hides trees) */
   terrainDirty?: (squares: number[]) => void;
 }

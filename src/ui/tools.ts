@@ -6,8 +6,11 @@ import { TRACK_COST } from '../track/rules.ts';
 import { placeTrain } from '../trains/train.ts';
 import { bodyPoint, trainLength } from '../trains/train.ts';
 import { fmtMoney, toast } from './hud.ts';
+import { bestPlacement, build, footprint, INDUSTRIES, type IndustryKind, isLinked, placeError, placementsAt, priceOf, shareAt } from '../buildings/industries.ts';
 
-export type Mode = 'pan' | 'rail' | 'double' | 'remove' | 'train';
+type Placement = ReturnType<typeof placementsAt>[number];
+
+export type Mode = 'pan' | 'rail' | 'double' | 'remove' | 'train' | 'build';
 
 export const MODE_HINT: Record<Mode, string> = {
   pan: '',
@@ -15,6 +18,7 @@ export const MODE_HINT: Record<Mode, string> = {
   double: '═ Tap or drag along your track to make it double. Trains keep left, so two can pass.',
   remove: '✂ Tap a track square to remove it.',
   train: '🚂 Tap your track to put a test train there.',
+  build: '🏗 Pick what to build, then tap a glowing spot. Tap it again to turn the yard.',
 };
 
 /** The build tools: what the player is doing, and the confirm bar it needs. */
@@ -27,6 +31,13 @@ export class Tools {
   flash: { square: number; until: number } | null = null;
   /** the last stroke built, while it can still be undone */
   lastStroke: BuiltStroke | null = null;
+  /** Build mode: the kind chosen, squares that glow, and the spot being previewed */
+  buildKind: IndustryKind | null = null;
+  glow = new Set<number>();
+  private glowKey = '';
+  preview: Placement | null = null;
+  private previewAt = -1;
+  private previewTurn = 0;
 
   constructor(private g: () => Game) {}
 
@@ -35,7 +46,22 @@ export class Tools {
     this.cancel();
   }
 
-  cancel() { this.plan = null; this.dbl.clear(); this.removeAt = null; }
+  cancel() { this.plan = null; this.dbl.clear(); this.removeAt = null; this.preview = null; this.previewAt = -1; if (this.mode !== 'build') this.buildKind = null; }
+
+  /** choose what to build: glowing squares show where it fits */
+  chooseBuild(k: IndustryKind) { this.mode = 'build'; this.buildKind = k; this.preview = null; this.glowKey = ''; }
+
+  /** recompute the glowing squares around the view (cheap enough to call each frame: cached on what matters) */
+  updateGlow(cx: number, cy: number) {
+    const g = this.g();
+    if (this.mode !== 'build' || !this.buildKind) { this.glow.clear(); return; }
+    const key = `${this.buildKind}/${g.track.size}/${g.s.buildings?.length ?? 0}/${cx >> 3}/${cy >> 3}`;
+    if (key === this.glowKey) return;
+    this.glowKey = key; this.glow.clear();
+    const R = 14;
+    for (let y = cy - R; y <= cy + R; y++) for (let x = cx - R; x <= cx + R; x++)
+      if (bestPlacement(g, this.buildKind, x, y).place) this.glow.add(y * g.world.n + x);
+  }
 
   private refuse(square: number, why: string) { this.flash = { square, until: performance.now() + 900 }; toast(why); }
 
@@ -69,6 +95,18 @@ export class Tools {
       toast('New track must join your network: start from your track or from Ashford'); return true;
     }
     if (this.mode === 'double') { if (g.track.has(i)) { if (this.dbl.has(i)) this.dbl.delete(i); else this.dbl.add(i); } return true; }
+    if (this.mode === 'build' && this.buildKind) {
+      const x = i % n, y = (i / n) | 0;
+      if (this.previewAt === i && this.preview) { // tap again: turn the yard to the next way that fits
+        const all = placementsAt(this.buildKind, x, y).filter(p => !placeError(g, p));
+        if (all.length > 1) { this.previewTurn = (this.previewTurn + 1) % all.length; this.preview = all[this.previewTurn]!; }
+        return true;
+      }
+      const b = bestPlacement(g, this.buildKind, x, y);
+      if (!b.place) { this.refuse(i, b.why); return true; }
+      this.preview = b.place; this.previewAt = i; this.previewTurn = 0;
+      return true;
+    }
     if (this.mode === 'remove') { this.removeAt = g.track.has(i) ? i : null; if (!g.track.has(i)) toast('No track here'); return true; }
     if (this.mode === 'train') {
       const ids = g.net.bySquare.get(i);
@@ -129,6 +167,10 @@ export class Tools {
       return { text: `Double ${add.length} square${add.length === 1 ? '' : 's'} · ${fmtMoney(c)}`, ok: '✓ Double', can: add.length > 0 && c <= g.s.money };
     }
     if (this.mode === 'remove' && this.removeAt !== null) return { text: 'Remove this track square?', ok: '✂ Remove', can: true };
+    if (this.mode === 'build' && this.preview) {
+      const k = this.preview.kind, price = priceOf(g, k), out = Math.round(INDUSTRIES[k].rate * shareAt(g, this.preview) * 60);
+      return { text: `${INDUSTRIES[k].icon} ${INDUSTRIES[k].name} · ${fmtMoney(price)} · makes ${out}/min`, ok: '✓ Build', can: price <= g.s.money };
+    }
     return null;
   }
 
@@ -152,6 +194,11 @@ export class Tools {
       if (c > g.s.money) { toast('Not enough money'); return; }
       g.s.money -= c; for (const i of add) g.track.get(i)!.dbl = true; this.lastStroke = null;
       trackChanged(g); this.dbl.clear();
+    } else if (this.mode === 'build' && this.preview) {
+      const b = build(g, this.preview); if (typeof b === 'string') { toast(b); return; }
+      trackChanged(g); g.terrainDirty?.(footprint(g.world.n, b));
+      toast(isLinked(g, b) ? `${INDUSTRIES[b.kind].icon} ${INDUSTRIES[b.kind].name} built` : `${INDUSTRIES[b.kind].icon} Built! Now lay track from your railway to one end of its yard`);
+      this.preview = null; this.previewAt = -1; this.glowKey = '';
     } else if (this.mode === 'remove' && this.removeAt !== null) {
       const i = this.removeAt;
       if (g.s.trains.some(t => t.trail.some(s => g.net.pieces[s.piece]!.squares.includes(i)))) { toast('A train is on this track'); return; }
