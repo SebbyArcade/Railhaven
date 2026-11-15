@@ -1,6 +1,7 @@
 import type { Game } from '../state.ts';
 import { type Building, buildingSquares, type Good } from '../buildings/industries.ts';
 import { dockRange, isDock, islandOfB, linkedDocks, seaDist } from './docks.ts';
+import { lightMul, salvageAt } from '../world/explore.ts';
 
 /**
  * Cargo ships. Goods for another island go maker → dock (by train) → ship → far dock, where that island's trains
@@ -123,7 +124,7 @@ export function tickShips(g: Game, dt: number) {
     if (s.to !== undefined) { // at sea
       const to = dockOf(g, s.to);
       if (!to || !s.path) { s.to = undefined; s.path = undefined; continue; }
-      s.pos += SHIP_SPEED * dt;
+      { const p = shipPlace(g, s); s.pos += SHIP_SPEED * lightMul(g, p.x, p.y) * dt; salvageAt(g, Math.round(p.x), Math.round(p.y)); }
       if (s.pos >= s.path.length - 1) { s.at = s.to; s.to = undefined; s.path = undefined; s.pos = 0; s.wait = SHIP_LOAD; }
       continue;
     }

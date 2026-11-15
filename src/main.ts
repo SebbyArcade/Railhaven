@@ -18,6 +18,7 @@ import { buyFleet, FLEET, type FleetKey, fleetLvl, refundOf, removeBuilding, rus
 import { foundTown, sizeName, tickTowns, upgradeTown } from './economy/towns.ts';
 import { buyTrainAt, tickTrains } from './economy/dispatch.ts';
 import { buyShip } from './ships/ships.ts';
+import { POI, poisOf } from './world/explore.ts';
 import { buyFishing, FISHING } from './economy/upgrades.ts';
 import { checkStuck } from './economy/nofail.ts';
 
@@ -57,7 +58,9 @@ attachInput(canvas, () => game.s.camera, () => view, () => game.world.n * 32, {
     if (tools.mode === 'pan') { const [wx, wy] = toWorld(game.s.camera, view, sx, sy); if (tools.tapWorld(wx, wy)) { renderCard(); return; } }
     if (tools.tapSquare(i)) return;
     const n = game.world.n, x = i % n, y = (i / n) | 0;
-    if (!isRevealed(game, i)) { toast('Unexplored fog. Scouting comes in a later stage.'); return; }
+    if (!isRevealed(game, i)) { toast('Unexplored fog: 🔭 Scout from a town or dock on your railway, or lay track toward it'); return; }
+    const poi = poisOf(game).find(p => p.seen && Math.abs(p.x - x) <= 1 && Math.abs(p.y - y) <= 1 && !(p.kind === 'wreck' && p.got));
+    if (poi) { toast(`${POI[poi.kind].icon} ${POI[poi.kind].name}: ${poi.got ? 'yours · ' : poi.kind === 'wreck' ? '' : 'bring track within 2 squares to take it over · '}${POI[poi.kind].perk}`); return; }
     const br = game.s.breaks?.find(b => b.square === i);
     if (br) { const s = Math.ceil(br.crewAt - game.s.t); toast(`${BREAK_TEXT[br.kind]}: trains go round or wait. ${s > 0 ? `Repair crew arrives in ${s} s` : `Repair crew at work, ${Math.ceil(br.doneAt - game.s.t)} s left`}`); return; }
     if (game.s.shed && game.s.shed.x === x && game.s.shed.y === y) { openCard({ kind: 'shed', id: 0 }); return; }

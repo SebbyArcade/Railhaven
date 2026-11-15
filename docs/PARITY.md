@@ -48,7 +48,7 @@ that makes sense. Details for each line: `legacy/CHANGES.md` (search the version
 - [x] No-fail safety net (top-up to the next useful step when broke with nothing earning, at most every 3 min)
 
 ## Stage 4: islands and sea
-- [ ] Scouting: drawn routes from towns/docks, pay per square, refunds, boats over sea
+- [ ] Scouting: drawn routes from towns/docks, pay per square, refunds, boats over sea (done: 🔭 Scout tool, routes drawn from linked towns on foot or docks by boat, (10n + n(n+1)) cost, boats ×1.5, caps 36/50, 90% back for unused squares, 2 out at once; landmarks: ruins, lighthouses, lookout hills, shipwrecks; to do: buy a map)
 - [ ] Docks/landings, dock upgrades (berths, storage, cranes, warehouse), fishing boats, shellfish (done: docks and landings, reach by sea, 3 levels of reach, sea charting, landings start their own railway; fishing boats, bigger fleet, shellfish traps; dock card tiles with Back pages; to do: berths/storage/cranes, seafood in coastal orders)
 - [ ] Ships: buy at docks, roaming, sea lanes only over mapped water, storms, ferrying trains (done: cargo ships $3,000 bought at a dock, roam between docks with sea routes, wait for half a hold, goods for another island go train → dock → ship → landing → island trains; ship a train over to a landing; to do: ship upgrades and hold types, ship card, storms, two-hop routes)
 - [ ] Island specialties (+50%), resources per island, regional capitals, trade orders, long-haul imports (done: iron and oil only on outer islands, landing crews survey their island, specialties +50% with ★ labels, coastal seafood orders; to do: regional capitals, trade orders, long-haul imports)
