@@ -81,6 +81,8 @@ export interface Building {
   inbuf?: Partial<Record<Good, number>>;
   /** the deposit a mine stands on */
   dep?: number;
+  /** on fire: makes nothing until the fire crew puts it out */
+  fire?: { crewAt: number; doneAt: number };
   /** money paid for it and its levels (half comes back if it is removed) */
   paid?: number;
   /** docks: how far out the sea is already charted */

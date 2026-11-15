@@ -3,6 +3,8 @@ import { Sound } from './audio/sound.ts';
 import { hearScene } from './audio/scene.ts';
 import { breaksChanged, newGame, trackChanged } from './game.ts';
 import { BREAK_TEXT, breakRail, tickBreaks } from './track/breaks.ts';
+import { tickEvents } from './world/events.ts';
+import { bodyPoint } from './trains/train.ts';
 import { hallAt, hallsOf } from './buildings/stations.ts';
 import { type View, toSquare, toWorld } from './render/camera.ts';
 import { Renderer } from './render/renderer.ts';
@@ -59,8 +61,8 @@ const snapPic = () => { if (slotsOk) try { touchActive(localStorage, game, mapTh
 const tools = new Tools(() => game);
 let renderer = new Renderer(game, tools);
 /** run the game rules for some seconds at once (screenshot checks and the bot) */
-function step(secs: number) { for (let k = 0; k < secs * 20; k++) { const dt = 0.05; game.s.t += dt; game.sys.tick(dt); tickProduction(game, dt); tickTowns(game, dt); tickTrains(game, dt); if (Math.floor(game.s.t / 5) !== Math.floor((game.s.t - dt) / 5)) checkStuck(game); if (tickBreaks(game)) breaksChanged(game); } }
-(window as any).railhaven = { get game() { return game; }, get renderer() { return renderer; }, get sound() { return sound; }, hear: () => hearScene(game, view), tools, step, openCard: (c: Card | null) => openCard(c), breakRail: (i: number) => { const b = breakRail(game, i); breaksChanged(game); return b; } };
+function step(secs: number) { for (let k = 0; k < secs * 20; k++) { const dt = 0.05; game.s.t += dt; game.sys.tick(dt); tickProduction(game, dt); tickTowns(game, dt); tickTrains(game, dt); if (Math.floor(game.s.t / 5) !== Math.floor((game.s.t - dt) / 5)) checkStuck(game); if (+tickBreaks(game) + +tickEvents(game, dt)) breaksChanged(game); } }
+(window as any).railhaven = { get game() { return game; }, get renderer() { return renderer; }, get sound() { return sound; }, hear: () => hearScene(game, view), trainAt: (id: number) => { const t = game.s.trains.find(t => t.id === id); return t?.trail.length ? bodyPoint(game.net, t, 0) : null; }, tools, step, openCard: (c: Card | null) => openCard(c), breakRail: (i: number) => { const b = breakRail(game, i); breaksChanged(game); return b; } };
 
 const view: View = { w: 0, h: 0 };
 let dpr = 1;
@@ -441,7 +443,7 @@ let last0 = 0, last = performance.now(), saveT = 0, lastMenu = 0, lastCard = 0, 
 function frame(now: number) {
   const dt = Math.max(0, Math.min(0.1, (now - last) / 1000)); last = now; // the first frame time can be a little before load time
   if (idle() && !onHome() && pausedEl.style.display !== 'flex') { pausedEl.style.display = 'flex'; saveTo(localStorage, game); }
-  if (!document.hidden && !idle()) { game.s.t += dt; game.sys.tick(dt); tickProduction(game, dt); tickTowns(game, dt); tickTrains(game, dt); if (Math.floor(game.s.t / 5) !== Math.floor((game.s.t - dt) / 5)) checkStuck(game); if (tickBreaks(game)) breaksChanged(game); }
+  if (!document.hidden && !idle()) { game.s.t += dt; game.sys.tick(dt); tickProduction(game, dt); tickTowns(game, dt); tickTrains(game, dt); if (Math.floor(game.s.t / 5) !== Math.floor((game.s.t - dt) / 5)) checkStuck(game); if (+tickBreaks(game) + +tickEvents(game, dt)) breaksChanged(game); }
   { const se = seasonOf(game.s.t); if (se !== lastSeason) { if (lastSeason >= 0) (game.news ??= []).push(`${SEASONS[se]} has come`); lastSeason = se; } }
   sound.season = seasonOf(game.s.t); sound.pause(document.hidden || idle());
   if (now - soundT > 100) { soundT = now; sound.update(hearScene(game, view)); }

@@ -1,4 +1,5 @@
 import type { Game, GameState, Site } from './state.ts';
+import { trainSpeedMul } from './world/events.ts';
 import { checkPois } from './world/explore.ts';
 import { chartSea, islandOfB, linkedDocks } from './ships/docks.ts';
 const isHomeDock = (g: Game, b: import('./buildings/industries.ts').Building) => islandOfB(g, b) === g.world.home;
@@ -47,7 +48,7 @@ function assemble(s: GameState): Game {
   const g = { s, world, track } as Game;
   g.linked = linkedSquares(g); placeShed(g); g.linked = linkedSquares(g); // the shed lays its siding first
   const net = makeNetwork(track, world.n, s.sites, s.buildings);
-  g.net = net; g.sys = new TrainSystem(net, s.trains);
+  g.net = net; g.sys = new TrainSystem(net, s.trains); g.sys.speedOf = t => trainSpeedMul(g, t);
   if (s.netKey !== networkKey(net)) {
     // the rails were built by different code: find every train again by where it stood
     for (const t of s.trains) if (t.at) relocate(net, t, t.at);

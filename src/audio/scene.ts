@@ -8,7 +8,7 @@ import { isRevealed } from '../world/fog.ts';
 import type { View } from '../render/camera.ts';
 
 /** What makes a sound on the map. Only rules state is read: this never changes the game. */
-export type SoundKind = 'train' | 'load' | 'repair' | 'ship' | 'town' | IndustryKind;
+export type SoundKind = 'train' | 'load' | 'repair' | 'ship' | 'town' | 'fire' | IndustryKind;
 
 /** One thing you can hear: how loud (0-1) and where, left -1 to right +1. */
 export interface Hear { id: string; kind: SoundKind; vol: number; pan: number; rate?: number; moving?: boolean }
@@ -46,6 +46,7 @@ export function hearScene(g: Game, v: View): Scene {
   for (const t of g.s.trains) {
     if (!t.trail.length) continue;
     const p = bodyPoint(g.net, t, 0), moving = Math.abs(t.v) > 4;
+    if (t.broke && g.s.t < t.broke.doneAt) { add({ id: `t${t.id}`, kind: g.s.t >= t.broke.crewAt ? 'repair' : 'train', rate: 0, moving: false }, p.x, p.y); continue; } // broken down
     if (moving) add({ id: `t${t.id}`, kind: 'train', rate: Math.min(1, Math.abs(t.v) / 70), moving }, p.x, p.y);
     else if (t.job?.phase === 'loading' || t.job?.phase === 'unloading') add({ id: `t${t.id}`, kind: 'load', moving }, p.x, p.y);
     else add({ id: `t${t.id}`, kind: 'train', rate: 0, moving }, p.x, p.y); // standing still: only the whistle when it sets off
@@ -53,7 +54,8 @@ export function hearScene(g: Game, v: View): Scene {
   for (const b of g.s.buildings ?? []) {
     const sq = buildingSquares(n, b), mid = sq[1]!, wx = (mid % n + 1) * TILE, wy = (((mid / n) | 0) + 0.5) * TILE;
     const working = b.kind === 'dock' || (b.stock < capOf(b) && (!isFactory(b.kind) || inputsOf(b.kind).every(k => (b.inbuf?.[k] ?? 0) >= 1)));
-    if (working) add({ id: `b${b.id}`, kind: b.kind }, wx, wy);
+    if (b.fire && g.s.t < b.fire.doneAt) add({ id: `b${b.id}`, kind: 'fire', moving: g.s.t >= b.fire.crewAt }, wx, wy); // on fire: crackling, and the crew's water once they arrive
+    else if (working) add({ id: `b${b.id}`, kind: b.kind }, wx, wy);
   }
   for (const s of g.s.ships ?? []) {
     const p = shipPlace(g, s); add({ id: `s${s.id}`, kind: 'ship', moving: s.to !== undefined }, (p.x + 0.5) * TILE, (p.y + 0.5) * TILE);
@@ -62,6 +64,12 @@ export function hearScene(g: Game, v: View): Scene {
     const wx = (b.square % n + 0.5) * TILE, wy = (((b.square / n) | 0) + 0.5) * TILE;
     if (g.s.t >= b.crewAt && g.s.t < b.doneAt) add({ id: `r${b.square}`, kind: 'repair' }, wx, wy);
     if (b.kind === 'washout' && g.s.t < b.doneAt) out.storm = Math.max(out.storm, Math.min(1, place(g, v, wx, wy).vol * 2.5) * near);
+  }
+  const st = g.s.storm; // a storm cloud over the screen: rain, wind and thunder
+  if (st && g.s.t < st.until) {
+    const life = Math.max(0, Math.min(1, (st.until - g.s.t) / 20, (g.s.t - st.t0) / 20)), c = g.s.camera;
+    const d = Math.hypot(st.x * TILE - c.x, st.y * TILE - c.y) / TILE;
+    out.storm = Math.max(out.storm, Math.max(0, Math.min(1, (st.r * 1.6 - d) / (st.r * 0.8))) * life * near);
   }
   // the nearest town on the railway rings its bell now and then
   let town: { id: number; x: number; y: number } | null = null, best = Infinity;

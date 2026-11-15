@@ -187,6 +187,7 @@ function buildingCard(g: Game, b: Building, page?: string): string {
   const plan = shipPlan(g);
   const sm = fac ? 1 : specMul(g, islandOfB(g, b), b.kind);
   let h = `<div class="head"><b class="big">${d.icon}</b><div><h2>${d.name}</h2><span class="chip2">Level ${b.lvl}</span> <span class="chip2">${G.icon} ${Math.round(outputOf(g, b) * 60)}/min</span>${sm > 1 ? ' <span class="chip2">★ island specialty +50%</span>' : ''}</div></div>`;
+  if (b.fire && g.s.t < b.fire.doneAt) { const c = Math.ceil(b.fire.crewAt - g.s.t); h += `<div class="warn">🔥 On fire: it makes nothing for now. ${c > 0 ? `The fire crew arrives in ${c} s` : `The fire crew is putting it out, ${Math.ceil(b.fire.doneAt - g.s.t)} s left`}. Nothing is lost.</div>`; }
   if (!linked) h += `<div class="warn">🔌 Not on the railway yet: lay track from your line to one end of its yard</div>`;
   if (fac) {
     const st = factoryState(g, b);
@@ -260,6 +261,7 @@ function shedCard(g: Game): string {
 
 function trainCard(g: Game, t: Train): string {
   let h = `<div class="head"><b class="big">🚂</b><div><h2>Train ${t.id}</h2><span class="chip2">Carries ${trainCap(g)}</span></div></div>`;
+  if (t.broke && g.s.t < t.broke.doneAt) { const c = Math.ceil(t.broke.crewAt - g.s.t); h += `<div class="warn">🔧 Broken down: ${c > 0 ? `the repair crew arrives in ${c} s` : `the crew is fixing it, ${Math.ceil(t.broke.doneAt - g.s.t)} s left`}. Trains behind it wait.</div>`; }
   h += `<div class="note big2">${trainStatus(g, t)}</div>`;
   if (t.lastPay) { h += `<div class="row"><b class="ico">💰</b><div class="grow">Last delivery: ${t.lastPay.n} ${GOODS[t.lastPay.good as Good]?.icon ?? ''} to ${esc(destName(g, t.lastPay.to))} paid <b>${fmtMoney(t.lastPay.pay)}</b></div></div>`; }
   h += `<small class="why">Trains run themselves: each one takes the best waiting load to the place that needs it.</small>`;
