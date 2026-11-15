@@ -153,7 +153,7 @@ function blockedAt(g: Game, hx: number, hy: number, w: number, hall?: Hall): boo
     const x = Math.floor((hx + ox!) / TILE), y = Math.floor((hy + oy!) / TILE);
     if (g.track.has(y * n + x)) return true;
     if (g.s.buildings?.some(b => footprint(n, b).includes(y * n + x))) return true; // nor on an industry
-    const tr = g.world.terr[y * n + x]; if (tr === undefined || tr === 0 || tr === 4) return true; // never in the water or on a mountain
+    const tr = g.world.terr[y * n + x]; if (tr === undefined || tr === 0 || tr === 2 || tr === 4) return true; // never in the water, in a forest (it sat on the treetops) or on a mountain
     if (g.s.parks?.some(q => q.x === x && q.y === y)) return true; // a park or town project stands here
   }
   if (hall) {
