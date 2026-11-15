@@ -209,16 +209,36 @@ export class Renderer {
     }
   }
 
+  private islandAt = -1; private islandInfo = new Map<number, { towns: number; linked: number; trains: number; ships: number }>();
+  /** Per island: towns found and on the railway, trains and ships there (counted once a second). */
+  private islandStats() {
+    const g = this.g, n = g.world.n, now = performance.now();
+    if (now - this.islandAt < 1000) return this.islandInfo;
+    this.islandAt = now; const m = this.islandInfo; m.clear();
+    const get = (k: number) => { let o = m.get(k); if (!o) m.set(k, o = { towns: 0, linked: 0, trains: 0, ships: 0 }); return o; };
+    for (const s of g.s.sites) if (s.kind === 'town' && isRevealed(g, s.y * n + s.x)) { const o = get(g.world.islandOf[s.y * n + s.x]!); o.towns++; if (townLinked(g, s)) o.linked++; }
+    for (const t of g.s.trains) { const sq = t.trail.length ? g.net.pieces[t.trail.at(-1)!.piece]?.squares[0] : undefined; if (sq !== undefined) get(g.world.islandOf[sq]!).trains++; }
+    for (const s of g.s.ships ?? []) { const d = g.s.buildings?.find(b => b.id === s.at); if (d) get(g.world.islandOf[d.y * n + d.x]!).ships++; }
+    return m;
+  }
+
   private drawIslandNames(ctx: CanvasRenderingContext2D, z: number) {
     if (z >= 0.8) return;
-    const g = this.g, n = g.world.n;
+    const g = this.g, n = g.world.n, info = this.islandStats();
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     g.world.islands.forEach((o, k) => {
       if (!o.name || !isRevealed(g, Math.round(o.cy) * n + Math.round(o.cx))) return;
       const X = (o.cx + 0.5) * TILE, Y = (o.cy + 0.5) * TILE - TILE * (k === g.world.home ? 6 : 1.5), f = Math.round(15 / z);
       ctx.font = `italic 700 ${f}px Georgia,serif`; ctx.lineWidth = 4 / z; ctx.strokeStyle = 'rgba(20,18,14,.75)';
       ctx.strokeText(o.name, X, Y); ctx.fillStyle = k === g.world.home ? 'rgba(255,226,160,.95)' : 'rgba(200,215,235,.85)'; ctx.fillText(o.name, X, Y);
-      const sp = islandSpec(g, k); if (sp) { const t = `★ ${SPEC_TEXT[sp]}`; ctx.font = `600 ${Math.round(f * 0.6)}px system-ui`; ctx.strokeText(t, X, Y + f * 0.9); ctx.fillStyle = 'rgba(255,214,120,.9)'; ctx.fillText(t, X, Y + f * 0.9); }
+      const sp = islandSpec(g, k); let yy = Y + f * 0.9;
+      if (sp) { const t = `★ ${SPEC_TEXT[sp]}`; ctx.font = `600 ${Math.round(f * 0.6)}px system-ui`; ctx.strokeText(t, X, yy); ctx.fillStyle = 'rgba(255,214,120,.9)'; ctx.fillText(t, X, yy); yy += f * 0.85; }
+      const st = info.get(k); if (!st) return;
+      const t = st.linked ? `🏘 ${st.linked}/${st.towns} towns · 🚂 ${st.trains}${st.ships ? ` · 🚢 ${st.ships}` : ''}` : st.towns ? `⛵ not reached yet · ${st.towns} town${st.towns === 1 ? '' : 's'} found` : '';
+      if (!t) return;
+      ctx.font = `600 ${Math.round(f * 0.6)}px system-ui`; const w = ctx.measureText(t).width + f * 0.8, h = f * 0.95;
+      ctx.fillStyle = 'rgba(20,16,12,.8)'; ctx.beginPath(); ctx.roundRect(X - w / 2, yy - h / 2, w, h, h / 2); ctx.fill();
+      ctx.fillStyle = st.linked ? '#e8f4ff' : '#c8d2dc'; ctx.fillText(t, X, yy + f * 0.03);
     });
   }
 }

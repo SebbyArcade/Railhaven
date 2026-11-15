@@ -1,4 +1,5 @@
 import type { Game } from '../state.ts';
+import { inStorm, STORM_SLOW } from '../world/events.ts';
 import { type Building, buildingSquares, type Good } from '../buildings/industries.ts';
 import { dockRange, isDock, islandOfB, linkedDocks, seaDist } from './docks.ts';
 import { lightMul, salvageAt } from '../world/explore.ts';
@@ -124,7 +125,7 @@ export function tickShips(g: Game, dt: number) {
     if (s.to !== undefined) { // at sea
       const to = dockOf(g, s.to);
       if (!to || !s.path) { s.to = undefined; s.path = undefined; continue; }
-      { const p = shipPlace(g, s); s.pos += SHIP_SPEED * lightMul(g, p.x, p.y) * dt; salvageAt(g, Math.round(p.x), Math.round(p.y)); }
+      { const p = shipPlace(g, s); s.pos += SHIP_SPEED * lightMul(g, p.x, p.y) * (inStorm(g, p.x, p.y) ? STORM_SLOW : 1) * dt; salvageAt(g, Math.round(p.x), Math.round(p.y)); }
       if (s.pos >= s.path.length - 1) { s.at = s.to; s.to = undefined; s.path = undefined; s.pos = 0; s.wait = SHIP_LOAD; }
       continue;
     }
