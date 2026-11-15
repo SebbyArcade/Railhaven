@@ -19,7 +19,7 @@ export function buildingSide(seed: number, h: Hall): 1 | -1 {
 export function drawHall(ctx: CanvasRenderingContext2D, seed: number, h: Hall, zoom: number) {
   const T = TILE, n = h.town, lv = stationLevel(n.pop ?? 0), side = buildingSide(seed, h);
   ctx.save();
-  ctx.translate((n.x + 0.5) * T, (n.y + 0.5) * T);
+  ctx.translate((h.cx + 0.5) * T, (h.cy + 0.5) * T);
   if (!h.horizontal) ctx.rotate(Math.PI / 2);
   const L = 3 * T - 6; // platform length
   // platforms either side of the tracks (rails sit at ±8 ± 3.4)

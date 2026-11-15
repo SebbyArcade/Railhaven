@@ -30,7 +30,7 @@ export function squareCost(g: Game, i: number): number | string {
   if (x < 1 || y < 1 || x >= n - 1 || y >= n - 1) return 'The edge of the map';
   if (!isRevealed(g, i)) return 'Unexplored fog: scout here first';
   const site = g.s.sites.find(s => s.x === x && s.y === y);
-  if (site && site.kind !== 'town') return site.kind === 'plot' ? 'A settlement site: found a town here first' : 'A deposit: build a mine on it instead';
+  if (site && site.kind !== 'town') return site.kind === 'plot' ? 'A settlement site: tap its 🚩 flag to found a town, then lay track onto it' : 'A deposit: build a mine on it instead';
   const t = g.world.terr[i]!;
   if (t === T.Mountain) return 'Mountains block track (tunnels come later)';
   if (t === T.Water) {

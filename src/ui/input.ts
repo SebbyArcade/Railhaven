@@ -29,10 +29,19 @@ export function attachInput(el: HTMLElement, cam: () => Camera, view: () => View
       pinch = { d: Math.hypot(a!.x - b!.x, a!.y - b!.y), z: cam().z };
     }
   });
+  // while painting near the screen edge, the map slides along so a long line can be drawn in one go
+  let last: { x: number; y: number } | null = null, edgeRaf = 0;
+  const edgePan = () => {
+    edgeRaf = 0; if (!painting || !last || pts.size !== 1) return;
+    const r = el.getBoundingClientRect(), m = 48, c = cam();
+    const ex = last.x < m ? -1 : last.x > r.width - m ? 1 : 0, ey = last.y < m + 40 ? -1 : last.y > r.height - m - 110 ? 1 : 0;
+    if (ex || ey) { c.x += ex * 5 / c.z; c.y += ey * 5 / c.z; clampCamera(c, mapSize()); h.dragMove?.(last.x, last.y); }
+    edgeRaf = requestAnimationFrame(edgePan);
+  };
   el.addEventListener('pointermove', e => {
     const prev = pts.get(e.pointerId); if (!prev) return;
     const p = rel(e), c = cam();
-    if (pts.size === 1 && painting) { moved += Math.hypot(p.x - prev.x, p.y - prev.y); h.dragMove?.(p.x, p.y); }
+    if (pts.size === 1 && painting) { moved += Math.hypot(p.x - prev.x, p.y - prev.y); last = p; h.dragMove?.(p.x, p.y); if (!edgeRaf) edgeRaf = requestAnimationFrame(edgePan); }
     else if (pts.size === 1) {
       c.x -= (p.x - prev.x) / c.z; c.y -= (p.y - prev.y) / c.z; moved += Math.hypot(p.x - prev.x, p.y - prev.y);
     } else if (pts.size === 2 && pinch) {

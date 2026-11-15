@@ -2,6 +2,7 @@ import { hash } from '../core/rng.ts';
 import { capOf, type Building, INDUSTRIES, isLinked } from '../buildings/industries.ts';
 import type { Game } from '../state.ts';
 import { TILE } from '../world/terrain.ts';
+import { bush, cottage, logEnd, logSide, person, puff } from './art.ts';
 
 const CRATE: Record<string, string> = { wood: '#8a5a2e', farm: '#d8b44a', stone: '#9a958c', coal: '#2e2b28', iron: '#8a5a4a', oil: '#3a3a48', wool: '#efeadf', sawmill: '#e0b878', brickworks: '#b5523b', gristmill: '#f4efe2', mill: '#9aa0a8', refinery: '#4a4a58', textile: '#5a7ab0' };
 
@@ -140,13 +141,7 @@ const FACTORY_ART = {
 
 const ART: Record<Building['kind'], Art> = {
   ...FACTORY_ART,
-  wood: (ctx, tm, H, lvl) => { // log cabin, stacked logs, a sawhorse
-    house(ctx, -34, 0, 18, 13, '#8a5e36', '#5a3a22'); smoke(ctx, -38, -5, tm);
-    for (let r = 0; r < 3 + lvl; r++) for (let k = 0; k < 4 - (r % 2); k++) { ctx.fillStyle = '#7a4e28'; ctx.beginPath(); ctx.arc(-8 + k * 4.4 + (r % 2) * 2.2, 8 - r * 3.2, 1.9, 0, 7); ctx.fill(); ctx.fillStyle = '#c99a5b'; ctx.beginPath(); ctx.arc(-8 + k * 4.4 + (r % 2) * 2.2, 8 - r * 3.2, 0.9, 0, 7); ctx.fill(); }
-    ctx.strokeStyle = '#6b4a2e'; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(18, -4); ctx.lineTo(30, 4); ctx.moveTo(18, 4); ctx.lineTo(30, -4); ctx.stroke();
-    ctx.fillStyle = '#9a6a3a'; ctx.fillRect(16, -1, 16, 2);
-    void H;
-  },
+  wood: (ctx, tm, H, lvl) => lumberCamp(ctx, tm, H, lvl),
   farm: (ctx, tm, H) => { // barn, silo, golden field rows
     house(ctx, -36, -1, 20, 14, '#a8402e', '#6e2a20'); ctx.fillStyle = '#efe6d2'; ctx.fillRect(-38, 3, 4, 3.5);
     ctx.fillStyle = '#c9c2b0'; ctx.beginPath(); ctx.arc(-18, -2, 5, 0, 7); ctx.fill(); ctx.fillStyle = '#8a8478'; ctx.beginPath(); ctx.arc(-18, -2, 2.4, 0, 7); ctx.fill();
@@ -159,17 +154,9 @@ const ART: Record<Building['kind'], Art> = {
     ctx.strokeStyle = '#3f6a2e'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(-7, 13); ctx.lineTo(57, 13); ctx.stroke();
     for (let k = 0; k < 9; k++) { ctx.fillStyle = k % 2 ? '#4f7f38' : '#3b6329'; ctx.beginPath(); ctx.arc(-5 + k * 7.5, 13, 1.8, 0, 7); ctx.fill(); }
   },
-  stone: (ctx, tm, H, lvl) => { // a stepped quarry pit and a little crane
-    ctx.fillStyle = '#6f6a62'; ctx.beginPath(); ctx.ellipse(10, 2, 30, 11, 0, 0, 7); ctx.fill();
-    ctx.fillStyle = '#8a857b'; ctx.beginPath(); ctx.ellipse(10, 2, 22, 7.5, 0, 0, 7); ctx.fill();
-    ctx.fillStyle = '#a19b90'; ctx.beginPath(); ctx.ellipse(10, 2, 13, 4, 0, 0, 7); ctx.fill();
-    for (let k = 0; k < 2 + lvl; k++) { ctx.fillStyle = '#b8b2a6'; ctx.fillRect(-46 + k * 6, 6 - (k % 2) * 3, 4.5, 3.5); }
-    const a = Math.sin(tm * 0.8) * 0.5; ctx.strokeStyle = '#d0a020'; ctx.lineWidth = 1.4; ctx.beginPath(); ctx.moveTo(-30, -6); ctx.lineTo(-30 + Math.cos(a) * 18, -6 + Math.sin(a) * 6); ctx.stroke();
-    house(ctx, -40, -6, 9, 7, '#c8bfae', '#5b6066');
-    void H;
-  },
-  coal: (ctx, tm, _H, lvl) => headframe(ctx, tm, '#2e2b28', lvl),
-  iron: (ctx, tm, _H, lvl) => headframe(ctx, tm, '#7a4a3a', lvl),
+  stone: (ctx, tm, H, lvl) => quarry(ctx, tm, H, lvl),
+  coal: (ctx, tm, H, lvl) => pithead(ctx, tm, H, lvl, ['#2a2725', '#3e3a36', '#14120f']),
+  iron: (ctx, tm, H, lvl) => pithead(ctx, tm, H, lvl, ['#7a4a3a', '#9a5e48', '#5a3328']),
   oil: (ctx, tm) => { // pumpjack nodding, a storage tank
     ctx.fillStyle = '#5b6066'; ctx.fillRect(-14, 6, 26, 3);
     const a = Math.sin(tm * 2) * 0.35; ctx.save(); ctx.translate(-2, 0); ctx.rotate(a);
@@ -188,11 +175,159 @@ const ART: Record<Building['kind'], Art> = {
   },
 };
 
-function headframe(ctx: CanvasRenderingContext2D, tm: number, heap: string, lvl: number) {
-  // winding house, a pithead frame with a turning wheel, and a heap of what it digs
-  house(ctx, -34, 2, 16, 12, '#8c3f2c', '#4c3b33'); smoke(ctx, -30, -6, tm, true);
-  ctx.strokeStyle = '#3a3532'; ctx.lineWidth = 1.4; ctx.beginPath(); ctx.moveTo(-12, 8); ctx.lineTo(-6, -8); ctx.lineTo(0, 8); ctx.stroke();
-  ctx.save(); ctx.translate(-6, -8); ctx.rotate(tm * 2); ctx.strokeStyle = '#c9ccd1'; ctx.lineWidth = 0.8; ctx.beginPath(); ctx.arc(0, 0, 3.2, 0, 7); ctx.moveTo(-3.2, 0); ctx.lineTo(3.2, 0); ctx.moveTo(0, -3.2); ctx.lineTo(0, 3.2); ctx.stroke(); ctx.restore();
-  ctx.fillStyle = heap; ctx.beginPath(); ctx.ellipse(26, 3, 16 + lvl * 3, 8, 0, 0, 7); ctx.fill();
-  ctx.fillStyle = 'rgba(255,255,255,.1)'; ctx.beginPath(); ctx.ellipse(23, 0, 8, 3, 0, 0, 7); ctx.fill();
+/** Wood chips, sawdust and a trodden earth yard under a building's props. */
+function yardGround(ctx: CanvasRenderingContext2D, u0: number, u1: number, col: string, H: (k: number) => number, specks: string) {
+  ctx.fillStyle = col; ctx.beginPath(); ctx.roundRect(u0, -13, u1 - u0, 26, 5); ctx.fill();
+  ctx.fillStyle = specks;
+  for (let k = 0; k < 40; k++) ctx.fillRect(u0 + 2 + H(300 + k) * (u1 - u0 - 4), -11 + H(400 + k) * 22, 0.8, 0.6);
+}
+
+/**
+ * Lumber camp: a log cabin with a stone chimney, a woodcutter at the chopping block, end-on log stacks with growth
+ * rings, long trunks waiting on skids, a sawbuck and a handcart, stumps all around.
+ */
+function lumberCamp(ctx: CanvasRenderingContext2D, tm: number, H: (k: number) => number, lvl: number) {
+  yardGround(ctx, -58, 58, '#8a7350', H, 'rgba(235,205,150,.7)');
+  // stumps of felled trees around the edge
+  for (let k = 0; k < 6; k++) { const u = -52 + H(10 + k) * 104, v = k % 2 ? -11 : 11; logEnd(ctx, u, v, 1.6); }
+  cottage(ctx, -44, 1, 22, 18, { wall: '#8a5e36', roof: '#5a4030', walls: 'logs', chimney: -0.8, tm, smoke: true });
+  // a lean-to woodshed on the cabin's side, split firewood under it
+  ctx.fillStyle = '#4a3424'; ctx.fillRect(-32, -6, 6, 13);
+  for (let r = 0; r < 4; r++) for (let k = 0; k < 2; k++) { ctx.fillStyle = r % 2 ? '#c99a5b' : '#b8864a'; ctx.fillRect(-31.5 + k * 2.6, -5 + r * 3, 2.2, 2.4); }
+  // chopping block and a woodcutter swinging his axe
+  logEnd(ctx, -20, 7, 2.4);
+  const sw = Math.sin(tm * 5) > 0 ? 1 : 0;
+  person(ctx, -16, 8, '#a8402e', '#2e2a26');
+  ctx.strokeStyle = '#6b4a2e'; ctx.lineWidth = 0.6; ctx.beginPath(); ctx.moveTo(-16.5, 7); ctx.lineTo(sw ? -19.5 : -17.5, sw ? 6.2 : 3.8); ctx.stroke();
+  ctx.fillStyle = '#c9ccd1'; ctx.fillRect(sw ? -20.6 : -18.6, sw ? 5.6 : 3, 1.4, 1.1);
+  if (sw) { ctx.fillStyle = '#e8c890'; ctx.fillRect(-22.5, 5.5, 0.8, 0.6); ctx.fillRect(-21.8, 9, 0.7, 0.7); }
+  // end-on log stacks between posts, more with each level
+  const stacks = 1 + Math.min(2, lvl - 1);
+  for (let s = 0; s < stacks; s++) {
+    const u0 = -10 + s * 13;
+    ctx.fillStyle = '#4a3424'; ctx.fillRect(u0 - 1.5, -12, 1.2, 25); ctx.fillRect(u0 + 10.3, -12, 1.2, 25);
+    for (let r = 0; r < 4; r++) for (let k = 0; k < 3; k++) logEnd(ctx, u0 + 1.6 + k * 3.4 + (r % 2) * 1.2, 10 - r * 3.1 - (k % 2) * 0.2, 1.6);
+    for (let r = 0; r < 3; r++) for (let k = 0; k < 3; k++) logEnd(ctx, u0 + 1.6 + k * 3.4 + (r % 2) * 1.2, -2 - r * 3.1, 1.6);
+  }
+  // long trunks on skids, waiting to be loaded
+  const tu = -10 + stacks * 13 + 2;
+  ctx.fillStyle = '#4a3424'; ctx.fillRect(tu + 2, -12, 1.4, 24); ctx.fillRect(tu + 22, -12, 1.4, 24);
+  for (let k = 0; k < 4; k++) logSide(ctx, tu, tu + 28 - (k % 2) * 3, -8 + k * 4.4, 1.9);
+  // sawbuck with a log on it, and a handcart
+  ctx.strokeStyle = '#5a3a22'; ctx.lineWidth = 0.9;
+  ctx.beginPath(); ctx.moveTo(50, -10); ctx.lineTo(54, -4); ctx.moveTo(54, -10); ctx.lineTo(50, -4); ctx.stroke();
+  logSide(ctx, 44, 58, -7, 1.4);
+  ctx.fillStyle = '#7a5530'; ctx.fillRect(46, 4, 9, 6); ctx.fillStyle = '#2e2a26'; ctx.fillRect(45.2, 9.4, 2.4, 1.2); ctx.fillRect(53.4, 9.4, 2.4, 1.2);
+  ctx.strokeStyle = '#5a3a22'; ctx.lineWidth = 0.6; ctx.beginPath(); ctx.moveTo(46, 7); ctx.lineTo(42, 7); ctx.stroke();
+  for (let k = 0; k < 3; k++) logEnd(ctx, 48.2 + k * 2.4, 6.6, 1);
+  person(ctx, 40, -2, '#3f5a7a');
+}
+
+/**
+ * Quarry: a pit cut into stepped benches of pale rock, a wooden derrick crane lifting a block, cut blocks stacked by
+ * the platform, a workers' hut, rubble and a few quarrymen.
+ */
+function quarry(ctx: CanvasRenderingContext2D, tm: number, H: (k: number) => number, lvl: number) {
+  yardGround(ctx, -58, 58, '#7d776c', H, 'rgba(50,46,40,.5)');
+  // the pit: benches stepping down, each lit on its top edge and shaded on the cut face
+  const steps = 4 + Math.min(1, lvl - 1), cols = ['#c4bdae', '#a39a8a', '#857d70', '#696257', '#4f4943'];
+  for (let k = 0; k < steps; k++) {
+    const w = 64 - k * 11, d = 25 - k * 4.4, u = 18 + k * 1.2, v = 0.5 + k * 0.7;
+    ctx.fillStyle = cols[k]!; ctx.beginPath(); ctx.roundRect(u - w / 2, v - d / 2, w, d, 3); ctx.fill();
+    ctx.fillStyle = 'rgba(40,34,28,.55)'; ctx.fillRect(u - w / 2 + 2, v - d / 2, w - 4, 2.4); // the cut face below the bench
+    ctx.fillStyle = 'rgba(40,34,28,.35)'; ctx.fillRect(u - w / 2, v - d / 2 + 2, 1.6, d - 4);
+    ctx.fillStyle = 'rgba(255,255,255,.3)'; ctx.fillRect(u - w / 2 + 2, v + d / 2 - 0.8, w - 4, 0.6);
+    ctx.strokeStyle = 'rgba(0,0,0,.12)'; ctx.lineWidth = 0.3; // drill lines in the rock
+    for (let x = u - w / 2 + 4; x < u + w / 2 - 3; x += 3.5) { ctx.beginPath(); ctx.moveTo(x, v - d / 2 + 1.4); ctx.lineTo(x + 0.6, v - d / 2 + 3.4); ctx.stroke(); }
+  }
+  // loose blocks on the benches, rubble
+  for (let k = 0; k < 8; k++) { const u = -6 + H(50 + k) * 48, v = -8 + H(60 + k) * 16; ctx.fillStyle = '#c8c2b4'; ctx.fillRect(u, v, 2.4, 1.8); ctx.fillStyle = 'rgba(0,0,0,.3)'; ctx.fillRect(u, v + 1.8, 2.4, 0.5); }
+  for (let k = 0; k < 20; k++) { ctx.fillStyle = 'rgba(70,66,60,.6)'; ctx.fillRect(-4 + H(80 + k) * 50, -10 + H(90 + k) * 20, 0.8, 0.8); }
+  // quarrymen in the pit
+  person(ctx, 14, 2, '#c8a040', '#d0a020'); person(ctx, 26, -3, '#5a6a7a', '#d0a020');
+  // derrick: a mast with guy ropes, a boom swinging over the pit, a block hanging from it
+  const a = -0.25 + Math.sin(tm * 0.6) * 0.45, mu = -16, mv = 0, bl = 24;
+  ctx.strokeStyle = 'rgba(60,50,40,.45)'; ctx.lineWidth = 0.3;
+  for (const [gu, gv] of [[-26, -12], [-26, 12], [-6, 12]]) { ctx.beginPath(); ctx.moveTo(mu, mv); ctx.lineTo(gu!, gv!); ctx.stroke(); }
+  const bu = mu + Math.cos(a) * bl, bv = mv + Math.sin(a) * bl * 0.5;
+  ctx.strokeStyle = 'rgba(0,0,0,.3)'; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.moveTo(mu + 1, mv + 1.5); ctx.lineTo(bu + 1, bv + 1.5); ctx.stroke();
+  ctx.strokeStyle = '#8a6a40'; ctx.lineWidth = 1.4; ctx.beginPath(); ctx.moveTo(mu, mv); ctx.lineTo(bu, bv); ctx.stroke();
+  ctx.fillStyle = '#5a4630'; ctx.beginPath(); ctx.arc(mu, mv, 1.8, 0, 7); ctx.fill();
+  ctx.strokeStyle = '#3a3532'; ctx.lineWidth = 0.3; ctx.beginPath(); ctx.moveTo(bu, bv); ctx.lineTo(bu, bv + 3); ctx.stroke();
+  ctx.fillStyle = '#d4cec0'; ctx.fillRect(bu - 1.8, bv + 3, 3.6, 2.6); ctx.fillStyle = 'rgba(0,0,0,.25)'; ctx.fillRect(bu - 1.8, bv + 5.2, 3.6, 0.5);
+  // cut blocks stacked for loading, more with each level
+  const piles = 2 + Math.min(2, lvl - 1);
+  for (let p = 0; p < piles; p++) for (let r = 0; r < 2; r++) for (let k = 0; k < 2; k++) {
+    const u = -56 + p * 7 + k * 3, v = -11 + r * 3.4 + (p % 2) * 13;
+    ctx.fillStyle = '#9a958a'; ctx.fillRect(u, v + 2.4, 2.8, 0.8);
+    ctx.fillStyle = '#d6d0c2'; ctx.fillRect(u, v, 2.8, 2.4);
+    ctx.fillStyle = 'rgba(255,255,255,.35)'; ctx.fillRect(u, v, 2.8, 0.5);
+  }
+  cottage(ctx, -38, 6, 12, 10, { wall: '#c8bfae', roof: '#5b6066', chimney: 0.6, tm, smoke: true });
+  person(ctx, -30, -6, '#7a4a3a');
+}
+
+/**
+ * Coal or iron mine: a brick engine house with a tall chimney, a steel headframe over the shaft with two turning
+ * winding wheels and cables to the engine house, a narrow track where a tub runs to the heap, and miners in helmets.
+ */
+function pithead(ctx: CanvasRenderingContext2D, tm: number, H: (k: number) => number, lvl: number, heap: [string, string, string]) {
+  yardGround(ctx, -58, 58, '#6e665a', H, 'rgba(30,26,22,.55)');
+  // engine house with its round chimney
+  cottage(ctx, -44, 3, 20, 15, { wall: '#9a4a34', roof: '#3e3a38', walls: 'brick', storeys: 2, door: true });
+  const cu = -52, cv = -8;
+  ctx.fillStyle = 'rgba(0,0,0,.3)'; ctx.beginPath(); ctx.arc(cu + 2.4, cv + 2.6, 3.4, 0, 7); ctx.fill();
+  ctx.fillStyle = '#8a3c2a'; ctx.beginPath(); ctx.arc(cu, cv, 3.4, 0, 7); ctx.fill();
+  ctx.fillStyle = '#6a2c1e'; ctx.beginPath(); ctx.arc(cu, cv, 2.6, 0, 7); ctx.fill();
+  ctx.fillStyle = '#1e1a18'; ctx.beginPath(); ctx.arc(cu, cv, 1.6, 0, 7); ctx.fill();
+  puff(ctx, cu, cv - 2, tm, true, 1.3);
+  // the shaft: a timber collar round a dark hole, the cage just visible
+  const su = -18, sv = 4;
+  ctx.fillStyle = '#5a4630'; ctx.fillRect(su - 5, sv - 4, 10, 8);
+  ctx.fillStyle = '#141210'; ctx.fillRect(su - 3.6, sv - 2.6, 7.2, 5.2);
+  const cage = (Math.sin(tm * 0.9) + 1) / 2;
+  ctx.fillStyle = `rgba(160,150,130,${0.25 + cage * 0.6})`; ctx.fillRect(su - 2.6, sv - 1.8, 5.2, 3.6);
+  // headframe: two lattice legs leaning back to the engine house, the wheels on top
+  const top = sv - 13;
+  const lattice = (u0: number, v0: number, u1: number, v1: number) => {
+    ctx.strokeStyle = 'rgba(0,0,0,.3)'; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.moveTo(u0 + 2, v0 + 2); ctx.lineTo(u1 + 2, v1 + 2); ctx.stroke();
+    ctx.strokeStyle = '#3a4a52'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(u0, v0); ctx.lineTo(u1, v1); ctx.stroke();
+    ctx.strokeStyle = '#6a7a84'; ctx.lineWidth = 0.3;
+    const steps = 6;
+    for (let k = 0; k < steps; k++) { const t0 = k / steps, t1 = (k + 1) / steps; ctx.beginPath(); ctx.moveTo(u0 + (u1 - u0) * t0 - 0.8, v0 + (v1 - v0) * t0); ctx.lineTo(u0 + (u1 - u0) * t1 + 0.8, v0 + (v1 - v0) * t1); ctx.stroke(); }
+  };
+  lattice(su - 4, sv + 3, su - 2, top); lattice(su + 4, sv + 3, su + 2, top);
+  lattice(su - 14, sv + 2, su - 1, top + 1); // back stay toward the engine house
+  ctx.fillStyle = '#3a4a52'; ctx.fillRect(su - 4, top - 1, 8, 2);
+  for (const k of [-1, 1]) {
+    ctx.save(); ctx.translate(su + k * 2.4, top); ctx.rotate(tm * 2.4 * k);
+    ctx.strokeStyle = '#c9ccd1'; ctx.lineWidth = 0.6; ctx.beginPath(); ctx.arc(0, 0, 2.6, 0, 7); ctx.stroke();
+    ctx.lineWidth = 0.3; for (let s = 0; s < 3; s++) { const r = s * 1.047; ctx.beginPath(); ctx.moveTo(Math.cos(r) * -2.6, Math.sin(r) * -2.6); ctx.lineTo(Math.cos(r) * 2.6, Math.sin(r) * 2.6); ctx.stroke(); }
+    ctx.restore();
+  }
+  ctx.strokeStyle = 'rgba(30,30,30,.7)'; ctx.lineWidth = 0.25; // winding cables to the engine house
+  ctx.beginPath(); ctx.moveTo(su - 2.4, top); ctx.lineTo(-36, -2); ctx.moveTo(su + 2.4, top); ctx.lineTo(-36, 0); ctx.stroke();
+  // the heap of what it digs, lumpy, growing with level
+  const hu = 34, hw = 16 + lvl * 3, hd = 10;
+  ctx.fillStyle = 'rgba(0,0,0,.3)'; ctx.beginPath(); ctx.ellipse(hu + 2, 3, hw, hd, 0, 0, 7); ctx.fill();
+  ctx.fillStyle = heap[0]; ctx.beginPath(); ctx.ellipse(hu, 1, hw, hd, 0, 0, 7); ctx.fill();
+  ctx.fillStyle = heap[1]; ctx.beginPath(); ctx.ellipse(hu - hw * 0.25, -2, hw * 0.55, hd * 0.5, 0, 0, 7); ctx.fill();
+  for (let k = 0; k < 30; k++) {
+    const a = H(500 + k) * 6.283, r = Math.sqrt(H(600 + k));
+    ctx.fillStyle = k % 3 ? heap[2] : heap[1]; ctx.fillRect(hu + Math.cos(a) * hw * r * 0.9, 1 + Math.sin(a) * hd * r * 0.9, 1.1, 0.9);
+  }
+  ctx.fillStyle = 'rgba(255,255,255,.12)'; ctx.beginPath(); ctx.ellipse(hu - hw * 0.35, -3, hw * 0.25, hd * 0.2, 0, 0, 7); ctx.fill();
+  // narrow track from the shaft up onto the heap, a tub running along it
+  ctx.strokeStyle = '#5a4630'; ctx.lineWidth = 0.6;
+  for (let u = su + 6; u < hu - 4; u += 2) { ctx.beginPath(); ctx.moveTo(u, 7.6); ctx.lineTo(u, 10.4); ctx.stroke(); }
+  ctx.strokeStyle = '#9aa0a6'; ctx.lineWidth = 0.35;
+  ctx.beginPath(); ctx.moveTo(su + 5, 8.2); ctx.lineTo(hu - 4, 8.2); ctx.moveTo(su + 5, 9.8); ctx.lineTo(hu - 4, 9.8); ctx.stroke();
+  const p = (Math.sin(tm * 0.7) + 1) / 2, tu = su + 7 + p * (hu - su - 14);
+  ctx.fillStyle = '#4a4440'; ctx.fillRect(tu - 2.4, 7.4, 4.8, 3.2);
+  ctx.fillStyle = heap[1]; ctx.fillRect(tu - 1.8, 7.8, 3.6, 2.2);
+  person(ctx, tu - 4.5, 9, '#4a5a6a', '#e0c040');
+  // lamp room and a miner at the shaft
+  cottage(ctx, -4, -8, 9, 8, { wall: '#c8bfae', roof: '#4c4844', door: true });
+  person(ctx, -12, 9, '#3a3a40', '#e0c040');
+  void bush;
 }

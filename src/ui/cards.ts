@@ -1,13 +1,13 @@
 import type { Game, Site } from '../state.ts';
 import { bufOf, type Building, capOf, GOODS, type Good, INDUSTRIES, type IndustryKind, inputsOf, isFactory, isLinked, lockedText, outputOf, shareAt } from '../buildings/industries.ts';
 import { factoryState } from '../economy/production.ts';
-import { orderDone, orderOf, reward, sizeName, steadyGoods, stepOf, townLinked, upgradePrice } from '../economy/towns.ts';
+import { FOUND_PRICE, orderDone, orderOf, reward, sizeName, steadyGoods, stepOf, townLinked, upgradePrice } from '../economy/towns.ts';
 import { type Dest, destName, type Ship, shipPlan, siteOf } from '../economy/shipping.ts';
 import { trainStatus } from '../economy/dispatch.ts';
 import type { Train } from '../trains/train.ts';
 import { fmtMoney } from './hud.ts';
 
-export type Card = { kind: 'town'; id: number } | { kind: 'bld'; id: number } | { kind: 'train'; id: number };
+export type Card = { kind: 'plot'; id: number } | { kind: 'town'; id: number } | { kind: 'bld'; id: number } | { kind: 'train'; id: number };
 
 /** the kind that makes each good */
 const makerOf = (k: Good) => (Object.keys(INDUSTRIES) as IndustryKind[]).find(m => INDUSTRIES[m].makes === k);
@@ -33,7 +33,8 @@ const bName = (b: Building) => INDUSTRIES[b.kind].name;
 
 /** Card HTML. Every number is read fresh, so the card is redrawn each second while open. */
 export function cardHtml(g: Game, c: Card): string | null {
-  if (c.kind === 'town') { const t = siteOf(g, c.id); return t ? townCard(g, t) : null; }
+  if (c.kind === 'plot') { const p = siteOf(g, c.id); return p?.kind === 'plot' ? plotCard(g, p) : null; }
+  if (c.kind === 'town') { const t = siteOf(g, c.id); return t?.kind === 'town' ? townCard(g, t) : null; }
   if (c.kind === 'bld') { const b = g.s.buildings?.find(x => x.id === c.id); return b ? buildingCard(g, b) : null; }
   const t = g.s.trains.find(x => x.id === c.id); return t ? trainCard(g, t) : null;
 }
@@ -58,6 +59,15 @@ function townCard(g: Game, t: Site): string {
   if (st.length) h += `<h3>🛒 Keeps buying</h3><div class="chips">${st.map(k => `<span class="chip2">${GOODS[k].icon} ${GOODS[k].name}</span>`).join('')}</div>`;
   const coming = g.s.trains.filter(x => x.job && sameDest(x.job.to, { kind: 'town', id: t.id })).length;
   if (coming) h += `<div class="note">🚂 ${coming} train${coming > 1 ? 's' : ''} bringing goods here</div>`;
+  return h;
+}
+
+function plotCard(g: Game, p: Site): string {
+  const can = g.s.money >= FOUND_PRICE;
+  let h = `<div class="head"><b class="big">🚩</b><div><h2>${esc(p.name ?? 'Settlement site')}</h2><span class="chip2">Settlement site</span></div></div>`;
+  h += `<div class="note">🏘 Open land waiting for settlers. Found a town here, then lay track onto it: it starts as a Hamlet with its own order.</div>`;
+  h += `<button class="act" data-act="found" data-id="${p.id}" ${can ? '' : 'disabled'}>🏘 Found ${esc(p.name ?? 'a town')} · ${fmtMoney(FOUND_PRICE)}</button>`;
+  if (!can) h += `<small>Need ${fmtMoney(FOUND_PRICE - Math.floor(g.s.money))} more: deliveries pay for it</small>`;
   return h;
 }
 
