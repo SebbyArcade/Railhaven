@@ -1,4 +1,5 @@
 import { drawParks } from './parks.ts';
+import { hallOf } from '../buildings/stations.ts';
 import type { Game } from '../state.ts';
 import { dockRange, seaDist } from '../ships/docks.ts';
 import { isRevealed } from '../world/fog.ts';
@@ -171,7 +172,7 @@ export class Renderer {
         }
       }
     }
-    if (t.mode === 'rail' && !t.plan) this.drawRailGuide(ctx, tm, box);
+    if (t.mode === 'rail' && (!t.plan || t.plan.path.length <= 1)) this.drawRailGuide(ctx, tm, box);
     if (t.card?.kind === 'ship') { // the open ship: a gold ring
       const sh = this.g.s.ships?.find(x => x.id === t.card!.id);
       if (sh) { const p = shipPlace(this.g, sh); ctx.strokeStyle = '#ffd27a'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc((p.x + 0.5) * TILE, (p.y + 0.5) * TILE, 16 + Math.sin(tm * 5), 0, 7); ctx.stroke(); }
@@ -196,12 +197,26 @@ export class Renderer {
       pill((a.x + 0.5) * TILE, (a.y - 0.6) * TILE, '🛤 Start here: drag from Ashford outward', '#ffd27a');
       return;
     }
-    for (const s of g.s.sites) { // towns found but not on the railway: lay track across their square
+    // an arrow on square i pointing toward square j (where track may come in)
+    const arrow = (i: number, j: number) => {
+      const X = (i % n + 0.5) * TILE, Y = ((i / n | 0) + 0.5) * TILE, a = Math.atan2((j / n | 0) - (i / n | 0), j % n - i % n);
+      ctx.save(); ctx.translate(X, Y); ctx.rotate(a); ctx.fillStyle = `rgba(255,214,120,${0.7 + 0.3 * p})`; ctx.strokeStyle = 'rgba(40,28,10,.8)'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(9, 0); ctx.lineTo(-5, -7); ctx.lineTo(-2, 0); ctx.lineTo(-5, 7); ctx.closePath(); ctx.fill(); ctx.stroke(); ctx.restore();
+    };
+    const open = (i: number) => { const t = g.world.terr[i]; return t !== undefined && t !== 0 && t !== 4; }; // not sea or mountain
+    for (const s of g.s.sites) { // towns found but not on the railway: show where track may come in
       if (s.kind !== 'town' || !isRevealed(g, s.y * n + s.x) || townLinked(g, s)) continue;
-      glow(s.y * n + s.x);
+      const c = s.y * n + s.x, h = hallOf(g.track, n, s);
+      if (h) { // a station already stands there: join one of its ends
+        for (const [e, inner] of [[h.approaches[0], h.squares[0]], [h.approaches[1], h.squares[2]]] as const) if (open(e) || g.track.has(e)) { glow(e); arrow(e, inner); }
+        pill((s.x + 0.5) * TILE, (s.y - 1.4) * TILE, `🛤 Join ${s.name ?? 'the town'}'s station at an arrow`, '#ffd27a');
+        continue;
+      }
+      glow(c);
+      for (const j of [c + 1, c - 1, c + n, c - n]) if (open(j) && !g.track.has(j)) arrow(j, c);
       ctx.setLineDash([5 * k, 4 * k]); ctx.strokeStyle = `rgba(255,214,120,${0.5 + 0.4 * p})`; ctx.lineWidth = 2 * k;
       ctx.beginPath(); ctx.arc((s.x + 0.5) * TILE, (s.y + 0.5) * TILE, TILE * 1.6, 0, 7); ctx.stroke(); ctx.setLineDash([]);
-      pill((s.x + 0.5) * TILE, (s.y - 1.4) * TILE, `🛤 Join ${s.name ?? 'the town'}: track across its square, or straight past beside it`, '#ffd27a');
+      pill((s.x + 0.5) * TILE, (s.y - 1.4) * TILE, `🛤 Join ${s.name ?? 'the town'}: lay track to an arrow`, '#ffd27a');
     }
     for (const b of g.s.buildings ?? []) { // loose buildings: the two squares just past their loading track
       if (b.kind === 'dock' || isLinked(g, b)) continue;
