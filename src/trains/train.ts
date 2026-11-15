@@ -1,6 +1,6 @@
 import { type Network, entryNode } from '../track/network.ts';
 import { pointAt } from '../track/geometry.ts';
-import { findRoute, isRev, type Move, sameStep } from '../track/route.ts';
+import { findRoute, isRev, type Move, type RouteRequest, sameStep } from '../track/route.ts';
 import type { NodeKey, Step } from '../track/types.ts';
 
 /** Rolling stock sizes in world px (old game: 18% smaller to fit tight curves). */
@@ -60,7 +60,16 @@ export class TrainSystem {
   holder = new Map<number, number>();
   constructor(public net: Network, public trains: Train[]) { this.rebuildHolds(); }
 
+  /** pieces trains may not enter (broken rails) */
+  blocked = new Set<number>();
+
   setNetwork(net: Network) { this.net = net; }
+
+  /** findRoute that never drives over blocked pieces */
+  private route(q: RouteRequest) {
+    const extra = q.extra;
+    return findRoute(this.net, { ...q, extra: s => this.blocked.has(s.piece) ? Infinity : extra?.(s) ?? 0 });
+  }
 
   private stepsHeld(t: Train): number[] {
     const ids = t.trail.map(s => s.piece);
@@ -75,7 +84,7 @@ export class TrainSystem {
 
   private free(t: Train, piece: number): boolean {
     const own = (p: number) => { const h = this.holder.get(p); return h === undefined || h === t.id; };
-    return own(piece) && this.net.conflicts[piece]!.every(own);
+    return !this.blocked.has(piece) && own(piece) && this.net.conflicts[piece]!.every(own);
   }
 
   /**
@@ -137,7 +146,9 @@ export class TrainSystem {
     const nx = t.plan[0];
     if (nx && !isRev(nx) && !nextStepsOf(this.net, head).some(o => sameStep(o, nx))) {
       const last = t.plan.filter(m => !isRev(m)).at(-1) as Step;
-      t.plan = findRoute(this.net, { head, tail: t.trail[0]!, trail: t.trail, trainLen: trainLength(t), goal: s => sameStep(s, last), extra: s => this.laneCost(s) }) ?? [];
+      const again = this.route({ head, tail: t.trail[0]!, trail: t.trail, trainLen: trainLength(t), goal: s => sameStep(s, last), extra: s => this.laneCost(s) });
+      t.plan = again ?? [];
+      if (!again && t.dest !== undefined) t.refuge = REFUGE_WAIT; // no way right now: wait here and try again soon
     }
     t.held = 0;
     this.rebuildHolds();
@@ -150,11 +161,13 @@ export class TrainSystem {
 
   /** Plan a trip to a square. Returns false when there is no way. */
   sendTo(t: Train, dest: number): boolean {
-    const route = findRoute(this.net, {
+    const req: RouteRequest = {
       head: t.trail.at(-1)!, tail: t.trail[0]!, trail: t.trail, trainLen: trainLength(t), canReverseNow: true,
       goal: s => this.net.pieces[s.piece]!.squares.includes(dest),
       extra: s => this.laneCost(s) + (() => { const h = this.holder.get(s.piece); return h !== undefined && h !== t.id ? 200 : 0; })(),
-    });
+    };
+    // the only way is over a broken rail: take it anyway and wait there for the repair crew
+    const route = this.route(req) ?? (this.blocked.size ? findRoute(this.net, { ...req, extra: s => req.extra!(s) + (this.blocked.has(s.piece) ? 20000 : 0) }) : null);
     if (!route) return false;
     t.plan = route; t.dest = dest; t.held = 0; t.wait = 0; t.refuge = undefined;
     this.rebuildHolds();
@@ -228,13 +241,16 @@ export class TrainSystem {
   private unstick(t: Train) {
     if (t.wait < UNSTICK_AFTER || t.dest === undefined) return;
     t.wait = 0;
+    // waiting for a broken rail to be fixed: nothing else to do
+    const nextFree = t.plan.filter(m => !isRev(m))[t.held] as Step | undefined;
+    if (nextFree && this.blocked.has(nextFree.piece)) return;
     const dest = t.dest, L = trainLength(t);
     // pieces under other trains can't be passed; pieces they have only signalled ahead are just costly
     const bodies = new Set<number>();
     for (const o of this.trains) if (o !== t) for (const s of o.trail) { bodies.add(s.piece); for (const c of this.net.conflicts[s.piece]!) bodies.add(c); }
     const base = { head: t.trail.at(-1)!, tail: t.trail[0]!, trail: t.trail, trainLen: L, canReverseNow: true };
     const cost = (s: Step) => bodies.has(s.piece) ? Infinity : this.laneCost(s) + (() => { const h = this.holder.get(s.piece); return h !== undefined && h !== t.id ? 4000 : 0; })();
-    const route = findRoute(this.net, { ...base, goal: s => this.net.pieces[s.piece]!.squares.includes(dest), extra: cost });
+    const route = this.route({ ...base, goal: s => this.net.pieces[s.piece]!.squares.includes(dest), extra: cost });
     if (route) { t.plan = route; t.held = 0; this.rebuildHolds(); return; }
     // a parked train (no trip) is in the way: ask it to move aside, then wait for the way to clear
     const parked = new Set<number>();
@@ -242,7 +258,7 @@ export class TrainSystem {
     const moving = new Set<number>();
     for (const o of this.trains) if (o !== t && (o.plan.length || o.dest !== undefined)) for (const st of o.trail) { moving.add(st.piece); for (const c of this.net.conflicts[st.piece]!) moving.add(c); }
     if (parked.size) {
-      const via = findRoute(this.net, { ...base, goal: s => this.net.pieces[s.piece]!.squares.includes(dest), extra: s => moving.has(s.piece) ? Infinity : this.laneCost(s) + (parked.has(s.piece) ? 500 : 0) });
+      const via = this.route({ ...base, goal: s => this.net.pieces[s.piece]!.squares.includes(dest), extra: s => moving.has(s.piece) ? Infinity : this.laneCost(s) + (parked.has(s.piece) ? 500 : 0) });
       if (via) {
         const way = new Set<number>();
         for (const m of via) if (!isRev(m)) { way.add(m.piece); for (const c of this.net.conflicts[m.piece]!) way.add(c); }
@@ -268,7 +284,7 @@ export class TrainSystem {
     const L = trainLength(t);
     const bodies = new Set<number>();
     for (const o of this.trains) if (o !== t) for (const s of o.trail) { bodies.add(s.piece); for (const c of this.net.conflicts[s.piece]!) bodies.add(c); }
-    const refuge = findRoute(this.net, {
+    const refuge = this.route({
       head: t.trail.at(-1)!, tail: t.trail[0]!, trail: t.trail, trainLen: L, canReverseNow: true,
       extra: s => bodies.has(s.piece) ? Infinity : this.laneCost(s) + (() => { const h = this.holder.get(s.piece); return h !== undefined && h !== t.id ? 4000 : 0; })(),
       goal: s => !inWay.has(s.piece) && (this.net.passing[s.piece]! || (s.dir === 1 && !!this.net.pieces[s.piece]!.endB)),

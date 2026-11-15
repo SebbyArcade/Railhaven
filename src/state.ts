@@ -3,6 +3,8 @@ import type { SavedTrack } from './track/state.ts';
 import type { TrackMap } from './track/types.ts';
 import type { Network } from './track/network.ts';
 import type { Train, TrainSystem } from './trains/train.ts';
+import type { Shed } from './buildings/shed.ts';
+import type { Break } from './track/breaks.ts';
 
 export type Resource = 'wood' | 'farm' | 'stone' | 'coal' | 'iron' | 'oil';
 
@@ -41,6 +43,11 @@ export interface GameState {
   /** fingerprint of the rail network the trains' positions refer to */
   netKey: string;
   nextId: number;
+  /** the engine shed beside the line near Ashford (placed once there is track) */
+  shed?: Shed;
+  /** broken rails being repaired, and when the next one may happen */
+  breaks?: Break[];
+  nextBreak?: number;
 }
 
 /** The running game: saved state plus the world rebuilt from the seed. */
