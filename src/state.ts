@@ -111,6 +111,8 @@ export interface Game {
   track: TrackMap;
   net: Network;
   sys: TrainSystem;
+  /** squares where trains reversed partway along a trip lately (for the ⤺ marks in the Problems view) */
+  revs?: Map<number, { n: number; at: number }>;
   /** track squares joined to Ashford (rebuilt with the network) */
   linked?: Set<number>;
   /** rail distances from buildings and towns (cleared when the track changes) */

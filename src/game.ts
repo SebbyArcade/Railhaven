@@ -50,6 +50,7 @@ function assemble(s: GameState): Game {
   g.linked = linkedSquares(g); placeShed(g); g.linked = linkedSquares(g); // the shed lays its siding first
   const net = makeNetwork(track, world.n, s.sites, s.buildings);
   g.net = net; g.sys = new TrainSystem(net, s.trains); g.sys.speedOf = t => trainSpeedMul(g, t);
+  g.sys.onMidReverse = (_t, sq) => { const r = (g.revs ??= new Map()).get(sq); g.revs.set(sq, { n: (r?.n ?? 0) + 1, at: g.s.t }); };
   if (s.netKey !== networkKey(net)) {
     // the rails were built by different code: find every train again by where it stood
     for (const t of s.trains) if (t.at) relocate(net, t, t.at);

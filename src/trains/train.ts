@@ -10,6 +10,10 @@ export const SIGNAL_GAP = 8;
 /** seconds stuck before looking for another way, and seconds to wait aside before trying again */
 export const UNSTICK_AFTER = 4, REFUGE_WAIT = 4;
 export const V_MAX = 70, ACCEL = 40, DECEL = 60, REVERSE_PAUSE = 0.45;
+/** the engine running round its train: speed (px/s), seconds to uncouple or couple, and the longest way round (px) */
+/** extra route cost per px run with the engine at the back */
+export const PUSH_COST = 3;
+export const RR_SPEED = 32, RR_COUPLE = 0.8, RR_MAX = 12 * 32;
 
 export interface Train {
   id: number;
@@ -46,6 +50,12 @@ export interface Train {
   broke?: { crewAt: number; doneAt: number };
   /** head position when saved, to find the train again if the rails were rebuilt */
   at?: { x: number; y: number; tx: number; ty: number };
+  /**
+   * The engine is running round its train (it uncoupled at the front, drives along the other track of the yard or
+   * station and couples on at the back), so the train leaves pulling instead of pushing. `moves` is the engine's way,
+   * `s` how far along it is, `wait` the uncoupling or coupling time left.
+   */
+  rr?: { moves: Move[]; s: number; len: number; wait: number };
 }
 
 export const trainLength = (t: Train) => ENGINE_LEN + t.cars * (CAR_LEN + COUPLING);
@@ -78,6 +88,8 @@ export class TrainSystem {
   blocked = new Set<number>();
   /** platform and yard tracks: either lane is fine there (keep-left is for the open line) */
   anyLane = new Set<number>();
+  /** told when a train reverses partway along a trip (not at its stops): the square where its tail turned */
+  onMidReverse?: (t: Train, square: number) => void;
 
   setNetwork(net: Network) { this.net = net; }
 
@@ -89,6 +101,7 @@ export class TrainSystem {
 
   private stepsHeld(t: Train): number[] {
     const ids = t.trail.map(s => s.piece);
+    if (t.rr) for (const m of t.rr.moves) if (!isRev(m)) ids.push(m.piece);
     for (let k = 0, c = 0; k < t.plan.length && c < t.held; k++) { const m = t.plan[k]!; if (isRev(m)) continue; ids.push(m.piece); c++; }
     return ids;
   }
@@ -151,6 +164,11 @@ export class TrainSystem {
 
   private reverse(t: Train) {
     const old = t.trail, len = (s: Step) => this.net.pieces[s.piece]!.len;
+    // partway: not setting off from a stop, and not the short back-in at the end of the trip
+    if (this.onMidReverse && t.plan[0] && isRev(t.plan[0]) && t.plan[0].clear !== null) {
+      let left = 0; for (const m of t.plan) if (!isRev(m)) left += len(m);
+      if (left > trainLength(t) * 2 + 4 * 32) this.onMidReverse(t, this.net.pieces[old.at(-1)!.piece]!.squares[0]!);
+    }
     const headS = len(old[0]!) - t.tailS, tailS = len(old.at(-1)!) - t.headS;
     t.trail = old.slice().reverse().map(rev);
     t.headS = headS; t.tailS = tailS; t.engineAhead = !t.engineAhead; t.v = 0; t.pause = REVERSE_PAUSE;
@@ -167,6 +185,56 @@ export class TrainSystem {
       if (!again && t.dest !== undefined) t.refuge = REFUGE_WAIT; // no way right now: wait here and try again soon
     }
     t.held = 0;
+    this.rebuildHolds();
+  }
+
+  /**
+   * Find the engine's way round its train: off the front, back along a free parallel track (the yard's or the
+   * station's other track, or a passing loop), and onto the back of the train, never over the train itself.
+   */
+  private startRunRound(t: Train): boolean {
+    const trail = new Set(t.trail.map(s => s.piece)), head = t.trail.at(-1)!, tail = t.trail[0]!;
+    // the engine's place to couple on: the piece behind the tail, heading toward the train
+    const behind = nextStepsOf(this.net, rev(tail)).map(rev);
+    if (!behind.length) return false;
+    const goal = (s: Step) => behind.some(b => sameStep(s, b));
+    let used = 0;
+    const moves = this.route({
+      head, tail: head, trainLen: ENGINE_LEN, canReverseNow: false, goal,
+      extra: s => {
+        if (trail.has(s.piece) || this.net.conflicts[s.piece]!.some(c => trail.has(c) && c !== head.piece)) return Infinity;
+        if (!this.free(t, s.piece)) return Infinity;
+        return 0;
+      },
+      accept: ms => { used = 0; for (const m of ms) if (!isRev(m)) used += this.net.pieces[m.piece]!.len; return used <= RR_MAX + trainLength(t); },
+    });
+    if (!moves || !moves.length || moves.filter(isRev).length > 2) return false;
+    t.rr = { moves, s: 0, len: used + this.net.pieces[head.piece]!.len - t.headS, wait: RR_COUPLE };
+    this.rebuildHolds();
+    return true;
+  }
+
+  /** The engine drives its way round; when it couples on at the back, the train sets off pulling. */
+  private runRound(t: Train, dt: number) {
+    const r = t.rr!;
+    if (r.wait > 0) { r.wait -= dt; return; }
+    r.s += RR_SPEED * dt;
+    if (r.s < r.len) return;
+    if (r.s < r.len + RR_COUPLE * RR_SPEED) return; // coupling on
+    delete t.rr;
+    t.engineAhead = false; // the engine is now at the back: the reversal that follows puts it in front
+    this.rebuildHolds();
+    this.reverse(t);
+    // the engine coupled on just past the old tail: the train now reaches an engine length further that way
+    const len = (x: Step) => this.net.pieces[x.piece]!.len, head = t.trail.at(-1)!, room = len(head) - t.headS;
+    let gap = ENGINE_LEN + COUPLING;
+    if (gap <= room) t.headS += gap;
+    else {
+      const nx = t.plan[0];
+      if (nx && !isRev(nx)) { t.plan.shift(); t.trail.push(nx); t.headS = Math.min(len(nx), gap - room); } else t.headS = len(head);
+      gap = 0;
+    }
+    this.trimTail(t);
     this.rebuildHolds();
   }
 
@@ -188,6 +256,17 @@ export class TrainSystem {
     return this.sendTo(t, area[0]!, area);
   }
 
+  /**
+   * Into a dead-end yard or station, back in: the train runs past the turnout, then pushes its wagons in, so the
+   * engine stands at the open end and pulls out afterwards (real goods trains work dead-end sidings this way).
+   */
+  private backIn(t: Train): RouteRequest['revParity'] {
+    return { want: t.engineAhead ? 1 : 0, when: s => endsAtBuffer(this.net, s) };
+  }
+
+  /** Pushing a train costs as much again as pulling it, so trips turn the train where they can. */
+  private pushOf(t: Train): RouteRequest['push'] { return { engineAhead: t.engineAhead, perPx: PUSH_COST }; }
+
   /** Plan a trip to a square (or the far end of an area). Returns false when there is no way. */
   sendTo(t: Train, dest: number, area?: number[]): boolean {
     const goal = this.goalFor(dest, area);
@@ -197,7 +276,7 @@ export class TrainSystem {
       extra: s => this.laneCost(s) + (() => { const h = this.holder.get(s.piece); return h !== undefined && h !== t.id ? 200 : 0; })(),
     };
     // the only way is over a broken rail: take it anyway and wait there for the repair crew
-    const route = this.route(req) ?? (this.blocked.size ? findRoute(this.net, { ...req, extra: s => req.extra!(s) + (this.blocked.has(s.piece) ? 20000 : 0) }) : null);
+    const route = this.route({ ...req, push: this.pushOf(t), ...(area ? { revParity: this.backIn(t) } : {}) }) ?? this.route({ ...req, push: this.pushOf(t) }) ?? (this.blocked.size ? findRoute(this.net, { ...req, extra: s => req.extra!(s) + (this.blocked.has(s.piece) ? 20000 : 0) }) : null);
     if (!route) return false;
     t.plan = route; t.dest = dest; t.held = 0; t.wait = 0; t.refuge = undefined;
     if (area) t.area = area; else delete t.area;
@@ -211,12 +290,18 @@ export class TrainSystem {
 
   private move(t: Train, dt: number) {
     if (t.pause > 0) { t.pause -= dt; return; }
+    if (t.rr) { this.runRound(t, dt); return; }
     if (t.refuge !== undefined && !t.plan.length && t.v === 0) { // standing aside: try the real trip again soon
       t.refuge -= dt;
       if (t.refuge <= 0) { t.refuge = undefined; if (t.dest !== undefined) this.sendTo(t, t.dest, t.area); }
       return;
     }
-    if (isRev(t.plan[0]) && t.v < 0.5 && this.authority(t) <= 0.5) { this.reverse(t); return; }
+    if (isRev(t.plan[0]) && t.v < 0.5 && this.authority(t) <= 0.5) {
+      // about to set off backwards with the engine in front: if there is a free track beside the train, the engine
+      // runs round it first, so the train leaves pulling
+      if (t.engineAhead && t.plan[0].clear === null && this.startRunRound(t)) return;
+      this.reverse(t); return;
+    }
     // clear signals ahead while within braking distance plus a piece
     for (let tries = 0; tries < 4; tries++) {
       const brake = (t.v * t.v) / (2 * DECEL) + 40;
@@ -283,7 +368,7 @@ export class TrainSystem {
     for (const o of this.trains) if (o !== t) for (const s of o.trail) { bodies.add(s.piece); for (const c of this.net.conflicts[s.piece]!) bodies.add(c); }
     const base = { head: t.trail.at(-1)!, tail: t.trail[0]!, trail: t.trail, trainLen: L, canReverseNow: true };
     const cost = (s: Step) => bodies.has(s.piece) ? Infinity : this.laneCost(s) + (() => { const h = this.holder.get(s.piece); return h !== undefined && h !== t.id ? 4000 : 0; })();
-    const route = this.route({ ...base, goal, extra: cost });
+    const route = this.route({ ...base, goal, extra: cost, push: this.pushOf(t), ...(t.area ? { revParity: this.backIn(t) } : {}) }) ?? this.route({ ...base, goal, extra: cost });
     if (route) { t.plan = route; t.held = 0; this.rebuildHolds(); return; }
     // a parked train (no trip) is in the way: ask it to move aside, then wait for the way to clear
     const parked = new Set<number>();
@@ -354,4 +439,4 @@ export function placeTrain(net: Network, id: number, at: Step, cars: number): Tr
   if (t.trail.length === 1) t.tailS = Math.max(0, t.headS - L);
   return t;
 }
-import { nextSteps as nextStepsOf } from '../track/network.ts';
+import { endsAtBuffer, nextSteps as nextStepsOf } from '../track/network.ts';

@@ -32,6 +32,8 @@ export function viewMarks(g: Game, v: MapView): Mark[] {
       const c = t.trail.at(-1)!, p = g.net.pieces[c.piece]!.squares[0]!;
       out.push({ x: p % n, y: (p / n) | 0, icon: '🚦', text: `Train ${t.id} waits for the way to clear: a second track or a passing place helps`, col: C.warn });
     }
+    // where trains keep turning back partway (the last 5 minutes): a missing curve or a loop would let them run on
+    for (const [sq, r] of revMarks(g)) out.push({ x: sq % n, y: (sq / n) | 0, icon: '⤺', text: `Trains turn back here (${r.n}× lately): a curve the other way or a loop lets them keep going engine-first`, col: C.warn });
     return out;
   }
   if (v === 'dem') {
@@ -109,4 +111,16 @@ export function mapHtml(g: Game, view: MapView | null): string {
     h += `</div>`;
   }
   return h;
+}
+
+/** Squares where trains reversed partway at least 3 times in the last 5 game minutes, busiest first, nearby ones merged. */
+export function revMarks(g: Game): [number, { n: number; at: number }][] {
+  const n = g.world.n, out: [number, { n: number; at: number }][] = [];
+  for (const [sq, r] of g.revs ?? []) if (g.s.t - r.at > 300) g.revs!.delete(sq);
+  const list = [...(g.revs ?? [])].filter(([, r]) => r.n >= 3).sort((a, b) => b[1].n - a[1].n);
+  for (const [sq, r] of list) {
+    const near = out.find(([q]) => Math.abs(q % n - sq % n) <= 2 && Math.abs(((q / n) | 0) - ((sq / n) | 0)) <= 2);
+    if (near) near[1] = { n: near[1].n + r.n, at: Math.max(near[1].at, r.at) }; else out.push([sq, { ...r }]);
+  }
+  return out.slice(0, 12);
 }
