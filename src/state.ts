@@ -24,6 +24,12 @@ export interface Site {
   rich?: boolean;
   /** deposit hidden until surveyed (iron and oil) */
   hidden?: boolean;
+  /** town: step on the order ladder, goods got toward the current order, steady demand waiting */
+  lvl?: number;
+  got?: Partial<Record<string, number>>;
+  steady?: Partial<Record<string, number>>;
+  /** the current order was filled and its reward paid */
+  filled?: boolean;
 }
 
 /** Everything that is saved. Plain JSON. */
@@ -51,6 +57,12 @@ export interface GameState {
   nextBreak?: number;
   /** industries and factories the player built */
   buildings?: Building[];
+  /** orders filled so far (Railway level comes from this) and the level reached */
+  orders?: number;
+  rlv?: number;
+  /** money earned and spent, for the report */
+  earned?: number;
+  upkeep?: number;
 }
 
 /** The running game: saved state plus the world rebuilt from the seed. */
@@ -63,6 +75,12 @@ export interface Game {
   sys: TrainSystem;
   /** track squares joined to Ashford (rebuilt with the network) */
   linked?: Set<number>;
+  /** rail distances from buildings and towns (cleared when the track changes) */
+  dist?: Map<string, Int32Array>;
+  /** squares already built on (cached; rebuilt when the network or buildings change) */
+  taken?: { key: string; net: Network; set: Set<number> };
+  /** things to tell the player (the UI shows and clears them) */
+  news?: string[];
   /** set by the renderer: squares whose baked terrain must be redrawn (track hides trees) */
   terrainDirty?: (squares: number[]) => void;
 }

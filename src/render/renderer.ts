@@ -17,6 +17,8 @@ import { drawTrack } from './track.ts';
 import { drawTrains } from './trains.ts';
 import type { Tools } from '../ui/tools.ts';
 import { bodyPoint } from '../trains/train.ts';
+import { type Ship, shipPlan } from '../economy/shipping.ts';
+import { drawShipArrow, drawTownBadges } from './orders.ts';
 
 /** Squares under a building (trees are cleared there). */
 function builtOn(g: Game, i: number): boolean {
@@ -27,6 +29,8 @@ function builtOn(g: Game, i: number): boolean {
 /** Draws one frame. Reads the game, never changes it. */
 export class Renderer {
   readonly terrain: TerrainCache;
+  private plan = new Map<number, Ship>();
+  private planAt = -9;
   constructor(private g: Game, private tools?: Tools) {
     this.terrain = new TerrainCache(g.world, i => g.track.has(i) || i === shedSquare(g) || builtOn(g, i));
     g.terrainDirty = sq => this.terrain.invalidate(sq);
@@ -57,6 +61,9 @@ export class Renderer {
     drawShed(ctx, g, tm);
     for (const b of g.s.breaks ?? []) if (vis(b.square)) drawBreak(ctx, g, b, tm);
     drawTrains(ctx, g.net, g.s.trains, tm);
+    if (tm - this.planAt > 1) { this.planAt = tm; this.plan = shipPlan(g); } // the plan changes slowly: once a second is plenty
+    if (this.tools?.card?.kind === 'bld') drawShipArrow(ctx, g, this.plan, this.tools.card.id, tm);
+    drawTownBadges(ctx, g, this.plan, cam.z, tm);
     this.drawOverlay(ctx, tm);
     drawFog(ctx, g, x0, y0, x1, y1, cam.z, tm);
     this.drawIslandNames(ctx, cam.z);

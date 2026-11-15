@@ -8,6 +8,7 @@ function vehicle(ctx: CanvasRenderingContext2D, net: Network, t: Train, from: nu
   draw(len); ctx.restore();
 }
 
+const CARGO_COL: Record<string, string> = { wood: '#a0703f', farm: '#e6c35a', stone: '#a8a39a', coal: '#2b2b2b', iron: '#8a5a44', oil: '#1b1b22', wool: '#f1ede2' };
 const WAGON_COLS = ['#7a4f33', '#6b5a3a', '#5d4a3a', '#7a6248'];
 
 export function drawTrains(ctx: CanvasRenderingContext2D, net: Network, trains: Train[], tm: number) {
@@ -34,6 +35,10 @@ export function drawTrains(ctx: CanvasRenderingContext2D, net: Network, trains: 
         ctx.fillStyle = WAGON_COLS[(t.id + p.k) % WAGON_COLS.length]!; ctx.fillRect(-l / 2, -3.2, l, 6.4);
         ctx.strokeStyle = 'rgba(0,0,0,.35)'; ctx.lineWidth = 0.6; ctx.strokeRect(-l / 2, -3.2, l, 6.4);
         ctx.beginPath(); ctx.moveTo(0, -3.2); ctx.lineTo(0, 3.2); ctx.stroke();
+        if (t.cargo) { // the load, heaped in each half of the wagon
+          ctx.fillStyle = CARGO_COL[t.cargo.good] ?? '#c9b48a';
+          for (const u of [-l / 4, l / 4]) { ctx.beginPath(); ctx.ellipse(u, 0, l / 4 - 0.8, 2.2, 0, 0, 7); ctx.fill(); }
+        }
       }
     });
     // smoke from the chimney while moving

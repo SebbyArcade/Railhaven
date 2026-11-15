@@ -32,6 +32,14 @@ export interface Train {
   pause: number;
   /** destination: stop when the head is on this square */
   dest?: number;
+  /** or: pull right through to the far end of these squares (a yard or a station hall); dest is one of them */
+  area?: number[];
+  /** what it carries and its job (goods trains) */
+  cargo?: { good: string; n: number; d: number };
+  job?: { src: number; to: { kind: 'town'; id: number }; good: string; phase: 'toLoad' | 'loading' | 'toDrop' | 'unloading'; timer: number };
+  /** seconds until an idle train looks for a load again, and what its last delivery paid */
+  idle?: number;
+  lastPay?: { pay: number; at: number; n: number; good: string; town: number };
   /** seconds to wait in a refuge (out of another train's way) before trying again */
   refuge?: number;
   /** head position when saved, to find the train again if the rails were rebuilt */
@@ -62,6 +70,8 @@ export class TrainSystem {
 
   /** pieces trains may not enter (broken rails) */
   blocked = new Set<number>();
+  /** platform and yard tracks: either lane is fine there (keep-left is for the open line) */
+  anyLane = new Set<number>();
 
   setNetwork(net: Network) { this.net = net; }
 
@@ -156,20 +166,35 @@ export class TrainSystem {
 
   /** Trains keep to the left lane on double track (the right lane only when there is no other way). */
   private laneCost(s: Step): number {
-    return this.net.side[s.piece]! * s.dir > 0 ? 5000 : 0;
+    return !this.anyLane.has(s.piece) && this.net.side[s.piece]! * s.dir > 0 ? 5000 : 0;
   }
 
-  /** Plan a trip to a square. Returns false when there is no way. */
-  sendTo(t: Train, dest: number): boolean {
+  /** is this step a place where t's trip ends? */
+  private goalFor(dest: number, area?: number[]): (s: Step) => boolean {
+    if (!area) return s => this.net.pieces[s.piece]!.squares.includes(dest);
+    const set = new Set(area), inside = (s: Step) => this.net.pieces[s.piece]!.squares.every(q => set.has(q));
+    // inside the area, at its far end: going on would leave it
+    return s => inside(s) && !nextStepsOf(this.net, s).some(inside);
+  }
+
+  /** Send a train to the far end of a yard or station hall (whichever end it comes in from). */
+  sendToArea(t: Train, area: number[]): boolean {
+    return this.sendTo(t, area[0]!, area);
+  }
+
+  /** Plan a trip to a square (or the far end of an area). Returns false when there is no way. */
+  sendTo(t: Train, dest: number, area?: number[]): boolean {
+    const goal = this.goalFor(dest, area);
     const req: RouteRequest = {
       head: t.trail.at(-1)!, tail: t.trail[0]!, trail: t.trail, trainLen: trainLength(t), canReverseNow: true,
-      goal: s => this.net.pieces[s.piece]!.squares.includes(dest),
+      goal,
       extra: s => this.laneCost(s) + (() => { const h = this.holder.get(s.piece); return h !== undefined && h !== t.id ? 200 : 0; })(),
     };
     // the only way is over a broken rail: take it anyway and wait there for the repair crew
     const route = this.route(req) ?? (this.blocked.size ? findRoute(this.net, { ...req, extra: s => req.extra!(s) + (this.blocked.has(s.piece) ? 20000 : 0) }) : null);
     if (!route) return false;
     t.plan = route; t.dest = dest; t.held = 0; t.wait = 0; t.refuge = undefined;
+    if (area) t.area = area; else delete t.area;
     this.rebuildHolds();
     return true;
   }
@@ -182,7 +207,7 @@ export class TrainSystem {
     if (t.pause > 0) { t.pause -= dt; return; }
     if (t.refuge !== undefined && !t.plan.length && t.v === 0) { // standing aside: try the real trip again soon
       t.refuge -= dt;
-      if (t.refuge <= 0) { t.refuge = undefined; if (t.dest !== undefined) this.sendTo(t, t.dest); }
+      if (t.refuge <= 0) { t.refuge = undefined; if (t.dest !== undefined) this.sendTo(t, t.dest, t.area); }
       return;
     }
     if (isRev(t.plan[0]) && t.v < 0.5 && this.authority(t) <= 0.5) { this.reverse(t); return; }
@@ -198,7 +223,7 @@ export class TrainSystem {
     let go = Math.min(t.v * dt, auth);
     if (go <= 0.001) {
       t.v = Math.min(t.v, 0);
-      if (!t.plan.length) { t.v = 0; t.wait = 0; if (t.refuge === undefined) t.dest = undefined; return; } // arrived
+      if (!t.plan.length) { t.v = 0; t.wait = 0; if (t.refuge === undefined) { t.dest = undefined; delete t.area; } return; } // arrived
       if (!isRev(t.plan[0])) t.wait += dt; else t.wait = 0;
       this.unstick(t); return;
     }
@@ -214,7 +239,7 @@ export class TrainSystem {
     this.trimTail(t);
     if (!t.plan.length && t.v < 1 && this.authority(t) < 1) {
       t.v = 0;
-      if (t.refuge === undefined) t.dest = undefined;
+      if (t.refuge === undefined) { t.dest = undefined; delete t.area; }
     }
   }
 
@@ -244,13 +269,13 @@ export class TrainSystem {
     // waiting for a broken rail to be fixed: nothing else to do
     const nextFree = t.plan.filter(m => !isRev(m))[t.held] as Step | undefined;
     if (nextFree && this.blocked.has(nextFree.piece)) return;
-    const dest = t.dest, L = trainLength(t);
+    const dest = t.dest, L = trainLength(t), goal = this.goalFor(dest, t.area);
     // pieces under other trains can't be passed; pieces they have only signalled ahead are just costly
     const bodies = new Set<number>();
     for (const o of this.trains) if (o !== t) for (const s of o.trail) { bodies.add(s.piece); for (const c of this.net.conflicts[s.piece]!) bodies.add(c); }
     const base = { head: t.trail.at(-1)!, tail: t.trail[0]!, trail: t.trail, trainLen: L, canReverseNow: true };
     const cost = (s: Step) => bodies.has(s.piece) ? Infinity : this.laneCost(s) + (() => { const h = this.holder.get(s.piece); return h !== undefined && h !== t.id ? 4000 : 0; })();
-    const route = this.route({ ...base, goal: s => this.net.pieces[s.piece]!.squares.includes(dest), extra: cost });
+    const route = this.route({ ...base, goal, extra: cost });
     if (route) { t.plan = route; t.held = 0; this.rebuildHolds(); return; }
     // a parked train (no trip) is in the way: ask it to move aside, then wait for the way to clear
     const parked = new Set<number>();
@@ -258,7 +283,7 @@ export class TrainSystem {
     const moving = new Set<number>();
     for (const o of this.trains) if (o !== t && (o.plan.length || o.dest !== undefined)) for (const st of o.trail) { moving.add(st.piece); for (const c of this.net.conflicts[st.piece]!) moving.add(c); }
     if (parked.size) {
-      const via = this.route({ ...base, goal: s => this.net.pieces[s.piece]!.squares.includes(dest), extra: s => moving.has(s.piece) ? Infinity : this.laneCost(s) + (parked.has(s.piece) ? 500 : 0) });
+      const via = this.route({ ...base, goal, extra: s => moving.has(s.piece) ? Infinity : this.laneCost(s) + (parked.has(s.piece) ? 500 : 0) });
       if (via) {
         const way = new Set<number>();
         for (const m of via) if (!isRev(m)) { way.add(m.piece); for (const c of this.net.conflicts[m.piece]!) way.add(c); }
@@ -273,7 +298,7 @@ export class TrainSystem {
     for (const o of this.trains) if (o !== t) {
       let c = 0; for (const m of o.plan) { if (isRev(m)) continue; inWay.add(m.piece); for (const x of this.net.conflicts[m.piece]!) inWay.add(x); if (++c > 60) break; }
       // never stand aside on another train's destination (it may be standing aside itself, with no plan right now)
-      if (o.dest !== undefined) for (const p of this.net.bySquare.get(o.dest) ?? []) { inWay.add(p); for (const x of this.net.conflicts[p]!) inWay.add(x); }
+      if (o.dest !== undefined) for (const q of o.area ?? [o.dest]) for (const p of this.net.bySquare.get(q) ?? []) { inWay.add(p); for (const x of this.net.conflicts[p]!) inWay.add(x); }
     }
     // stagger retries so two trains standing aside don't come back at the same moment
     if (this.stepAside(t, inWay)) t.refuge = REFUGE_WAIT + (t.id % 3) * 1.5;

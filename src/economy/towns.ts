@@ -1,0 +1,99 @@
+import type { Game, Site } from '../state.ts';
+import type { Good } from '../buildings/industries.ts';
+import { hallOf } from '../buildings/stations.ts';
+
+/** The order ladder: one order per step; filling it lets the town grow one size. */
+export const LADDER: Partial<Record<Good, number>>[] = [
+  { farm: 30, wood: 20 },
+  { farm: 60, wood: 40, stone: 30 },
+  { farm: 100, coal: 50, planks: 40, bricks: 30 },
+  { farm: 150, flour: 60, planks: 60, bricks: 60, steel: 40 },
+  { flour: 150, bricks: 120, steel: 100, fuel: 80 },
+];
+export const SIZE_NAMES = ['Hamlet', 'Village', 'Town', 'City', 'Metropolis', 'Megacity'];
+/** reward for filling the order of each step, and the price of tapping ⬆ Upgrade after it */
+export const reward = (L: number) => L < 5 ? [600, 1500, 3000, 6000, 12500][L]! : Math.round(12500 * (1 + 0.25 * (L - 4)) / 100) * 100;
+export const upgradePrice = (L: number) => L < 5 ? [250, 800, 2500, 6000, 15000][L]! : Math.round(15000 * Math.pow(1.35, L - 4) / 100) * 100;
+/** most people a town holds at each size */
+export const sizeCap = (L: number) => L < 6 ? [100, 400, 1200, 3000, 8000, 20000][L]! : Math.round(20000 * Math.pow(1.35, L - 5) / 100) * 100;
+const sizeFloor = (L: number) => L === 0 ? 15 : sizeCap(L - 1);
+/** steady buying of goods from steps already climbed pays this share */
+export const STEADY_PAY = 0.35;
+export const SURPLUS_PAY = 0.175;
+export const steadyRate = (pop: number) => 10 + Math.sqrt(Math.max(0, pop)) * 0.6; // units per minute, and the most it holds
+
+export function sizeName(L: number): string { return SIZE_NAMES[Math.min(L, SIZE_NAMES.length - 1)]! + (L >= SIZE_NAMES.length ? ' ' + (L - SIZE_NAMES.length + 2) : ''); }
+
+/** The town's step on the ladder (stored on the site). */
+export const stepOf = (t: Site) => t.lvl ?? 0;
+
+/** The current order: fixed for the first five steps, then the goods the railway makes, a quarter bigger each step. */
+export function orderOf(g: Game, t: Site): Partial<Record<Good, number>> {
+  const L = stepOf(t);
+  if (L < LADDER.length) return LADDER[L]!;
+  const made = madeGoods(g), base = LADDER[LADDER.length - 1]!;
+  if (made.length < 2) return { farm: Math.round(150 * Math.pow(1.25, L - 4) / 5) * 5 };
+  const o: Partial<Record<Good, number>> = {};
+  for (let k = 0; k < Math.min(3, made.length); k++) { const good = made[(L * 2 + k) % made.length]!; o[good] = Math.round((base[good] ?? LADDER[3]![good] ?? 60) * Math.pow(1.25, L - 4) / 5) * 5; }
+  return o;
+}
+
+/** Goods the player's buildings make. */
+export function madeGoods(g: Game): Good[] {
+  return [...new Set((g.s.buildings ?? []).map(b => b.kind as Good))];
+}
+
+/** How far along the order is, 0-1. */
+export function orderProgress(g: Game, t: Site): number {
+  const o = orderOf(g, t), ks = Object.keys(o) as Good[];
+  if (!ks.length) return 1;
+  return ks.reduce((a, k) => a + Math.min(1, (t.got?.[k] ?? 0) / o[k]!), 0) / ks.length;
+}
+export const orderDone = (g: Game, t: Site) => orderProgress(g, t) >= 1;
+
+/** Goods of steps already climbed: the town keeps buying these (steady demand). */
+export function steadyGoods(t: Site): Good[] {
+  return [...new Set(LADDER.slice(0, Math.min(stepOf(t), LADDER.length)).flatMap(o => Object.keys(o) as Good[]))];
+}
+
+/** Is the town on the railway: its station hall joined to Ashford? */
+export function townLinked(g: Game, t: Site): boolean {
+  const h = hallOf(g.track, g.world.n, t);
+  return !!h && !!g.linked?.has(h.squares[1]);
+}
+
+/** How many units of a good the town takes right now, split into open-order and steady parts. */
+export function townRoom(g: Game, t: Site, k: Good): { order: number; steady: number } {
+  const o = orderOf(g, t), left = o[k] ? Math.max(0, o[k]! - (t.got?.[k] ?? 0)) : 0;
+  return { order: left, steady: steadyGoods(t).includes(k) ? Math.floor(t.steady?.[k] ?? 0) : 0 };
+}
+export const townWants = (g: Game, t: Site, k: Good) => { const r = townRoom(g, t, k); return r.order + r.steady > 0 || steadyGoods(t).includes(k) || !!orderOf(g, t)[k]; };
+
+/** Unload goods at a town: fills the order first, then steady demand, the rest is surplus. Returns the units in each part. */
+export function deliverToTown(g: Game, t: Site, k: Good, n: number) {
+  const r = townRoom(g, t, k), order = Math.min(n, r.order), steady = Math.min(n - order, r.steady), surplus = n - order - steady;
+  if (order) { (t.got ??= {})[k] = (t.got[k] ?? 0) + order; }
+  if (steady) (t.steady ??= {})[k] = (t.steady[k] ?? 0) - steady;
+  return { order, steady, surplus };
+}
+
+/** Steady demand refills; people move in as the order fills. */
+export function tickTowns(g: Game, dt: number) {
+  for (const t of g.s.sites) {
+    if (t.kind !== 'town' || !townLinked(g, t)) continue;
+    const cap = steadyRate(t.pop ?? 0);
+    for (const k of steadyGoods(t)) (t.steady ??= {})[k] = Math.min(cap, (t.steady[k] ?? 0) + dt * cap / 60);
+    const L = stepOf(t), target = sizeFloor(L) + (sizeCap(L) - sizeFloor(L)) * orderProgress(g, t);
+    if ((t.pop ?? 0) < target) t.pop = Math.min(target, (t.pop ?? 0) + dt * Math.max(0.5, target * 0.01));
+  }
+}
+
+/** The order is filled and the player taps ⬆ Upgrade: pay, climb a step, start the next order. */
+export function upgradeTown(g: Game, t: Site): string {
+  if (!orderDone(g, t)) return `${t.name} still needs goods for its order`;
+  const price = upgradePrice(stepOf(t));
+  if (price > g.s.money) return `Need $${(price - g.s.money).toLocaleString('en-US')} more to upgrade ${t.name}`;
+  g.s.money -= price;
+  t.lvl = stepOf(t) + 1; t.got = {}; t.filled = false;
+  return '';
+}

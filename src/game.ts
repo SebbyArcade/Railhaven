@@ -46,8 +46,8 @@ function assemble(s: GameState): Game {
     for (const t of s.trains) if (t.at) relocate(net, t, t.at);
     s.netKey = networkKey(net);
   }
-  g.linked = linkedSquares(g); placeShed(g); g.sys.blocked = blockedPieces(g);
-  for (const t of s.trains) if (t.dest !== undefined && t.plan.length === 0) g.sys.sendTo(t, t.dest);
+  g.linked = linkedSquares(g); placeShed(g); g.sys.blocked = blockedPieces(g); g.sys.anyLane = platformPieces(g);
+  for (const t of s.trains) if (t.dest !== undefined && t.plan.length === 0) g.sys.sendTo(t, t.dest, t.area);
   g.sys.rebuildHolds();
   return g;
 }
@@ -82,19 +82,27 @@ export function prepareSave(g: Game) {
 export function trackChanged(g: Game) {
   const where = g.s.trains.map(t => snapshot(g.net, t));
   g.net = makeNetwork(g.track, g.world.n, g.s.sites, g.s.buildings);
-  g.linked = linkedSquares(g);
+  g.linked = linkedSquares(g); g.dist = new Map();
   g.sys.setNetwork(g.net);
   g.s.trains.forEach((t, k) => { relocate(g.net, t, where[k]!); });
   g.s.breaks = g.s.breaks?.filter(b => g.track.has(b.square));
   const oldShed = shedSquare(g); placeShed(g);
-  if (shedSquare(g) !== oldShed) g.terrainDirty?.([oldShed, shedSquare(g)].filter(i => i >= 0)); g.sys.blocked = blockedPieces(g);
+  if (shedSquare(g) !== oldShed) g.terrainDirty?.([oldShed, shedSquare(g)].filter(i => i >= 0)); g.sys.blocked = blockedPieces(g); g.sys.anyLane = platformPieces(g);
   g.sys.rebuildHolds();
-  for (const t of g.s.trains) if (t.dest !== undefined) g.sys.sendTo(t, t.dest);
+  for (const t of g.s.trains) if (t.dest !== undefined) g.sys.sendTo(t, t.dest, t.area);
   g.s.netKey = networkKey(g.net);
+}
+
+/** Pieces wholly inside station halls and yards, where trains may use either lane. */
+function platformPieces(g: Game): Set<number> {
+  const n = g.world.n, sq = new Set<number>();
+  for (const h of hallsOf(g.track, n, g.s.sites)) for (const i of h.squares) sq.add(i);
+  for (const b of g.s.buildings ?? []) for (const i of yardSquares(n, b)) sq.add(i);
+  return new Set(g.net.pieces.filter(p => p.squares.every(i => sq.has(i))).map(p => p.id));
 }
 
 /** Broken rails came or went: trains plan around them again. */
 export function breaksChanged(g: Game) {
   g.sys.blocked = blockedPieces(g);
-  for (const t of g.s.trains) if (t.dest !== undefined && !t.refuge) g.sys.sendTo(t, t.dest);
+  for (const t of g.s.trains) if (t.dest !== undefined && !t.refuge) g.sys.sendTo(t, t.dest, t.area);
 }

@@ -3,10 +3,11 @@ import { trackChanged } from '../game.ts';
 import { type BuiltStroke, buildPlan, extendPlan, isAnchor, type PaintPlan, planCost, planError, startPlan, undoStroke } from '../track/paint.ts';
 import { removeSquare } from '../track/edit.ts';
 import { TRACK_COST } from '../track/rules.ts';
-import { placeTrain } from '../trains/train.ts';
+import { buyTrain, trainPrice } from '../economy/dispatch.ts';
 import { bodyPoint, trainLength } from '../trains/train.ts';
 import { fmtMoney, toast } from './hud.ts';
-import { bestPlacement, build, footprint, INDUSTRIES, type IndustryKind, isLinked, placeError, placementsAt, priceOf, shareAt } from '../buildings/industries.ts';
+import type { Card } from './cards.ts';
+import { bestPlacement, build, footprint, INDUSTRIES, type IndustryKind, isLinked, placeError, placementsAt, priceOf, shareAt, harmOf, harmText } from '../buildings/industries.ts';
 
 type Placement = ReturnType<typeof placementsAt>[number];
 
@@ -17,7 +18,7 @@ export const MODE_HINT: Record<Mode, string> = {
   rail: '🛤 Drag from your track (or Ashford) to paint rails square by square. Tap next to the end to add one square.',
   double: '═ Tap or drag along your track to make it double. Trains keep left, so two can pass.',
   remove: '✂ Tap a track square to remove it.',
-  train: '🚂 Tap your track to put a test train there.',
+  train: '🚂 Trains roll out of the engine shed and run themselves: each takes the best waiting load where it is needed.',
   build: '🏗 Pick what to build, then tap a glowing spot. Tap it again to turn the yard.',
 };
 
@@ -28,6 +29,8 @@ export class Tools {
   dbl = new Set<number>();
   removeAt: number | null = null;
   selected: number | null = null;
+  /** the open card (town, building or train), shown on the map too */
+  card: Card | null = null;
   flash: { square: number; until: number } | null = null;
   /** the last stroke built, while it can still be undone */
   lastStroke: BuiltStroke | null = null;
@@ -108,23 +111,7 @@ export class Tools {
       return true;
     }
     if (this.mode === 'remove') { this.removeAt = g.track.has(i) ? i : null; if (!g.track.has(i)) toast('No track here'); return true; }
-    if (this.mode === 'train') {
-      const ids = g.net.bySquare.get(i);
-      if (!ids?.length) { toast('Put the train on your track'); return true; }
-      const p = g.net.pieces[ids.find(id => g.net.pieces[id]!.squares.length === 1) ?? ids[0]!]!; // plain track rather than a turnout
-      const t = placeTrain(g.net, g.s.nextId++, { piece: p.id, dir: 1 }, 3);
-      if (t.trail.some(s => g.sys.holder.has(s.piece))) { toast('Another train is there'); g.s.nextId--; return true; }
-      g.s.trains.push(t); g.sys.rebuildHolds(); this.selected = t.id;
-      toast('Train placed. Tap anywhere on your track to send it there.');
-      this.mode = 'pan';
-      return true;
-    }
-    // pan mode: a selected train goes where you tap on the track
-    if (this.selected !== null && g.track.has(i)) {
-      const t = g.s.trains.find(x => x.id === this.selected);
-      if (t && !g.sys.sendTo(t, i)) toast('No way there on the rails');
-      return true;
-    }
+    if (this.mode === 'train') return true;
     return false;
   }
 
@@ -133,7 +120,7 @@ export class Tools {
     const g = this.g();
     for (const t of g.s.trains) for (let u = 0; u <= trainLength(t); u += 4) {
       const p = bodyPoint(g.net, t, u);
-      if (Math.hypot(p.x - wx, p.y - wy) < 10) { this.selected = this.selected === t.id ? null : t.id; if (this.selected !== null) toast('Train selected: tap your track to send it'); return true; }
+      if (Math.hypot(p.x - wx, p.y - wy) < 10) { this.selected = this.selected === t.id ? null : t.id; this.card = this.selected === null ? null : { kind: 'train', id: t.id }; return true; }
     }
     return false;
   }
@@ -160,16 +147,20 @@ export class Tools {
     const g = this.g();
     if (this.mode === 'rail' && this.plan && this.plan.path.length > 1) {
       const e = planError(g, this.plan), n = this.plan.path.filter(i => !g.track.has(i)).length;
-      return { text: e || `${n} new square${n === 1 ? '' : 's'} · ${fmtMoney(planCost(g, this.plan))}`, ok: '✓ Build', can: !e };
+      return { text: e || `${n} new square${n === 1 ? '' : 's'} · ${fmtMoney(planCost(g, this.plan))}${harmText(harmOf(g, this.plan.path.filter(i => !g.track.has(i))))}`, ok: '✓ Build', can: !e };
     }
     if (this.mode === 'double' && this.dbl.size) {
       const add = [...this.dbl].filter(i => g.track.has(i) && !g.track.get(i)!.dbl), c = add.length * TRACK_COST.double;
       return { text: `Double ${add.length} square${add.length === 1 ? '' : 's'} · ${fmtMoney(c)}`, ok: '✓ Double', can: add.length > 0 && c <= g.s.money };
     }
     if (this.mode === 'remove' && this.removeAt !== null) return { text: 'Remove this track square?', ok: '✂ Remove', can: true };
+    if (this.mode === 'train') {
+      const p = trainPrice(g);
+      return { text: g.s.shed ? `🚂 Buy train ${g.s.trains.length + 1} · ${fmtMoney(p)}` : '🏚 Lay a straight bit of line near Ashford: the engine shed goes beside it', ok: '✓ Buy', can: !!g.s.shed && p <= g.s.money };
+    }
     if (this.mode === 'build' && this.preview) {
       const k = this.preview.kind, price = priceOf(g, k), out = Math.round(INDUSTRIES[k].rate * shareAt(g, this.preview) * 60);
-      return { text: `${INDUSTRIES[k].icon} ${INDUSTRIES[k].name} · ${fmtMoney(price)} · makes ${out}/min`, ok: '✓ Build', can: price <= g.s.money };
+      return { text: `${INDUSTRIES[k].icon} ${INDUSTRIES[k].name} · ${fmtMoney(price)} · makes ${out}/min${harmText(harmOf(g, footprint(g.world.n, this.preview)))}`, ok: '✓ Build', can: price <= g.s.money };
     }
     return null;
   }
@@ -199,6 +190,9 @@ export class Tools {
       trackChanged(g); g.terrainDirty?.(footprint(g.world.n, b));
       toast(isLinked(g, b) ? `${INDUSTRIES[b.kind].icon} ${INDUSTRIES[b.kind].name} built` : `${INDUSTRIES[b.kind].icon} Built! Now lay track from your railway to one end of its yard`);
       this.preview = null; this.previewAt = -1; this.glowKey = '';
+    } else if (this.mode === 'train') {
+      const t = buyTrain(g); if (typeof t === 'string') { toast(t); return; }
+      this.selected = t.id; toast(`🚂 Train ${t.id} is out of the shed and looking for a load`);
     } else if (this.mode === 'remove' && this.removeAt !== null) {
       const i = this.removeAt;
       if (g.s.trains.some(t => t.trail.some(s => g.net.pieces[s.piece]!.squares.includes(i)))) { toast('A train is on this track'); return; }
