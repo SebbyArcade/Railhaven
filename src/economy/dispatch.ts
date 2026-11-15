@@ -319,7 +319,7 @@ export function tickTrains(g: Game, dt: number) {
       const n = Math.min(trainCap(g), Math.floor(readyOf(src, j.good)));
       if (n <= 0) { endJob(t); continue; }
       if (isDock(src)) src.landed![j.good as Good]! -= n; else src.stock -= n;
-      const ship = planFor(P(), src, j.good); if (ship) { j.to = ship.to; j.sea = ship.sea; j.then = ship.then; }
+      const ship = planFor(shipPlan(g, t), src, j.good); if (ship) { j.to = ship.to; j.sea = ship.sea; j.then = ship.then; }
       t.cargo = { good: j.good, n, d: ship?.d ?? 8 };
       j.phase = 'toDrop'; sendLoaded(g, t);
     } else if (j.phase === 'toDrop') {

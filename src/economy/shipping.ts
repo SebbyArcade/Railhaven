@@ -1,4 +1,5 @@
 import type { Game, Site } from '../state.ts';
+import type { Train } from '../trains/train.ts';
 import { bufOf, type Building, GOODS, type Good, INDUSTRIES, inputsOf, isFactory, isLinked, yardSquares } from '../buildings/industries.ts';
 import { hallOf } from '../buildings/stations.ts';
 import { orderOf, steadyGoods, townLinked, townRoom } from './towns.ts';
@@ -63,10 +64,10 @@ export const PART_PAY: Record<Why, number> = { order: 1, factory: FACP, steady: 
 const key = (to: Dest, k: Good) => `${to.kind}${to.id}/${k}`;
 
 /** Units already on their way to (or about to be collected for) each place and good. */
-function enRoute(g: Game): Map<string, number> {
+function enRoute(g: Game, skip?: Train): Map<string, number> {
   const m = new Map<string, number>();
   for (const t of g.s.trains) {
-    const j = t.job; if (!j) continue;
+    const j = t.job; if (!j || t === skip) continue;
     const k = key(j.to, j.good as Good);
     m.set(k, (m.get(k) ?? 0) + (t.cargo?.n ?? trainCap(g)));
   }
@@ -81,12 +82,12 @@ export const factoryRoom = (f: Building, k: Good) => Math.max(0, bufOf(f) - (f.i
  * nearest-first so several camps don't all pile into one place; then towns that keep buying the good (steady
  * demand); else the nearest town on the railway (paid as extra).
  */
-export function shipPlan(g: Game): Plan {
+export function shipPlan(g: Game, skip?: Train): Plan {
   const out = new Map<string, Ship>(), n = g.world.n;
   const towns = g.s.sites.filter(t => t.kind === 'town' && townLinked(g, t));
   const bs = (g.s.buildings ?? []).filter(b => isLinked(g, b) && !b.closed); // ⛔ closed: sends nothing, takes nothing
   const facs = bs.filter(b => isFactory(b.kind));
-  const way = enRoute(g);
+  const way = enRoute(g, skip); // a train being loaded doesn't count its own load against the order it is fetching for
   // sources: every building's own good, and goods landed at docks (sent on by that island's trains)
   const srcs: { b: Building; k: Good; sk: string }[] = [];
   for (const b of bs) {
