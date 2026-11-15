@@ -49,6 +49,7 @@ export const refundOf = (b: Building) => Math.round((b.paid ?? INDUSTRIES[b.kind
 export function removeBuilding(g: Game, b: Building): string {
   const yard = new Set(yardSquares(g.world.n, b));
   if (g.s.trains.some(t => t.trail.some(s => g.net.pieces[s.piece]!.squares.some(q => yard.has(q))))) return 'A train is in its yard: wait until it leaves';
+  if ((g.s.ships ?? []).some(s => s.to === b.id || (s.to === undefined && s.at === b.id) || s.hold.some(q => q.to === b.id))) return 'A ship is at this dock or sailing to it: wait until it has gone';
   for (const t of g.s.trains) if (t.job && (t.job.src === b.id || (t.job.to.kind === 'bld' && t.job.to.id === b.id))) {
     if (t.job.phase === 'toDrop' || t.job.phase === 'unloading') t.job.to = { kind: 'town', id: g.s.sites[0]!.id }; // keep the load: it goes to a town
     else { t.job = undefined; t.dest = undefined; t.plan = []; }

@@ -3,6 +3,8 @@ import { bufOf, type Building, GOODS, type Good, INDUSTRIES, inputsOf, isFactory
 import { hallOf } from '../buildings/stations.ts';
 import { orderOf, steadyGoods, townLinked, townRoom } from './towns.ts';
 import { trainCap } from './upgrades.ts';
+import { isDock, islandOfB } from '../ships/docks.ts';
+import { lanesFrom, seaBound, seaLanes } from '../ships/ships.ts';
 
 /** Train load, and the least a train waits for before it sets off to collect (it leaves mostly full). */
 /** a train's load before any wagon upgrade (the real one is trainCap(g)) */
@@ -34,7 +36,13 @@ export const bldDist = (g: Game, b: Building) => railDist(g, 'b' + b.id, yardSqu
 
 export type Dest = { kind: 'town' | 'bld'; id: number };
 export type Why = 'order' | 'factory' | 'steady' | 'extra';
-export interface Ship { to: Dest; why: Why; d: number; rush?: boolean }
+/** where a load goes; `sea` = the far dock when it goes to a dock for a ship */
+export interface Ship { to: Dest; why: Why; d: number; rush?: boolean; sea?: number }
+type Pair = { s: { b: Building; k: Good; sk: string }; b: Building; to: Dest; d: number; t?: Site; f?: Building };
+type Targets = (from: Building, k: Good, d0: number, dist: Int32Array, push: (p: Omit<Pair, 's' | 'b'>) => void) => void;
+/** The plan: building id → where its goods go; `docks` holds landed goods at docks, keyed `dockId/good`. */
+export type Plan = Map<number, Ship> & { docks: Map<string, Ship> };
+export const dockKey = (id: number, k: string) => `${id}/${k}`;
 
 export const siteOf = (g: Game, id: number): Site | undefined => g.s.sites.find(s => s.id === id);
 export const bldOf = (g: Game, id: number): Building | undefined => g.s.buildings?.find(b => b.id === id);
@@ -67,22 +75,28 @@ export const factoryRoom = (f: Building, k: Good) => Math.max(0, bufOf(f) - (f.i
  * nearest-first so several camps don't all pile into one place; then towns that keep buying the good (steady
  * demand); else the nearest town on the railway (paid as extra).
  */
-export function shipPlan(g: Game): Map<number, Ship> {
-  const out = new Map<number, Ship>(), n = g.world.n;
+export function shipPlan(g: Game): Plan {
+  const out = new Map<string, Ship>(), n = g.world.n;
   const towns = g.s.sites.filter(t => t.kind === 'town' && townLinked(g, t));
   const bs = (g.s.buildings ?? []).filter(b => isLinked(g, b));
   const facs = bs.filter(b => isFactory(b.kind));
   const way = enRoute(g);
-  const pairs: { b: Building; to: Dest; d: number; t?: Site; f?: Building }[] = [];
+  // sources: every building's own good, and goods landed at docks (sent on by that island's trains)
+  const srcs: { b: Building; k: Good; sk: string }[] = [];
   for (const b of bs) {
-    const dist = bldDist(g, b), k = goodOf(b);
-    for (const t of towns) { const h = hallOf(g.track, n, t)!, d = dist[h.squares[1]]!; if (d >= 0) pairs.push({ b, to: { kind: 'town', id: t.id }, d, t }); }
-    for (const f of facs) if (f !== b && inputsOf(f.kind).includes(k)) { const d = dist[yardSquares(n, f)[1]!]!; if (d >= 0) pairs.push({ b, to: { kind: 'bld', id: f.id }, d, f }); }
+    if (!isDock(b)) srcs.push({ b, k: goodOf(b), sk: String(b.id) });
+    else for (const k of Object.keys(b.landed ?? {}) as Good[]) if ((b.landed![k] ?? 0) > 0) srcs.push({ b, k, sk: dockKey(b.id, k) });
   }
+  const targets: Targets = (from, k, d0, dist, push) => {
+    for (const t of towns) { const h = hallOf(g.track, n, t)!, d = dist[h.squares[1]]!; if (d >= 0) push({ to: { kind: 'town', id: t.id }, d: d + d0, t }); }
+    for (const f of facs) if (f !== from && inputsOf(f.kind).includes(k)) { const d = dist[yardSquares(n, f)[1]!]!; if (d >= 0) push({ to: { kind: 'bld', id: f.id }, d: d + d0, f }); }
+  };
+  const pairs: Pair[] = [];
+  for (const s of srcs) targets(s.b, s.k, 0, bldDist(g, s.b), p => pairs.push({ ...p, s, b: s.b }));
   pairs.sort((p, q) => p.d - q.d);
   const left = new Map<string, number>();
-  const room = (p: typeof pairs[number], why: 'need' | 'steady'): number => {
-    const k = goodOf(p.b), kk = key(p.to, k) + why;
+  const room = (p: Pair, why: 'need' | 'steady'): number => {
+    const k = p.s.k, kk = key(p.to, k) + why;
     if (!left.has(kk)) {
       let r = 0;
       if (why === 'need') r = p.f ? factoryRoom(p.f, k) : orderOf(g, p.t!)[k] ? townRoom(g, p.t!, k).order : 0;
@@ -96,20 +110,57 @@ export function shipPlan(g: Game): Map<number, Ship> {
     let want = r.left - (way.get(key(r.to, r.good)) ?? 0);
     for (const p of pairs) {
       if (want <= 0) break;
-      if (out.has(p.b.id) || goodOf(p.b) !== r.good || p.to.kind !== r.to.kind || p.to.id !== r.to.id) continue;
-      out.set(p.b.id, { to: p.to, why: p.f ? 'factory' : 'order', d: p.d, rush: true });
+      if (out.has(p.s.sk) || p.s.k !== r.good || p.to.kind !== r.to.kind || p.to.id !== r.to.id) continue;
+      out.set(p.s.sk, { to: p.to, why: p.f ? 'factory' : 'order', d: p.d, rush: true });
       want -= trainCap(g);
     }
   }
-  for (const why of ['need', 'steady'] as const) {
+  const take = (why: 'need' | 'steady') => {
     for (const p of pairs) {
-      if (out.has(p.b.id) || room(p, why) <= 0) continue;
-      out.set(p.b.id, { to: p.to, why: why === 'steady' ? 'steady' : p.f ? 'factory' : 'order', d: p.d });
-      const kk = key(p.to, goodOf(p.b)) + why; left.set(kk, left.get(kk)! - trainCap(g));
+      if (out.has(p.s.sk) || room(p, why) <= 0) continue;
+      out.set(p.s.sk, { to: p.to, why: why === 'steady' ? 'steady' : p.f ? 'factory' : 'order', d: p.d });
+      const kk = key(p.to, p.s.k) + why; left.set(kk, left.get(kk)! - trainCap(g));
     }
+  };
+  take('need');
+  seaNeeds(g, srcs.filter(s => !out.has(s.sk) && !isDock(s.b)), out, targets, room);
+  take('steady');
+  for (const p of pairs) if (!out.has(p.s.sk) && p.t) out.set(p.s.sk, { to: p.to, why: 'extra', d: p.d });
+  const plan = new Map<number, Ship>() as Plan; plan.docks = new Map();
+  for (const [k, v] of out) if (k.includes('/')) plan.docks.set(k, v); else plan.set(+k, v);
+  return plan;
+}
+
+/**
+ * Goods nobody on their own island needs, but an order or factory on another island does: the train takes them
+ * to a dock with a sea route there (paid like factory supply), and a ship carries them on.
+ */
+function seaNeeds(g: Game, srcs: { b: Building; k: Good; sk: string }[], out: Map<string, Ship>, targets: Targets, room: (p: any, why: 'need') => number) {
+  if (!srcs.length) return;
+  const lanes = seaLanes(g); if (!lanes.length) return;
+  const docks = (g.s.buildings ?? []).filter(b => isDock(b) && isLinked(g, b)), n = g.world.n;
+  const bound = new Map<string, number>(); // units already heading to each far dock by sea, per good
+  for (const s of srcs) {
+    const dist = bldDist(g, s.b);
+    let best: Ship | null = null, bt = Infinity, bk = '';
+    for (const d1 of docks) {
+      if (islandOfB(g, d1) !== islandOfB(g, s.b)) continue;
+      const d1d = dist[yardSquares(n, d1)[1]!]!; if (d1d < 0) continue;
+      for (const r of lanesFrom(g, d1.id, lanes)) {
+        const d2 = docks.find(b => b.id === r.id)!, k2 = `${d2.id}/${s.k}`;
+        if (!bound.has(k2)) bound.set(k2, seaBound(g, d2.id, s.k));
+        targets(d2, s.k, 0, bldDist(g, d2), p => {
+          if (p.t && !orderOf(g, p.t)[s.k]) return; // towns: only open orders draw goods across the sea
+          if (room({ ...p, s, b: s.b }, 'need') - bound.get(k2)! <= 0) return;
+          const tot = d1d + r.d + p.d;
+          if (tot < bt) { bt = tot; bk = k2; best = { to: { kind: 'bld', id: d1.id }, why: 'factory', d: d1d, sea: d2.id }; }
+        });
+      }
+    }
+    if (!best) continue;
+    out.set(s.sk, best);
+    bound.set(bk, bound.get(bk)! + trainCap(g));
   }
-  for (const p of pairs) if (!out.has(p.b.id) && p.t) out.set(p.b.id, { to: p.to, why: 'extra', d: p.d });
-  return out;
 }
 
 /** What a load of n units pays when delivered there. */

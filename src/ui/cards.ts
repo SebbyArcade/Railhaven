@@ -5,6 +5,7 @@ import { FOUND_PRICE, orderDone, orderOf, reward, sizeName, steadyGoods, stepOf,
 import { type Dest, destName, type Ship, shipPlan, siteOf } from '../economy/shipping.ts';
 import { FERRY_FEE, trainPrice, trainStatus } from '../economy/dispatch.ts';
 import { dockRange, islandOfB, seaDist } from '../ships/docks.ts';
+import { lanesFrom, SHIP_PRICE, SHIP_SPEED, waitingAt } from '../ships/ships.ts';
 import { FLEET, type FleetKey, fleetLvl, levelGain, levelPrice, MAX_LVL, MAX_RUSH, refundOf, RUSH_FEE, rushOf, sellOffer, trainCap } from '../economy/upgrades.ts';
 import type { Train } from '../trains/train.ts';
 import { fmtMoney } from './hud.ts';
@@ -94,6 +95,21 @@ function dockCard(g: Game, b: Building): string {
       h += `<div class="row"><b class="ico">🏝</b><div class="grow"><div class="line"><span>${esc(g.world.islands[k]!.name!)}</span><span>${v} squares</span></div><small>${has ? '⚓ You have a landing there' : '🏗 Build → Dock on its shore to land there'}</small></div></div>`;
     }
   } else if (linked) h += `<div class="note">🌊 No other island within reach yet: a bigger dock sails farther</div>`;
+  // sea routes, ships and goods
+  if (linked) {
+    const routes = lanesFrom(g, b.id), name = (id: number) => { const o = g.s.buildings!.find(x => x.id === id)!; const k = islandOfB(g, o); return k === g.world.home ? 'Ashford Isle dock' : `${g.world.islands[k]?.name ?? 'Island'} landing`; };
+    const here = (g.s.ships ?? []).filter(s => s.to === undefined && s.at === b.id).length, all = (g.s.ships ?? []).length;
+    if (routes.length) {
+      h += `<h3>⛴ Sea routes</h3>`;
+      const wait = waitingAt(b);
+      for (const r of routes) h += `<div class="row"><b class="ico">⛴</b><div class="grow"><div class="line"><span>${esc(name(r.id))}</span><span>${r.d} squares · ${Math.round(r.d / SHIP_SPEED)} s</span></div><small>${wait.get(r.id) ? `📦 ${wait.get(r.id)} waiting for a ship` : 'Nothing waiting'}</small></div></div>`;
+      if (!all) h += `<div class="warn">🚢 No cargo ship yet: goods for other islands wait here until you buy one</div>`;
+      else h += `<div class="note">🚢 ${all} ship${all === 1 ? '' : 's'} sail${all === 1 ? 's' : ''} every route${here ? ` · ${here} here now` : ''}</div>`;
+      h += `<button class="act" data-act="ship" data-id="${b.id}" ${g.s.money >= SHIP_PRICE ? '' : 'disabled'}>🚢 Buy a cargo ship · ${fmtMoney(SHIP_PRICE)}</button>`;
+    } else if (home) h += `<div class="note">⛴ Build a Dock on another island's shore within reach: that makes a sea route for ships</div>`;
+    const landed = Object.entries(b.landed ?? {}).filter(([, v]) => (v ?? 0) >= 1);
+    if (landed.length) h += `<div class="gift">📦 Landed here for this island's trains: ${landed.map(([k, v]) => `${GOODS[k as Good].icon} ${Math.floor(v!)}`).join(' · ')}</div>`;
+  }
   if (!home) {
     const p = trainPrice(g) + FERRY_FEE, can = linked && g.s.money >= p;
     h += `<div class="note">🚂 ${g.s.trains.filter(t => islandOfTrain(g, t) === islandOfB(g, b)).length} trains on ${esc(isl)}. Trains stay on their island.</div>`;
