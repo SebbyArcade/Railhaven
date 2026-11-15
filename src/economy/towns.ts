@@ -2,6 +2,7 @@ import type { Game, Site } from '../state.ts';
 import type { Good } from '../buildings/industries.ts';
 import { hallOf } from '../buildings/stations.ts';
 import { reveal } from '../world/fog.ts';
+import { islandSpec } from '../world/specialty.ts';
 
 /** The order ladder: one order per step; filling it lets the town grow one size. */
 export const LADDER: Partial<Record<Good, number>>[] = [
@@ -30,6 +31,14 @@ export const stepOf = (t: Site) => t.lvl ?? 0;
 
 /** The current order: fixed for the first five steps, then the goods the railway makes, a quarter bigger each step. */
 export function orderOf(g: Game, t: Site): Partial<Record<Good, number>> {
+  const o = orderBase(g, t);
+  if (!t.sea0) return o;
+  // towns by the sea with a fishing dock on their island order seafood too (more on a fishing island)
+  const L = stepOf(t), isl = g.world.islandOf[t.y * g.world.n + t.x]!, m = islandSpec(g, isl) === 'fish' ? 1.5 : 1;
+  return { ...o, fish: Math.round((20 + 15 * L) * m / 5) * 5 };
+}
+
+function orderBase(g: Game, t: Site): Partial<Record<Good, number>> {
   const L = stepOf(t);
   if (L < LADDER.length) return LADDER[L]!;
   const made = madeGoods(g), base = LADDER[LADDER.length - 1]!;
@@ -108,6 +117,8 @@ export function upgradeTown(g: Game, t: Site): string {
   if (price > g.s.money) return `Need $${(price - g.s.money).toLocaleString('en-US')} more to upgrade ${t.name}`;
   g.s.money -= price;
   t.lvl = stepOf(t) + 1; t.got = {}; t.filled = false;
+  const isl = g.world.islandOf[t.y * g.world.n + t.x];
+  t.sea0 = isCoastal(g, t) && (g.s.buildings ?? []).some(b => b.kind === 'dock' && (b.fish ?? 0) > 0 && g.world.islandOf[(b.y) * g.world.n + b.x] === isl) || undefined;
   return '';
 }
 

@@ -51,7 +51,7 @@ that makes sense. Details for each line: `legacy/CHANGES.md` (search the version
 - [ ] Scouting: drawn routes from towns/docks, pay per square, refunds, boats over sea
 - [ ] Docks/landings, dock upgrades (berths, storage, cranes, warehouse), fishing boats, shellfish (done: docks and landings, reach by sea, 3 levels of reach, sea charting, landings start their own railway; fishing boats, bigger fleet, shellfish traps; dock card tiles with Back pages; to do: berths/storage/cranes, seafood in coastal orders)
 - [ ] Ships: buy at docks, roaming, sea lanes only over mapped water, storms, ferrying trains (done: cargo ships $3,000 bought at a dock, roam between docks with sea routes, wait for half a hold, goods for another island go train → dock → ship → landing → island trains; ship a train over to a landing; to do: ship upgrades and hold types, ship card, storms, two-hop routes)
-- [ ] Island specialties (+50%), resources per island, regional capitals, trade orders, long-haul imports
+- [ ] Island specialties (+50%), resources per island, regional capitals, trade orders, long-haul imports (done: iron and oil only on outer islands, landing crews survey their island, specialties +50% with ★ labels, coastal seafood orders; to do: regional capitals, trade orders, long-haul imports)
 - [ ] Landmarks (old halt, lookout, falls, lighthouse, ranger hut, ruins) with small perks; shipwrecks; maps to buy
 - [ ] Town parks/projects, town specialties
 - [ ] Adaptive missions with Mira, opening story, guided lessons
