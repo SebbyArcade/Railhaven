@@ -5,6 +5,8 @@ import { type View, toWorld } from './camera.ts';
 import { drawFog } from './fog.ts';
 import { drawSites } from './sites.ts';
 import { drawHall } from './stations.ts';
+import { drawBreak, drawShed } from './shed.ts';
+import { shedSquare } from '../buildings/shed.ts';
 import { hallsOf } from '../buildings/stations.ts';
 import { landDistance } from '../track/rules.ts';
 import { TerrainCache } from './terrainCache.ts';
@@ -18,7 +20,7 @@ import { bodyPoint } from '../trains/train.ts';
 export class Renderer {
   readonly terrain: TerrainCache;
   constructor(private g: Game, private tools?: Tools) {
-    this.terrain = new TerrainCache(g.world, i => g.track.has(i));
+    this.terrain = new TerrainCache(g.world, i => g.track.has(i) || i === shedSquare(g));
     g.terrainDirty = sq => this.terrain.invalidate(sq);
   }
 
@@ -43,6 +45,8 @@ export class Renderer {
     const halls = hallsOf(g.track, n, g.s.sites);
     for (const h of halls) if (vis(h.squares[1]) && isRevealed(g, h.squares[1])) drawHall(ctx, g.s.seed, h, cam.z);
     drawSites(ctx, g, x0, y0, x1, y1, cam.z, tm, halls);
+    drawShed(ctx, g, tm);
+    for (const b of g.s.breaks ?? []) if (vis(b.square)) drawBreak(ctx, g, b, tm);
     drawTrains(ctx, g.net, g.s.trains, tm);
     this.drawOverlay(ctx, tm);
     drawFog(ctx, g, x0, y0, x1, y1, cam.z, tm);

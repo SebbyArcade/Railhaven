@@ -1,4 +1,5 @@
-import { newGame } from './game.ts';
+import { breaksChanged, newGame } from './game.ts';
+import { BREAK_TEXT, breakRail, tickBreaks } from './track/breaks.ts';
 import { hallAt, hallsOf } from './buildings/stations.ts';
 import { type View, toSquare, toWorld } from './render/camera.ts';
 import { Renderer } from './render/renderer.ts';
@@ -19,7 +20,7 @@ const params = new URLSearchParams(location.search);
 let game: Game = (!params.has('new') && loadFrom(localStorage)) || newGame(params.has('seed') ? +params.get('seed')! : undefined);
 const tools = new Tools(() => game);
 let renderer = new Renderer(game, tools);
-(window as any).railhaven = { get game() { return game; }, tools };
+(window as any).railhaven = { get game() { return game; }, tools, breakRail: (i: number) => { const b = breakRail(game, i); breaksChanged(game); return b; } };
 
 const view: View = { w: 0, h: 0 };
 let dpr = 1;
@@ -45,6 +46,9 @@ attachInput(canvas, () => game.s.camera, () => view, () => game.world.n * 32, {
     if (tools.tapSquare(i)) return;
     const n = game.world.n, x = i % n, y = (i / n) | 0;
     if (!isRevealed(game, i)) { toast('Unexplored fog. Scouting comes in a later stage.'); return; }
+    const br = game.s.breaks?.find(b => b.square === i);
+    if (br) { const s = Math.ceil(br.crewAt - game.s.t); toast(`${BREAK_TEXT[br.kind]}: trains go round or wait. ${s > 0 ? `Repair crew arrives in ${s} s` : `Repair crew at work, ${Math.ceil(br.doneAt - game.s.t)} s left`}`); return; }
+    if (game.s.shed && game.s.shed.x === x && game.s.shed.y === y) { toast('🏚 Engine shed: trains will be bought and kept here'); return; }
     const site = hallAt(hallsOf(game.track, n, game.s.sites), i)?.town ?? game.s.sites.find(s => Math.abs(s.x - x) <= 1 && Math.abs(s.y - y) <= 1);
     if (site) toast(site.kind === 'town' ? `🏘 ${site.name}` : site.kind === 'plot' ? `🚩 Settlement site: ${site.name}` : `⛏ ${site.res} deposit`);
     else toast(TERRAIN_NAMES[game.world.terr[i]!]!);
@@ -76,7 +80,7 @@ function updateUi() {
 let last = performance.now(), saveT = 0;
 function frame(now: number) {
   const dt = Math.min(0.1, (now - last) / 1000); last = now;
-  if (!document.hidden) { game.s.t += dt; game.sys.tick(dt); }
+  if (!document.hidden) { game.s.t += dt; game.sys.tick(dt); if (tickBreaks(game)) breaksChanged(game); }
   saveT += dt; if (saveT > 5) { saveT = 0; saveTo(localStorage, game); }
   renderer.draw(ctx, view, dpr, now / 1000);
   updateHud(hud, game);

@@ -21,10 +21,11 @@ const res = await page.evaluate(() => {
   const log = [];
   log.push(paint([[0, 0], [6, 0], [6, 4]]));          // east then a wide corner south
   log.push(paint([[6, 4], [0, 4], [0, 2]]));   // round to make a loop-ish line
-  log.push(paint([[3, 0], [3, 2]]));                   // a branch south from the main line
+  log.push(paint([[3, 0], [3, 3]]));                   // a branch south from the main line
   T.mode = 'double'; T.dbl.clear(); for (let x = 1; x <= 5; x++) T.dbl.add(sq(x, 4)); T.confirm();
   T.mode = 'train'; T.tapSquare(sq(2, 0)); T.mode = 'train'; T.tapSquare(sq(4, 4));
   T.mode = 'pan';
+  R.breakRail(sq(6, 2));
   const [a, b] = g.s.trains;
   if (a) g.sys.sendTo(a, sq(0, 2)); if (b) g.sys.sendTo(b, sq(3, 2));
   g.s.camera.x = (cx + 2.2) * 32; g.s.camera.y = (cy + 2.5) * 32; g.s.camera.z = 2.2;
@@ -33,7 +34,7 @@ const res = await page.evaluate(() => {
 console.log(JSON.stringify(res));
 const dbg = () => page.evaluate(() => window.railhaven.game.s.trains.map(t => ({ id: t.id, plan: t.plan.length, held: t.held, v: t.v, wait: t.wait, dest: t.dest, trail: t.trail.length, pause: t.pause })));
 console.log(JSON.stringify(await dbg()));
-for (const [k, wait] of [[1, 200], [2, 3000], [3, 6000], [4, 30000]]) { await page.waitForTimeout(wait); await page.screenshot({ path: `${out}/sandbox-${k}.png` }); }
+for (const [k, wait] of [[1, 200], [2, 3000], [3, 6000], [4, 50000]]) { await page.waitForTimeout(wait); await page.screenshot({ path: `${out}/sandbox-${k}.png` }); }
 console.log(JSON.stringify(await dbg()));
 await browser.close();
 if (errors.length) { console.error(errors.join('\n')); process.exit(1); }

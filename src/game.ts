@@ -7,6 +7,8 @@ import { buildNetwork, type Network } from './track/network.ts';
 import { trackFromSave, trackToSave } from './track/state.ts';
 import type { TrackMap } from './track/types.ts';
 import { TrainSystem } from './trains/train.ts';
+import { placeShed, shedSquare } from './buildings/shed.ts';
+import { blockedPieces } from './track/breaks.ts';
 import { networkKey, relocate, snapshot } from './trains/relocate.ts';
 
 export const START_MONEY = 12000;
@@ -38,6 +40,7 @@ function assemble(s: GameState): Game {
     for (const t of s.trains) if (t.at) relocate(net, t, t.at);
     s.netKey = networkKey(net);
   }
+  placeShed(g); g.sys.blocked = blockedPieces(g);
   for (const t of s.trains) if (t.dest !== undefined && t.plan.length === 0) g.sys.sendTo(t, t.dest);
   g.sys.rebuildHolds();
   return g;
@@ -75,7 +78,16 @@ export function trackChanged(g: Game) {
   g.net = makeNetwork(g.track, g.world.n, g.s.sites);
   g.sys.setNetwork(g.net);
   g.s.trains.forEach((t, k) => { relocate(g.net, t, where[k]!); });
+  g.s.breaks = g.s.breaks?.filter(b => g.track.has(b.square));
+  const oldShed = shedSquare(g); placeShed(g);
+  if (shedSquare(g) !== oldShed) g.terrainDirty?.([oldShed, shedSquare(g)].filter(i => i >= 0)); g.sys.blocked = blockedPieces(g);
   g.sys.rebuildHolds();
   for (const t of g.s.trains) if (t.dest !== undefined) g.sys.sendTo(t, t.dest);
   g.s.netKey = networkKey(g.net);
+}
+
+/** Broken rails came or went: trains plan around them again. */
+export function breaksChanged(g: Game) {
+  g.sys.blocked = blockedPieces(g);
+  for (const t of g.s.trains) if (t.dest !== undefined && !t.refuge) g.sys.sendTo(t, t.dest);
 }

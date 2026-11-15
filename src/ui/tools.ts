@@ -133,6 +133,13 @@ export class Tools {
   }
 
   confirm() {
+    const g = this.g(), shed = g.s.shed && `${g.s.shed.x},${g.s.shed.y}`;
+    this.doConfirm();
+    const now = g.s.shed && `${g.s.shed.x},${g.s.shed.y}`;
+    if (shed && now !== shed) toast(now ? '🏚 The engine shed moved beside the line' : '🏚 The engine shed needs a straight bit of line near Ashford');
+  }
+
+  private doConfirm() {
     const g = this.g();
     if (this.mode === 'rail' && this.plan) {
       const b = buildPlan(g, this.plan); if (typeof b === 'string') { toast(b); return; }

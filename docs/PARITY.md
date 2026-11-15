@@ -30,8 +30,8 @@ that makes sense. Details for each line: `legacy/CHANGES.md` (search the version
 - [x] Station halls (2 platform lanes, entered only at the ends, building per town size)
 - [x] Trains on rail pieces: no spin, reverse at dead ends, queue at signals, easing (plus: parked trains move aside, trains step aside when the way is blocked)
 - [ ] Bridges: trestle/stone/steel truss by depth, $500/$1,500/$3,500 per square, upkeep, never join two islands, max 3 from land / 8 long (done except upkeep, which comes with the economy)
-- [ ] Remove track square, route-cut warning, broken rail events + repair handcar
-- [ ] Engine shed with stalls beside the line
+- [ ] Remove track square, route-cut warning, broken rail events + repair handcar (done except the route-cut warning, which needs buildings)
+- [x] Engine shed with stalls beside the line (spare trains parked inside come with buying trains in stage 3)
 
 ## Stage 3: core loop
 - [ ] Industries: lumber camp (forest, trees deplete and regrow), wheat farm (fields), coal/stone/iron mines in mountains, oil well, fishing (docks)
