@@ -1,4 +1,5 @@
 import type { Game } from '../state.ts';
+import { dockRange, seaDist } from '../ships/docks.ts';
 import { isRevealed } from '../world/fog.ts';
 import { TILE } from '../world/terrain.ts';
 import { type View, toWorld } from './camera.ts';
@@ -65,6 +66,15 @@ export class Renderer {
     drawShed(ctx, g, tm); // after trains: a train on the siding runs in under its roof
     if (tm - this.planAt > 1) { this.planAt = tm; this.plan = shipPlan(g); } // the plan changes slowly: once a second is plenty
     if (this.tools?.card?.kind === 'bld') drawShipArrow(ctx, g, this.plan, this.tools.card.id, tm);
+    // an open dock card shows the sea it reaches
+    const open = this.tools?.card?.kind === 'bld' ? g.s.buildings?.find(b => b.id === this.tools!.card!.id) : undefined;
+    if (open?.kind === 'dock') {
+      const d = seaDist(g, open), R = dockRange(open), p = 0.5 + 0.5 * Math.sin(tm * 2);
+      for (let y = Math.max(0, y0); y <= Math.min(n - 1, y1); y++) for (let x = Math.max(0, x0); x <= Math.min(n - 1, x1); x++) {
+        const v = d[y * n + x]!; if (v < 0 || v > R) continue;
+        ctx.fillStyle = v > R - 2 ? `rgba(255,255,255,${0.25 + 0.2 * p})` : 'rgba(140,210,255,.14)'; ctx.fillRect(x * TILE, y * TILE, TILE, TILE);
+      }
+    }
     drawTownBadges(ctx, g, this.plan, cam.z, tm);
     this.drawOverlay(ctx, tm);
     drawFog(ctx, g, x0, y0, x1, y1, cam.z, tm);

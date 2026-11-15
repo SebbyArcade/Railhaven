@@ -1,4 +1,5 @@
 import type { Game, Site } from '../state.ts';
+import { dockReachError, landingSeeds } from '../ships/docks.ts';
 import { isRevealed } from '../world/fog.ts';
 import { T } from '../world/terrain.ts';
 import { isMountainFoot } from '../world/sites.ts';
@@ -13,6 +14,7 @@ export const GOODS = {
   iron: { name: 'Iron', icon: '🧲', value: 9 },
   oil: { name: 'Oil', icon: '🛢', value: 12 },
   wool: { name: 'Wool', icon: '🐑', value: 10 },
+  fish: { name: 'Fish', icon: '🐟', value: 9 },
   planks: { name: 'Planks', icon: '🪚', value: 14 },
   bricks: { name: 'Bricks', icon: '🧱', value: 14 },
   flour: { name: 'Flour', icon: '🍞', value: 18 },
@@ -36,6 +38,7 @@ export const INDUSTRIES = {
   iron: { name: 'Iron Mine', icon: '🧲', makes: 'iron', price: 1500, rate: 1.1, needs: 'an iron deposit (outer islands)' },
   oil: { name: 'Oil Well', icon: '🛢', makes: 'oil', price: 2500, rate: 0.6, needs: 'an oil seep (outer islands)' },
   wool: { name: 'Sheep Farm', icon: '🐑', makes: 'wool', price: 900, rate: 1.1, needs: 'open grassland for pasture' },
+  dock: { name: 'Dock', icon: '⚓', makes: 'fish', price: 4000, rate: 0, needs: 'a shore: its pier stands over the water, its yard on land', unlock: 1 },
   sawmill: { name: 'Sawmill', icon: '🪚', makes: 'planks', price: 2500, rate: 0.6, needs: 'open flat land', in: { wood: 1 }, unlock: 1 },
   brickworks: { name: 'Brickworks', icon: '🧱', makes: 'bricks', price: 2500, rate: 0.6, needs: 'open flat land', in: { stone: 1 }, unlock: 1 },
   gristmill: { name: 'Flour Mill', icon: '🍞', makes: 'flour', price: 2500, rate: 0.6, needs: 'open flat land', in: { farm: 1 }, unlock: 1 },
@@ -75,6 +78,8 @@ export interface Building {
   dep?: number;
   /** money paid for it and its levels (half comes back if it is removed) */
   paid?: number;
+  /** docks: how far out the sea is already charted */
+  chart?: number;
 }
 
 export const YARD_LEN = 4;
@@ -159,6 +164,8 @@ export function placeError(g: Game, b: Pick<Building, 'x' | 'y' | 'horizontal' |
     const dep = depositUnder(g, b);
     if (!dep) return `A ${info.name} must stand on ${info.needs}`;
     if (!isMountainFoot(g.world, dep.x, dep.y) && (b.kind === 'stone' || b.kind === 'coal')) return 'This deposit is not at the foot of mountains';
+  } else if (b.kind === 'dock') {
+    return dockReachError(g, b);
   } else if (b.kind === 'wool' && buildingSquares(n, b).some(i => t[i] !== T.Grass)) {
     return 'A Sheep Farm stands on grassland: move it off the hills and woods onto open grass';
   } else if (shareAt(g, b) < 2 / 6) {
@@ -182,7 +189,9 @@ function squareError(g: Game, b: Pick<Building, 'x' | 'y' | 'horizontal' | 'side
   const inRow = buildingSquares(n, b).includes(i); // mines dig into the mountain: their building row may stand on it
   if (x < 1 || y < 1 || x >= n - 1 || y >= n - 1) return 'Too close to the edge of the map';
   if (!isRevealed(g, i)) return 'Part of this spot is still in the fog: explore it first';
-  if (t[i] === T.Water) return 'Part of this spot is water: pick dry land';
+  const pier = b.kind === 'dock' && inRow;
+  if (pier && t[i] !== T.Water) return 'A dock\'s pier stands over the water: turn it so the green row is on the sea';
+  if (t[i] === T.Water && !pier) return b.kind === 'dock' ? 'A dock\'s yard track goes on the shore: turn it so the blue row is on land' : 'Part of this spot is water: pick dry land';
   if (t[i] === T.Mountain && !(MINES.has(b.kind) && inRow)) return MINES.has(b.kind) ? 'The blue loading track needs flat land: turn it so the green row is on the mountain and the blue row beside it' : 'The yard track can\'t go on mountain: turn it to the flat land';
   for (const o of g.s.buildings ?? []) if (footprint(n, o).includes(i)) return `The ${INDUSTRIES[o.kind].name} is in the way (red squares): move the outline to open land`;
   for (const s of g.s.sites) if (s.kind === 'town' && Math.abs(s.x - x) <= 1 && Math.abs(s.y - y) <= 1) return `Too close to ${s.name}: towns keep the squares around them free`;
@@ -266,7 +275,7 @@ export function joinYardEnds(g: Game, b: Building): number {
 }
 
 /** Output per second, stock cap (by level). */
-export const outputOf = (g: Game, b: Building) => isFactory(b.kind) ? 0.35 + 0.25 * b.lvl : INDUSTRIES[b.kind].rate * (1 + 0.5 * (b.lvl - 1)) * shareAt(g, b);
+export const outputOf = (g: Game, b: Building) => b.kind === 'dock' ? 0 : isFactory(b.kind) ? 0.35 + 0.25 * b.lvl : INDUSTRIES[b.kind].rate * (1 + 0.5 * (b.lvl - 1)) * shareAt(g, b);
 export const capOf = (b: Building) => 80 + 40 * (b.lvl - 1);
 
 /** Why linking neighbour squares a and b would break a yard (joined from its long side), or ''. */
@@ -286,6 +295,17 @@ export function linkedSquares(g: Game): Set<number> {
   const n = g.world.n, a = g.s.sites[0]!, start = a.y * n + a.x, out = new Set<number>();
   if (!g.track.has(start)) return out;
   const q = [start]; out.add(start);
+  // landings on other islands reached by sea from a dock already joined start their island's railway
+  for (let pass = 0; pass < 6; pass++) {
+    const before = out.size; flood(g, q, out);
+    for (const i of landingSeeds(g, out)) if (!out.has(i) && g.track.has(i)) { out.add(i); q.push(i); }
+    if (out.size === before) break;
+  }
+  return out;
+}
+
+function flood(g: Game, q: number[], out: Set<number>) {
+  const n = g.world.n;
   for (let h = 0; h < q.length; h++) {
     const i = q[h]!, sq = g.track.get(i)!;
     for (const [d, j] of [[0, i + 1], [1, i + n], [2, i - 1], [3, i - n]] as const) {

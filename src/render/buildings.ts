@@ -142,6 +142,7 @@ const FACTORY_ART = {
 const ART: Record<Building['kind'], Art> = {
   ...FACTORY_ART,
   wood: (ctx, tm, H, lvl) => lumberCamp(ctx, tm, H, lvl),
+  dock: (ctx, tm, H, lvl) => dockArt(ctx, tm, H, lvl),
   farm: (ctx, tm, H) => { // barn, silo, golden field rows
     house(ctx, -36, -1, 20, 14, '#a8402e', '#6e2a20'); ctx.fillStyle = '#efe6d2'; ctx.fillRect(-38, 3, 4, 3.5);
     ctx.fillStyle = '#c9c2b0'; ctx.beginPath(); ctx.arc(-18, -2, 5, 0, 7); ctx.fill(); ctx.fillStyle = '#8a8478'; ctx.beginPath(); ctx.arc(-18, -2, 2.4, 0, 7); ctx.fill();
@@ -330,4 +331,55 @@ function pithead(ctx: CanvasRenderingContext2D, tm: number, H: (k: number) => nu
   cottage(ctx, -4, -8, 9, 8, { wall: '#c8bfae', roof: '#4c4844', door: true });
   person(ctx, -12, 9, '#3a3a40', '#e0c040');
   void bush;
+}
+
+/**
+ * Dock: a plank pier on pilings over the water, a quayside crane swinging, crates and barrels, a harbour office,
+ * bollards with mooring ropes, and a little steamer bobbing at the berth (a second one from level 2).
+ */
+function dockArt(ctx: CanvasRenderingContext2D, tm: number, H: (k: number) => number, lvl: number) {
+  // pilings showing under the deck edge, with ripples
+  for (let u = -56; u <= 56; u += 8) {
+    ctx.fillStyle = 'rgba(255,255,255,.25)'; ctx.beginPath(); ctx.ellipse(u, 9.5 + Math.sin(tm * 2 + u) * 0.3, 2.6, 0.9, 0, 0, 7); ctx.fill();
+    ctx.fillStyle = '#4a3424'; ctx.fillRect(u - 0.9, 6, 1.8, 3.4);
+  }
+  // the deck: planks across, a darker edge beam
+  ctx.fillStyle = 'rgba(0,0,0,.3)'; ctx.fillRect(-59, -13, 118, 21);
+  ctx.fillStyle = '#9a7a52'; ctx.fillRect(-60, -14, 120, 20);
+  ctx.strokeStyle = 'rgba(60,40,20,.35)'; ctx.lineWidth = 0.35;
+  for (let u = -60; u <= 60; u += 2.2) { ctx.beginPath(); ctx.moveTo(u, -14); ctx.lineTo(u, 6); ctx.stroke(); }
+  for (let k = 0; k < 12; k++) { ctx.fillStyle = 'rgba(40,26,12,.35)'; ctx.fillRect(-58 + H(700 + k) * 116, -13 + H(710 + k) * 18, 0.6, 0.6); } // nail heads
+  ctx.fillStyle = '#5a4030'; ctx.fillRect(-60, 5, 120, 1.6);
+  // bollards with ropes out to the boat
+  for (const u of [-44, -8, 26]) { ctx.fillStyle = '#2e2a26'; ctx.beginPath(); ctx.arc(u, 4, 1.2, 0, 7); ctx.fill(); }
+  // the steamer at the berth: hull, deck, funnel with a red band, smoke
+  const boat = (u0: number, k: number) => {
+    const bob = Math.sin(tm * 1.6 + k) * 0.6, v0 = 13 + bob;
+    ctx.fillStyle = 'rgba(0,0,0,.25)'; ctx.beginPath(); ctx.ellipse(u0 + 1, v0 + 1.5, 15, 4.2, 0, 0, 7); ctx.fill();
+    ctx.fillStyle = '#2e3a4a'; ctx.beginPath(); ctx.moveTo(u0 - 15, v0 - 3); ctx.lineTo(u0 + 11, v0 - 3); ctx.quadraticCurveTo(u0 + 17, v0, u0 + 11, v0 + 3); ctx.lineTo(u0 - 15, v0 + 3); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#d8cdb4'; ctx.fillRect(u0 - 13, v0 - 2, 22, 4);
+    ctx.fillStyle = '#efe6d2'; ctx.fillRect(u0 - 6, v0 - 1.6, 8, 3.2);
+    ctx.fillStyle = '#6f93a8'; for (let w = 0; w < 3; w++) ctx.fillRect(u0 - 5 + w * 2.6, v0 - 0.4, 1.2, 0.9);
+    ctx.fillStyle = '#2a2420'; ctx.beginPath(); ctx.arc(u0 + 4, v0, 1.5, 0, 7); ctx.fill();
+    ctx.fillStyle = '#b8402e'; ctx.beginPath(); ctx.arc(u0 + 4, v0, 1.5, 0, 7); ctx.fill(); ctx.fillStyle = '#1e1a18'; ctx.beginPath(); ctx.arc(u0 + 4, v0, 0.8, 0, 7); ctx.fill();
+    puff(ctx, u0 + 4, v0 - 2, tm + k, true, 0.8);
+    ctx.strokeStyle = 'rgba(220,200,160,.8)'; ctx.lineWidth = 0.3; ctx.beginPath(); ctx.moveTo(u0 - 12, v0 - 3); ctx.lineTo(u0 - 14, 4); ctx.moveTo(u0 + 9, v0 - 3); ctx.lineTo(u0 + 12, 4); ctx.stroke();
+  };
+  boat(-26, 0); if (lvl >= 2) boat(30, 2);
+  // crates and barrels waiting on the quay
+  for (let k = 0; k < 6; k++) { const u = 8 + (k % 3) * 4, v = -12 + ((k / 3) | 0) * 4; ctx.fillStyle = '#8a6a40'; ctx.fillRect(u, v, 3.4, 3.4); ctx.strokeStyle = 'rgba(0,0,0,.35)'; ctx.lineWidth = 0.3; ctx.strokeRect(u, v, 3.4, 3.4); ctx.beginPath(); ctx.moveTo(u, v); ctx.lineTo(u + 3.4, v + 3.4); ctx.stroke(); }
+  for (let k = 0; k < 4; k++) { const u = 24 + k * 3.2; ctx.fillStyle = '#6a4a2e'; ctx.beginPath(); ctx.arc(u, -10, 1.4, 0, 7); ctx.fill(); ctx.strokeStyle = '#3a2a1e'; ctx.lineWidth = 0.3; ctx.beginPath(); ctx.arc(u, -10, 1, 0, 7); ctx.stroke(); }
+  // harbour office
+  cottage(ctx, 46, -5, 14, 11, { wall: '#e8e0cc', roof: '#3f5a7a', chimney: 0.6, tm, smoke: true });
+  // quay crane: a turning jib over the water with a hook and a sling of crates
+  const a = Math.PI / 2 + Math.sin(tm * 0.5) * 0.9, cu = -40, cv = -6, L = 16;
+  ctx.fillStyle = 'rgba(0,0,0,.3)'; ctx.fillRect(cu - 2.5, cv - 1.5, 6, 6);
+  ctx.fillStyle = '#b8862e'; ctx.fillRect(cu - 3, cv - 2, 6, 6);
+  const ju = cu + Math.cos(a) * L, jv = cv + Math.sin(a) * L * 0.8;
+  ctx.strokeStyle = 'rgba(0,0,0,.3)'; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.moveTo(cu + 1.5, cv + 2); ctx.lineTo(ju + 1.5, jv + 2); ctx.stroke();
+  ctx.strokeStyle = '#d0a020'; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(cu, cv); ctx.lineTo(ju, jv); ctx.stroke();
+  ctx.strokeStyle = '#7a5a10'; ctx.lineWidth = 0.3; for (let k = 1; k < 6; k++) { const p = k / 6; ctx.beginPath(); ctx.moveTo(cu + (ju - cu) * p - 0.6, cv + (jv - cv) * p); ctx.lineTo(cu + (ju - cu) * p + 0.6, cv + (jv - cv) * p + 0.8); ctx.stroke(); }
+  ctx.fillStyle = '#8a6a40'; ctx.fillRect(ju - 1.6, jv + 1.4, 3.2, 2.4);
+  ctx.strokeStyle = '#2e2a26'; ctx.lineWidth = 0.25; ctx.beginPath(); ctx.moveTo(ju, jv); ctx.lineTo(ju, jv + 1.4); ctx.stroke();
+  person(ctx, -30, -10, '#3f5a7a', '#2a3a4a'); person(ctx, 18, -2, '#a8402e');
 }

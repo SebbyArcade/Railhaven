@@ -44,6 +44,26 @@ export function buyTrain(g: Game): Train | string {
   return 'The shed siding is busy: try again in a moment';
 }
 
+/** Shipping a train over to another island costs this much on top of its price. */
+export const FERRY_FEE = 500;
+
+/** Buy a train for a landing's island: it comes over by boat and is set down on the landing's yard. */
+export function buyTrainAt(g: Game, dock: Building): Train | string {
+  const price = trainPrice(g) + FERRY_FEE;
+  if (!isLinked(g, dock)) return 'This landing is not reached by your docks yet';
+  if (price > g.s.money) return `Need $${(price - g.s.money).toLocaleString('en-US')} more for a train and its crossing`;
+  const yard = yardSquares(g.world.n, dock);
+  for (const sq of yard) for (const id of g.net.bySquare.get(sq) ?? []) for (const dir of [1, -1] as const) {
+    const t = placeTrain(g.net, g.s.nextId, { piece: id, dir }, 3);
+    const all = t.trail.flatMap(s => g.net.pieces[s.piece]!.squares);
+    if (!all.every(q => yard.includes(q))) continue; // the whole train on the yard
+    if (t.trail.some(s => g.sys.holder.has(s.piece) || g.sys.blocked.has(s.piece))) continue;
+    g.s.nextId++; g.s.money -= price; g.s.trains.push(t); g.sys.rebuildHolds();
+    return t;
+  }
+  return "The landing's yard is busy: try again in a moment";
+}
+
 /** Units of stock already promised to trains on their way to collect. */
 const claimed = (g: Game, b: Building) => g.s.trains.reduce((a, t) => a + (t.job?.src === b.id && t.job.phase === 'toLoad' ? trainCap(g) : 0), 0);
 
