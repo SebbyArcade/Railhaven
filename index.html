@@ -29,6 +29,8 @@
   #ok { background: #4caf50; color: #fff; } #ok:disabled { background: #555; color: #aaa; }
   #cancel { background: #5a4632; color: #ffe9c4; }
   #turn { background: #2f6f9a; color: #fff; display: none; }
+  #near { background: #8a5a2b; color: #fff; display: none; }
+  #confirm.two { flex-wrap: wrap; justify-content: flex-end; } #confirm.two span { flex: 1 1 100%; }
   .chip.pos { color: #9be28f; } .chip.neg { color: #ff9a85; }
   #card { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(max(10px, env(safe-area-inset-bottom)) + 56px); width: min(94vw, 440px); max-height: 52vh; overflow-y: auto; background: rgba(32,24,16,.96); border: 2px solid #c99a5b; border-radius: 16px; padding: 10px 12px 12px; box-sizing: border-box; display: none; font-size: 14px; }
   @media (min-width: 700px) { #card { left: auto; right: 10px; transform: none; top: 52px; bottom: 70px; max-height: none; width: 360px; } }
@@ -66,7 +68,7 @@
 <div id="toast"></div>
 <div id="hint"></div>
 <button id="undo">↶ Undo</button>
-<div id="confirm"><span id="ctext"></span><button id="turn">⟳ Turn</button><button id="ok">✓ Build</button><button id="cancel">✕</button></div>
+<div id="confirm"><span id="ctext"></span><button id="near">📍 Fit</button><button id="turn">⟳ Turn</button><button id="ok">✓ Build</button><button id="cancel">✕</button></div>
 <div id="buildMenu"></div>
 <div id="card"></div>
 <div id="bar">
