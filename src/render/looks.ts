@@ -12,6 +12,7 @@ export const PAINTS: Paint[] = [
   { k: 'gold', name: 'Golden express', xp: 1000, body: '#b8862e', roof: '#5a3f1e', band: '#fff0b8', beam: '#5a3f1e' },
   { k: 'purple', name: 'Royal purple', xp: 1300, body: '#5a2e6e', roof: '#3a1e48', band: '#e8c25a', beam: '#c0392b' },
   { k: 'silver', name: 'Silver streak', xp: 1650, body: '#9aa4ae', roof: '#5a646e', band: '#2c4f8a', beam: '#c0392b' },
+  { k: 'night', name: 'Midnight express', xp: 2100, body: '#1f2a44', roof: '#0f1626', band: '#f0d040', beam: '#e8e0cc' },
 ];
 
 export interface Theme { k: string; name: string; xp: number; roofs: string[]; walls: string[] }
@@ -22,6 +23,7 @@ export const THEMES: Theme[] = [
   { k: 'autumn', name: 'Autumn timber', xp: 700, roofs: ['#b8743a', '#a0602e', '#c88a40', '#8a5a2e', '#9a4a2a', '#b06a30'], walls: ['#d8b888', '#c9a272', '#e4c898', '#bf9a6a', '#d4ae7e', '#e8d0a8'] },
   { k: 'harbour', name: 'Painted harbour', xp: 950, roofs: ['#5a5e66', '#4c4844', '#6e4a36', '#5a5e66', '#3f5a7a', '#8a3e2c'], walls: ['#e8a8a0', '#a8d0e0', '#f0d890', '#b8dca8', '#e8c0e0', '#f4efe2'] },
   { k: 'alpine', name: 'Alpine chalets', xp: 1450, roofs: ['#3a2c22', '#4a3626', '#2e2620', '#56402c', '#3e3028', '#4c3a2a'], walls: ['#f4efe2', '#e8d6a8', '#f2e8d8', '#dcc8a8', '#efe4cc', '#e4dccf'] },
+  { k: 'royal', name: 'Royal capital', xp: 1900, roofs: ['#2f4a3a', '#3a5a46', '#26402f', '#46604e', '#2e4436', '#3c5440'], walls: ['#f4efe2', '#efe4cc', '#e8dcc0', '#f6f0e0', '#ece0c8', '#f0e8d4'] },
 ];
 
 /** What the player picked (set from their profile by the screen side). */

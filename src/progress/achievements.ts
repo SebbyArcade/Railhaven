@@ -1,7 +1,10 @@
 import type { Game } from '../state.ts';
 import { isFactory } from '../buildings/industries.ts';
 import { stepOf, townLinked } from '../economy/towns.ts';
-import { MAX_LVL } from '../economy/upgrades.ts';
+import { FISHING, FLEET, type FleetKey, fleetLvl, MAX_LVL } from '../economy/upgrades.ts';
+import { INDUSTRIES, type IndustryKind } from '../buildings/industries.ts';
+import { railDist } from '../economy/shipping.ts';
+import { hallOf } from '../buildings/stations.ts';
 import { RLV } from '../economy/dispatch.ts';
 import { ashford, msOf, reachedIslands } from './missions.ts';
 
@@ -23,11 +26,12 @@ export interface Profile {
 }
 export const emptyProfile = (): Profile => ({ medals: {}, orders: 0, seeds: [] });
 
-export type Group = 'start' | 'orders' | 'deliveries' | 'towns' | 'industry' | 'explore' | 'sea' | 'railway';
+export type Group = 'start' | 'orders' | 'deliveries' | 'towns' | 'industry' | 'upgrades' | 'explore' | 'sea' | 'track' | 'railway';
 export const GROUPS: { k: Group; icon: string; name: string }[] = [
   { k: 'start', icon: '🚩', name: 'First steps' }, { k: 'orders', icon: '📋', name: 'Orders' }, { k: 'deliveries', icon: '📦', name: 'Deliveries' },
-  { k: 'towns', icon: '🏘', name: 'Towns' }, { k: 'industry', icon: '🏭', name: 'Industry' }, { k: 'explore', icon: '🧭', name: 'Islands' },
-  { k: 'sea', icon: '⚓', name: 'Ships and sea' }, { k: 'railway', icon: '⭐', name: 'Railway' },
+  { k: 'towns', icon: '🏘', name: 'Towns' }, { k: 'industry', icon: '🏭', name: 'Buildings' }, { k: 'upgrades', icon: '⬆', name: 'Upgrades' },
+  { k: 'explore', icon: '🧭', name: 'Islands' }, { k: 'sea', icon: '⚓', name: 'Ships and sea' }, { k: 'track', icon: '🛤', name: 'Track' },
+  { k: 'railway', icon: '⭐', name: 'Railway' },
 ];
 
 export interface Medal { id: string; g: Group; icon: string; name: string; how: string; xp: number; prog: (g: Game, p: Profile) => [number, number] }
@@ -46,6 +50,16 @@ const dockIslands = (g: Game) => new Set(docks(g).map(b => g.world.islandOf[b.y 
 const explored = (g: Game) => { let n = 0; for (const v of g.s.fog) for (let b = v; b; b &= b - 1) n++; return n / (g.world.n * g.world.n); };
 const doubled = (g: Game) => g.s.track.filter(t => t[2]).length;
 const TOP_LVL = RLV.length - 1;
+const KINDS = Object.keys(INDUSTRIES) as IndustryKind[];
+const kindsBuilt = (g: Game) => new Set(blds(g).map(b => b.kind)).size;
+const mostOfOne = (g: Game) => Math.max(0, ...KINDS.map(k => blds(g).filter(b => b.kind === k).length));
+const fleetBought = (g: Game) => (Object.keys(FLEET) as FleetKey[]).reduce((a, k) => a + fleetLvl(g, k), 0);
+const fleetMax = (Object.keys(FLEET) as FleetKey[]).reduce((a, k) => a + FLEET[k].lv.length - 1, 0);
+/** the farthest track square from Ashford's station, in squares along the rails */
+function reach(g: Game) {
+  const h = hallOf(g.track, g.world.n, ashford(g)); if (!h) return 0;
+  const d = railDist(g, 'achAshford', h.squares); let m = 0; for (const v of d) if (v > m) m = v; return m;
+}
 function farShore(g: Game) {
   const r = reachedIslands(g);
   return g.s.sites.some(s => s.kind === 'dep' && (s.res === 'iron' || s.res === 'oil') && islandAt(g, s) !== g.world.home && r.has(islandAt(g, s)));
@@ -81,7 +95,18 @@ export const MEDALS: Medal[] = [
   { id: 'chain', g: 'industry', icon: '🔗', name: 'Full Chain', how: 'Get something a factory made to a town', xp: 25, prog: g => has(towns(g).some(t => PRODUCTS.some(k => (t.got?.[k] ?? 0) > 0 || (t.steady?.[k] ?? 0) > 0))) },
   { id: 'mines', g: 'industry', icon: '⛏', name: 'Down the Mine', how: 'Have a stone quarry, coal mine and iron mine in one game', xp: 25, prog: g => [(['stone', 'coal', 'iron'] as const).filter(k => blds(g).some(b => b.kind === k)).length, 3] },
   { id: 'oil', g: 'industry', icon: '🛢', name: 'Black Gold', how: 'Bring oil from an oil well to where it is needed', xp: 25, prog: g => has(blds(g).some(b => (b.inbuf?.oil ?? 0) > 0) || towns(g).some(t => (t.got?.oil ?? 0) > 0)) },
-  { id: 'maxlvl', g: 'industry', icon: '🏗', name: 'Big Works', how: `Raise any building to level ${MAX_LVL}`, xp: 25, prog: g => [Math.max(1, ...blds(g).map(b => b.lvl)), MAX_LVL] },
+  { id: 'kinds8', g: 'industry', icon: '🧰', name: 'Variety', how: 'Have 8 different kinds of building in one game', xp: 25, prog: g => [kindsBuilt(g), 8] },
+  { id: 'kindsall', g: 'industry', icon: '🗂', name: 'Collector', how: `Have every kind of building (${KINDS.length}) in one game`, xp: 75, prog: g => [kindsBuilt(g), KINDS.length] },
+  { id: 'same5', g: 'industry', icon: '🖐', name: 'Five of a Kind', how: 'Have 5 buildings of the same kind', xp: 25, prog: g => [mostOfOne(g), 5] },
+  { id: 'blds25', g: 'industry', icon: '🏘', name: 'Industrial Estate', how: 'Have 25 buildings in one game', xp: 25, prog: g => [blds(g).length, 25] },
+  { id: 'blds50', g: 'industry', icon: '🌇', name: 'Industrial Empire', how: 'Have 50 buildings in one game', xp: 50, prog: g => [blds(g).length, 50] },
+  { id: 'maxlvl', g: 'upgrades', icon: '🏗', name: 'Big Works', how: `Raise any building to level ${MAX_LVL}`, xp: 25, prog: g => [Math.max(1, ...blds(g).map(b => b.lvl)), MAX_LVL] },
+  { id: 'max10', g: 'upgrades', icon: '🏭', name: 'Fully Upgraded', how: `Have 10 buildings at level ${MAX_LVL}`, xp: 50, prog: g => [blds(g).filter(b => b.lvl >= MAX_LVL).length, 10] },
+  { id: 'fleet1', g: 'upgrades', icon: '🔧', name: 'Shed Work', how: 'Buy your first Engine shed upgrade', xp: 10, prog: g => has(fleetBought(g) > 0) },
+  { id: 'wagmax', g: 'upgrades', icon: '🚃', name: 'Heavy Haulers', how: 'Bigger wagons at their top level', xp: 25, prog: g => [fleetLvl(g, 'wag'), FLEET.wag.lv.length - 1] },
+  { id: 'engmax', g: 'upgrades', icon: '⚙', name: 'Express Diesel', how: 'Stronger engines at their top level', xp: 25, prog: g => [fleetLvl(g, 'eng'), FLEET.eng.lv.length - 1] },
+  { id: 'fleetmax', g: 'upgrades', icon: '🏆', name: 'Top of the Line', how: 'Every Engine shed upgrade at its top level', xp: 75, prog: g => [fleetBought(g), fleetMax] },
+  { id: 'fishmax', g: 'upgrades', icon: '🦞', name: 'Full Nets', how: 'Give a dock every fishing upgrade', xp: 25, prog: g => [Math.max(0, ...docks(g).map(b => b.fish ?? 0)), FISHING.length] },
   { id: 'island', g: 'explore', icon: '🏝', name: 'Land Ho', how: 'Reach your first new island', xp: 25, prog: g => [newIslands(g), 1] },
   { id: 'island3', g: 'explore', icon: '🧭', name: 'Island Hopper', how: 'Reach 3 new islands in one game', xp: 50, prog: g => [newIslands(g), 3] },
   { id: 'island5', g: 'explore', icon: '🗺', name: 'Archipelago', how: 'Reach 5 new islands in one game', xp: 50, prog: g => [newIslands(g), 5] },
@@ -92,6 +117,7 @@ export const MEDALS: Medal[] = [
   { id: 'map25', g: 'explore', icon: '🔭', name: 'Cartographer', how: 'Explore a quarter of the whole map', xp: 50, prog: g => [Math.floor(explored(g) * 100), 25] },
   { id: 'ship', g: 'sea', icon: '🚢', name: 'First Sailing', how: 'Get your first cargo ship', xp: 10, prog: g => has((g.s.ships ?? []).length > 0) },
   { id: 'fish', g: 'sea', icon: '🎣', name: 'Catch of the Day', how: 'Put fishing boats on a dock', xp: 10, prog: g => has(docks(g).some(b => (b.fish ?? 0) > 0)) },
+  { id: 'docks5', g: 'sea', icon: '🏗', name: 'Port Authority', how: 'Have 5 docks in one game', xp: 25, prog: g => [docks(g).length, 5] },
   { id: 'docks3', g: 'sea', icon: '⚓', name: 'Three Harbours', how: 'Have docks on 3 different islands', xp: 25, prog: g => [dockIslands(g), 3] },
   { id: 'ships5', g: 'sea', icon: '⛴', name: 'Merchant Fleet', how: 'Run 5 cargo ships at once', xp: 25, prog: g => [(g.s.ships ?? []).length, 5] },
   { id: 'ships10', g: 'sea', icon: '🛳', name: 'Shipping Line', how: 'Run 10 cargo ships at once', xp: 50, prog: g => [(g.s.ships ?? []).length, 10] },
@@ -103,8 +129,13 @@ export const MEDALS: Medal[] = [
   { id: 'mira', g: 'railway', icon: '🎯', name: "Mira's Favourite", how: "Finish 25 of Mira's missions in one game", xp: 25, prog: g => [msOf(g).done.length, 25] },
   { id: 'fleet', g: 'railway', icon: '🚃', name: 'Big Fleet', how: 'Run 20 trains at once', xp: 25, prog: g => [g.s.trains.length, 20] },
   { id: 'fleet40', g: 'railway', icon: '🚄', name: 'Rolling Stock', how: 'Run 40 trains at once', xp: 50, prog: g => [g.s.trains.length, 40] },
-  { id: 'track1000', g: 'railway', icon: '🛤', name: 'Iron Road', how: 'Lay 1,000 squares of track in one game', xp: 50, prog: g => [g.s.track.length, 1000] },
-  { id: 'double250', g: 'railway', icon: '═', name: 'Double the Line', how: 'Double 250 squares of track in one game', xp: 25, prog: g => [doubled(g), 250] },
+  { id: 'track100', g: 'track', icon: '🛤', name: 'Branch Line', how: 'Lay 100 squares of track in one game', xp: 10, prog: g => [g.s.track.length, 100] },
+  { id: 'track500', g: 'track', icon: '🚞', name: 'Main Line', how: 'Lay 500 squares of track in one game', xp: 25, prog: g => [g.s.track.length, 500] },
+  { id: 'track1000', g: 'track', icon: '🛤', name: 'Iron Road', how: 'Lay 1,000 squares of track in one game', xp: 50, prog: g => [g.s.track.length, 1000] },
+  { id: 'track2500', g: 'track', icon: '🌍', name: 'Coast to Coast', how: 'Lay 2,500 squares of track in one game', xp: 75, prog: g => [g.s.track.length, 2500] },
+  { id: 'reach60', g: 'track', icon: '📏', name: 'Long Haul', how: 'Run a line 60 squares out from Ashford, along the rails', xp: 25, prog: g => [reach(g), 60] },
+  { id: 'reach150', g: 'track', icon: '🧵', name: 'End of the Line', how: 'Run a line 150 squares out from Ashford, along the rails', xp: 50, prog: g => [reach(g), 150] },
+  { id: 'double250', g: 'track', icon: '═', name: 'Double the Line', how: 'Double 250 squares of track in one game', xp: 25, prog: g => [doubled(g), 250] },
   { id: 'games3', g: 'railway', icon: '🗂', name: 'Fresh Start', how: 'Play three different maps', xp: 10, prog: (_g, p) => [p.seeds.length, 3] },
 ];
 
