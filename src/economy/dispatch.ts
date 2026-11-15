@@ -9,7 +9,7 @@ import { bldDist, bldOf, destName, destSquares, dockKey, factoryRoom, payFor, ty
 import { isDock } from '../ships/docks.ts';
 import { tickShips } from '../ships/ships.ts';
 import { tickScouts } from '../world/explore.ts';
-import { tickMissions } from '../progress/missions.ts';
+import { reachedIslands, tickMissions } from '../progress/missions.ts';
 import { expressMul, fleetMulOf, minLoad, rushDelivered, trainCap } from './upgrades.ts';
 import { V_MAX } from '../trains/train.ts';
 import { isRev } from '../track/route.ts';
@@ -23,6 +23,23 @@ export const fleetMul = (n: number) => 1 + 0.03 * Math.max(0, n - 6);
 /** orders filled for each Railway level */
 export const RLV = [0, 2, 6, 12, 20, 30, 42, 56, 72, 90];
 export const railLevel = (orders: number) => { let L = 0; while (L + 1 < RLV.length && orders >= RLV[L + 1]!) L++; return L; };
+/** Railway levels that also need islands reached (Ashford Isle counts as one), as in the old game. */
+export const LEVEL_ISLANDS: Record<number, number> = { 5: 2, 7: 3, 9: 4 };
+/** The level orders would give, held back at the first level that needs more islands than you have reached. */
+export function levelNow(g: Game): { L: number; blocked?: { level: number; need: number; have: number } } {
+  const L = railLevel(g.s.orders ?? 0), have = reachedIslands(g).size;
+  for (let l = (g.s.rlv ?? 0) + 1; l <= L; l++) { const need = LEVEL_ISLANDS[l] ?? 0; if (need > have) return { L: l - 1, blocked: { level: l, need, have } }; }
+  return { L: Math.max(L, g.s.rlv ?? 0) };
+}
+/** Raise the Railway level when orders (and islands) allow it. It never goes down, so saves already past a level keep it. */
+export function checkLevel(g: Game) {
+  const { L, blocked } = levelNow(g);
+  if (L > (g.s.rlv ?? 0)) {
+    for (let l = (g.s.rlv ?? 0) + 1; l <= L; l++) { const b = 500 * l; pay(g, b); news(g, `⭐ Railway level ${l}! +$${b.toLocaleString('en-US')}${UNLOCKS[l] ? ' · new: ' + UNLOCKS[l] : ''}`); }
+    g.s.rlv = L;
+  }
+  if (blocked && g.s.sailNag !== blocked.level) { g.s.sailNag = blocked.level; news(g, `⛵ Time to sail: Railway level ${blocked.level} needs ${blocked.need} islands reached (you have ${blocked.have}). Build a ⚓ Dock and land on another island`); }
+}
 
 /** Price of the next train: $1,000 for the first six, then $250 more each (at most $2,500 before Railway level 3). */
 export function trainPrice(g: Game): number {
@@ -167,11 +184,7 @@ function unload(g: Game, t: Train) {
     const r = Math.round(reward(stepOf(town)) * fallsMul(g, town.x, town.y)); pay(g, r);
     g.s.orders = (g.s.orders ?? 0) + 1;
     news(g, `✅ ${town.name}'s order is filled! +$${r.toLocaleString('en-US')} · tap ⬆ to grow it into a ${sizeName(stepOf(town) + 1)}`);
-    const L = railLevel(g.s.orders);
-    if (L > (g.s.rlv ?? 0)) {
-      for (let l = (g.s.rlv ?? 0) + 1; l <= L; l++) { const b = 500 * l; pay(g, b); news(g, `⭐ Railway level ${l}! +$${b.toLocaleString('en-US')}${UNLOCKS[l] ? ' · new: ' + UNLOCKS[l] : ''}`); }
-      g.s.rlv = L;
-    }
+    checkLevel(g);
   }
   t.cargo = undefined; endJob(t);
 }
@@ -190,7 +203,7 @@ function nearestTown(g: Game, t: Train): { kind: 'town'; id: number } | null {
 /** Goods trains run themselves: each idle train collects the best waiting load and takes it where the plan says. */
 export function tickTrains(g: Game, dt: number) {
   tickShips(g, dt); tickScouts(g, dt);
-  if (Math.floor(g.s.t) !== Math.floor(g.s.t - dt)) tickMissions(g);
+  if (Math.floor(g.s.t) !== Math.floor(g.s.t - dt)) { tickMissions(g); if (Math.floor(g.s.t) % 5 === 0) checkLevel(g); } // reaching an island can let a held level through
   let plan: Plan | null = null;
   const P = () => (plan ??= shipPlan(g));
   const fm = fleetMul(g.s.trains.length) * fleetMulOf(g, 'rep');

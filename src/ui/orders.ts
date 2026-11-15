@@ -6,7 +6,7 @@ import { capOf, GOODS, type Good, INDUSTRIES, isFactory, isLinked } from '../bui
 import { factoryState } from '../economy/production.ts';
 import { orderDone, orderOf, orderProgress, sizeName, stepOf, townLinked, upgradePrice } from '../economy/towns.ts';
 import { bldDist, destSquares, shipPlan } from '../economy/shipping.ts';
-import { RLV, UNLOCKS } from '../economy/dispatch.ts';
+import { LEVEL_ISLANDS, levelNow, RLV, UNLOCKS } from '../economy/dispatch.ts';
 import { fmtMoney } from './hud.ts';
 import { bodyPoint } from '../trains/train.ts';
 import { TILE } from '../world/terrain.ts';
@@ -86,6 +86,9 @@ export function ordersHtml(g: Game): string {
   if (next !== undefined) {
     h += `<div class="row"><b class="ico">⭐</b><div class="grow"><div class="line"><span>Level ${L + 1}</span><span>${o} / ${next}</span></div>${bar((o - prev) / (next - prev), '#ffd27a')}`
       + `<small>${UNLOCKS[L + 1] ? `Unlocks ${UNLOCKS[L + 1]}` : 'Every order filled counts'}</small></div></div>`;
+    const bl = levelNow(g).blocked;
+    if (bl) h += `<div class="warn">⛵ Level ${bl.level} also needs ${bl.need} islands reached: you have ${bl.have}. Build a ⚓ Dock and land on another island</div>`;
+    else if (LEVEL_ISLANDS[L + 1]) h += `<small class="why">⛵ Level ${L + 1} also needs ${LEVEL_ISLANDS[L + 1]} islands reached (Ashford Isle counts as one)</small>`;
   } else h += `<div class="gift">⭐ Top Railway level: every order still pays</div>`;
   const stuck = stuckList(g);
   if (stuck.length) {
