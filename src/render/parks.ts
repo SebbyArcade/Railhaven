@@ -120,6 +120,21 @@ function drawPark(ctx: Ctx, g: Game, p: Park, zoom: number, tm: number) {
     if (zoom > 1.2) { person(ctx, u - 6, y + TILE - 3, '#7a3a8a'); person(ctx, u + 6, y + TILE - 3, '#2e2a26'); }
     if (zoom > 1) puff(ctx, u + 9, top + 6, tm * 0.6, false, 0.6);
   }
+  else if (p.k === 'foundry') {
+    // ⛰ a brick foundry: a long hall with a glowing furnace door, a tall smoking chimney, pig iron stacked outside
+    cottage(ctx, u - 2, y + 11, 20, 13, { wall: '#9c4a34', roof: '#3e3a38', walls: 'brick', storeys: 1, door: false });
+    const glow = 0.65 + 0.35 * Math.sin(tm * 5 + p.x);
+    ctx.fillStyle = '#2a1e16'; ctx.fillRect(u - 5, y + 13.5, 6, 4.5); // the furnace doorway
+    ctx.fillStyle = `rgba(255,${140 + 60 * glow},50,${0.8 * glow})`; ctx.fillRect(u - 4.4, y + 14.6, 4.8, 3.4);
+    ctx.fillStyle = `rgba(255,170,60,${0.2 * glow})`; ctx.beginPath(); ctx.arc(u - 2, y + 19, 5, 0, 7); ctx.fill(); // light on the ground
+    ctx.fillStyle = '#7a3a2a'; ctx.fillRect(u + 7, y + 1, 3.6, 13); ctx.fillStyle = '#2e2a26'; ctx.fillRect(u + 6.6, y + 0.4, 4.4, 1.4); // chimney
+    if (zoom > 0.8) for (let k = 0; k < 3; k++) puff(ctx, u + 8.8, y - 1 - k * 2, tm * 0.7 + k * 0.33, true, 0.8);
+    for (let k = 0; k < 3; k++) for (let j = 0; j <= k % 2; j++) { // pig iron bars
+      ctx.fillStyle = 'rgba(0,0,0,.25)'; ctx.fillRect(x + 5 + k * 5 + 0.5, y + TILE - 7 - j * 1.4 + 0.5, 4, 1.2);
+      ctx.fillStyle = j ? '#6e6a68' : '#5a5654'; ctx.fillRect(x + 5 + k * 5, y + TILE - 7 - j * 1.4, 4, 1.2);
+    }
+    if (zoom > 1.2) person(ctx, u + 4, y + TILE - 4, '#4a4440');
+  }
   if (zoom > 1.6) { fence(ctx, x + 2, y + TILE - 2, x + 9, y + TILE - 2); fence(ctx, x + TILE - 9, y + TILE - 2, x + TILE - 2, y + TILE - 2); }
   void pine;
 }

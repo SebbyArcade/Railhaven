@@ -10,22 +10,28 @@ import { hallsOf } from './stations.ts';
  * and gives a small lasting bonus to that town only. Parks make its orders smaller; projects make deliveries there
  * pay more (the Tram Line makes orders smaller instead). Nothing here earns money by itself.
  */
-export type ParkKind = 'park' | 'clock' | 'market' | 'tram' | 'theatre';
+export type ParkKind = 'park' | 'clock' | 'market' | 'tram' | 'theatre' | 'foundry';
 export interface Park { town: number; x: number; y: number; k: ParkKind }
 
 /** up to 3 parks per town, each making its orders 5% smaller */
 export const PARK_PRICE = [5000, 10000, 20000];
 export const PARK_ORDER = 0.05;
 
-export interface Project { k: Exclude<ParkKind, 'park'>; icon: string; name: string; price: number; size: number; pay?: number; order?: number; text: string }
+export interface Project { k: Exclude<ParkKind, 'park'>; icon: string; name: string; price: number; size: number; pay?: number; order?: number; text: string; /** Ashford only, from this Railway level */ ashford?: boolean; rlv?: number }
 /** size = the town's step it needs (2 Town, 3 City, 4 Metropolis) */
 export const PROJECTS: Project[] = [
+  // the old game's Ashford landmark: it casts the iron for tunnel linings, so track can cross mountains
+  { k: 'foundry', icon: '⛰', name: 'Foundry', price: 6000, size: 0, ashford: true, rlv: 2, text: 'Tunnels: track can cross mountains ($250 a square)' },
   { k: 'clock', icon: '🕰', name: 'Clock Tower', price: 15000, size: 2, pay: 0.10, text: 'Deliveries to this town pay 10% more' },
   { k: 'market', icon: '🛒', name: 'Market Hall', price: 30000, size: 3, pay: 0.15, text: 'Deliveries to this town pay 15% more' },
   { k: 'tram', icon: '🚋', name: 'Tram Line', price: 50000, size: 3, order: 0.05, text: 'Its orders are 5% smaller' },
   { k: 'theatre', icon: '🎭', name: 'Grand Theatre', price: 80000, size: 4, pay: 0.20, text: 'Deliveries to this town pay 20% more' },
 ];
 export const projectOf = (k: ParkKind) => PROJECTS.find(p => p.k === k);
+/** The projects a town can have (the Foundry is Ashford's alone). */
+export const projectsFor = (g: Game, t: Site) => PROJECTS.filter(P => !P.ashford || t === g.s.sites[0]);
+/** ⛰ Has Ashford built the Foundry? Then track may tunnel through mountains. */
+export const hasTunnels = (g: Game) => (g.s.parks ?? []).some(p => p.k === 'foundry');
 
 export const parksOf = (g: Game, t: Site) => (g.s.parks ?? []).filter(p => p.town === t.id && p.k === 'park');
 export const projectsOf = (g: Game, t: Site) => (g.s.parks ?? []).filter(p => p.town === t.id && p.k !== 'park');
@@ -91,6 +97,8 @@ export function buyPark(g: Game, t: Site): string {
 export function projectError(g: Game, t: Site, k: ParkKind): string {
   const P = projectOf(k); if (!P) return 'Unknown project';
   if (hasProject(g, t, k)) return `${t.name} already has a ${P.name}`;
+  if (P.ashford && t !== g.s.sites[0]) return `Only Ashford can build the ${P.name}`;
+  if (P.rlv && (g.s.rlv ?? 0) < P.rlv) return `Needs Railway level ${P.rlv}: fill more town orders`;
   if ((t.lvl ?? 0) < P.size) return `${t.name} must grow into a ${['Hamlet', 'Village', 'Town', 'City', 'Metropolis'][P.size]} first`;
   if (g.s.money < P.price) return `Need ${fmt(P.price - Math.floor(g.s.money))} more`;
   return '';

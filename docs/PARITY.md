@@ -26,7 +26,7 @@ that makes sense. Details for each line: `legacy/CHANGES.md` (search the version
 
 ## Stage 2: real rails and trains
 - [x] Track painting in Build → Build rails: square by square, attaches to network, cost + confirm, drag pans unless it starts on the network
-- [ ] Track costs by terrain; mountains need tunnels; no track through fog; undo except fog-revealing strokes (done except tunnels; track uncovers 3 squares around it)
+- [x] Track costs by terrain; mountains need tunnels; no track through fog; undo except fog-revealing strokes (track uncovers 3 squares around it; tunnels: the ⛰ Foundry in Ashford, Railway level 2, $6,000, then mountain track $250 a square)
 - [ ] Rail model: straights, wide smooth curves, gradual turnouts, crossings, double track, crossovers (done: straights, wide curves, double track, fans, gentle turnouts; to do: crossings, double-track turnouts)
 - [x] Station halls (2 platform lanes, entered only at the ends, building per town size)
 - [x] Trains on rail pieces: no spin, reverse at dead ends, queue at signals, easing (plus: parked trains move aside, trains step aside when the way is blocked)

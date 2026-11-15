@@ -207,6 +207,12 @@ export function importLegacy(o: any): ImportResult {
     report.push(`🌳 ${put} of ${oldParks.length} town parks and projects back in their towns${back ? ` · ${oldParks.length - put} had no room: ${fmt(back)} paid back` : ''}`);
   }
 
+  // the old ⛰ Foundry landmark: tunnels stay open, and it stands near Ashford again
+  if (o.lm?.foundry && !hasProject(g, sites[0]!, 'foundry')) {
+    const at = parkSpot(g, sites[0]!);
+    if (at) { (g.s.parks ??= []).push({ town: sites[0]!.id, ...at, k: 'foundry' }); g.taken = undefined; report.push('⛰ The Foundry stands in Ashford again: track can tunnel through mountains'); }
+    else { refund += projectOf('foundry')!.price; report.push(`⛰ No room near Ashford for the Foundry: ${fmt(projectOf('foundry')!.price)} paid back`); }
+  }
   g.s.money = (o.money ?? 0) + refund;
   g.news = []; // what the rebuild noticed while laying it all out (landmarks seen, seas charted) is old news
   report.push(`⭐ Railway level ${g.s.rlv} (${g.s.orders} orders filled) · 💰 ${fmt(g.s.money)}`);

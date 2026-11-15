@@ -84,6 +84,7 @@ export class Renderer {
     for (const b of g.s.breaks ?? []) if (vis(b.square)) drawBreak(ctx, g, b, tm);
     drawTrains(ctx, g.net, g.s.trains, tm);
     drawShed(ctx, g, tm); // after trains: a train on the siding runs in under its roof
+    this.drawTunnels(ctx, x0, y0, x1, y1); // after trains: they run into the hillside
     drawMishaps(ctx, g, tm, vis);
     drawShips(ctx, g, tm, (x, y) => x >= x0 - 2 && x <= x1 + 2 && y >= y0 - 2 && y <= y1 + 2 && !!isRevealed(g, Math.round(y) * n + Math.round(x)));
     drawExplore(ctx, g, this.tools, tm, (x, y) => x >= x0 - 2 && x <= x1 + 2 && y >= y0 - 2 && y <= y1 + 2, cam.z);
@@ -111,6 +112,42 @@ export class Renderer {
     const st = g.s.storm, fl = st && Math.hypot(st.x * TILE - cam.x, st.y * TILE - cam.y) * cam.z < Math.max(view.w, view.h) ? stormFlash(g, tm) : 0;
     if (fl) { ctx.fillStyle = `rgba(235,240,255,${fl})`; ctx.fillRect(0, 0, view.w, view.h); } // lightning
     const v = this.tools?.view; if (v) drawView(ctx, g, v, view, this.views.get(g, v, tm), tm, this.arrows);
+  }
+
+  /**
+   * ⛰ Tunnels: track on a mountain square is under the hillside, so the mountain is drawn again over the rails and any
+   * train inside, with a stone portal where the line runs in from open ground.
+   */
+  private drawTunnels(ctx: CanvasRenderingContext2D, x0: number, y0: number, x1: number, y1: number) {
+    const g = this.g, n = g.world.n, M = 4;
+    for (let y = Math.max(1, y0); y <= Math.min(n - 2, y1); y++) for (let x = Math.max(1, x0); x <= Math.min(n - 2, x1); x++) {
+      const i = y * n + x, sq = g.track.get(i); if (!sq || g.world.terr[i] !== M) continue;
+      this.terrain.drawSquareAt(ctx, x, y);
+    }
+    // a faint dashed line over the hill shows where the tunnel runs, like on a map
+    ctx.save(); ctx.strokeStyle = 'rgba(40,30,22,.45)'; ctx.lineWidth = 2; ctx.setLineDash([4, 4]); ctx.lineCap = 'round';
+    for (let y = Math.max(1, y0); y <= Math.min(n - 2, y1); y++) for (let x = Math.max(1, x0); x <= Math.min(n - 2, x1); x++) {
+      const i = y * n + x, sq = g.track.get(i); if (!sq || g.world.terr[i] !== M) continue;
+      const cx = (x + 0.5) * TILE, cy = (y + 0.5) * TILE;
+      for (let d = 0; d < 4; d++) if (sq.links & (1 << d)) { ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + [1, 0, -1, 0][d]! * TILE / 2, cy + [0, 1, 0, -1][d]! * TILE / 2); ctx.stroke(); }
+    }
+    ctx.restore();
+    for (let y = Math.max(1, y0); y <= Math.min(n - 2, y1); y++) for (let x = Math.max(1, x0); x <= Math.min(n - 2, x1); x++) {
+      const i = y * n + x, sq = g.track.get(i); if (!sq || g.world.terr[i] !== M) continue;
+      for (let d = 0; d < 4; d++) {
+        if (!(sq.links & (1 << d))) continue;
+        const j = (y + [0, 1, 0, -1][d]!) * n + x + [1, 0, -1, 0][d]!; if (g.world.terr[j] === M) continue;
+        const half = sq.dbl || g.track.get(j)?.dbl ? 17 : 10; // a wider bore for double track
+        ctx.save(); ctx.translate((x + 0.5) * TILE, (y + 0.5) * TILE); ctx.rotate(d * Math.PI / 2); ctx.translate(TILE / 2 - 3, 0);
+        ctx.fillStyle = 'rgba(0,0,0,.3)'; ctx.fillRect(-2, -half - 3, 6, half * 2 + 6);                  // shadow on the hillside
+        ctx.fillStyle = '#a59e92'; ctx.fillRect(-3, -half - 3, 5, half * 2 + 6);                         // the stone face
+        ctx.strokeStyle = 'rgba(60,54,46,.45)'; ctx.lineWidth = 0.4;
+        for (let k = -half - 1; k < half + 3; k += 3) { ctx.beginPath(); ctx.moveTo(-3, k); ctx.lineTo(2, k); ctx.stroke(); }
+        ctx.fillStyle = '#17130f'; ctx.fillRect(-3, -half + 1, 3.5, half * 2 - 2);                       // the dark bore
+        ctx.fillStyle = '#8a8276'; ctx.fillRect(-4, -half - 3, 1.6, half * 2 + 6);                       // the parapet edge
+        ctx.restore();
+      }
+    }
   }
 
   private noGo = { key: '', at: -9, set: [] as number[] };

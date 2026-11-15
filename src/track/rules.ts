@@ -2,8 +2,8 @@ import type { Game } from '../state.ts';
 import { isRevealed } from '../world/fog.ts';
 import { T } from '../world/terrain.ts';
 
-/** Track prices carried over from the old game: grass and forest $5, hills $15. Bridges by distance from land. */
-export const TRACK_COST = { flat: 5, hills: 15, bridge: [0, 500, 1500, 3500], double: 10 };
+/** Track prices carried over from the old game: grass and forest $5, hills $15, tunnels $250 (after the Foundry). Bridges by distance from land. */
+export const TRACK_COST = { flat: 5, hills: 15, tunnel: 250, bridge: [0, 500, 1500, 3500], double: 10 };
 /** A bridge may reach at most this many squares out from land, and be at most this long. */
 export const BRIDGE_MAX_FROM_LAND = 3;
 export const BRIDGE_MAX_LEN = 8;
@@ -32,7 +32,8 @@ export function squareCost(g: Game, i: number): number | string {
   const site = g.s.sites.find(s => s.x === x && s.y === y);
   if (site && site.kind !== 'town') return site.kind === 'plot' ? 'A settlement site: tap its 🚩 flag to found a town, then lay track onto it' : 'A deposit: build a mine on it instead';
   const t = g.world.terr[i]!;
-  if (t === T.Mountain) return 'Mountains block track (tunnels come later)';
+  if (t === T.Mountain) return (g.s.parks ?? []).some(p => p.k === 'foundry') ? TRACK_COST.tunnel // ⛰ the Foundry digs tunnels
+    : 'Mountains block track: build the ⛰ Foundry in Ashford (its card → Town projects) to dig tunnels';
   if (t === T.Water) {
     if (g.world.deep[i]) return 'Open sea: build a dock and use ships';
     const d = landDistance(g, i);
