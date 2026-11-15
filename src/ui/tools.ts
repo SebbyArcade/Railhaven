@@ -1,3 +1,4 @@
+import { shipPlace } from '../ships/ships.ts';
 import type { Game } from '../state.ts';
 import { MAX_SCOUTS, scoutCost, scoutStarts, scoutStepError, sendScout } from '../world/explore.ts';
 import { trackChanged } from '../game.ts';
@@ -256,6 +257,10 @@ export class Tools {
     for (const t of g.s.trains) for (let u = 0; u <= trainLength(t); u += 4) {
       const p = bodyPoint(g.net, t, u);
       if (Math.hypot(p.x - wx, p.y - wy) < 10) { this.selected = this.selected === t.id ? null : t.id; this.card = this.selected === null ? null : { kind: 'train', id: t.id }; return true; }
+    }
+    for (const s of g.s.ships ?? []) { // ships: a tap near the hull opens its card
+      const p = shipPlace(g, s);
+      if (Math.hypot((p.x + 0.5) * 32 - wx, (p.y + 0.5) * 32 - wy) < 16) { this.selected = null; this.card = this.card?.kind === 'ship' && this.card.id === s.id ? null : { kind: 'ship', id: s.id }; return true; }
     }
     return false;
   }

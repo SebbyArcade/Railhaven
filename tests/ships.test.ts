@@ -8,6 +8,7 @@ import { islandOfB } from '../src/ships/docks.ts';
 import { buyShip, SHIP_CAP, seaLanes } from '../src/ships/ships.ts';
 import type { Game } from '../src/state.ts';
 import { dockAndLanding, linkB } from './sea.ts';
+import { cardHtml } from '../src/ui/cards.ts';
 
 /** Build a building of this kind on an island, as near to a spot as fits, and join it to the railway there. */
 function buildNear(g: Game, kind: IndustryKind, isl: number, cx: number, cy: number): Building | null {
@@ -33,9 +34,16 @@ describe('cargo ships', () => {
     const money = g.s.money, s = buyShip(g, dock);
     expect(typeof s).not.toBe('string');
     expect(g.s.money).toBe(money - 3000);
-    for (let k = 0; k < 20 * 400 && !(landing.landed?.wood); k++) tickTrains(g, 0.05);
+    let mid = '';
+    for (let k = 0; k < 20 * 400 && !(landing.landed?.wood); k++) { tickTrains(g, 0.05); if (!mid && (s as { to?: number; hold: unknown[] }).to !== undefined) mid = cardHtml(g, { kind: 'ship', id: (s as { id: number }).id })!; }
+    expect(mid).toContain('Sailing from');
+    expect(mid).toContain('40 wood');
     expect(landing.landed?.wood).toBe(40);
     expect(dock.outq.length).toBe(0);
+    // its card says where it is and what it carries
+    const card = cardHtml(g, { kind: 'ship', id: (s as { id: number }).id })!;
+    expect(card).toContain('Cargo ship 1');
+    expect(card).toMatch(/At |Sailing from/);
     expect(SHIP_CAP).toBe(80);
   });
 

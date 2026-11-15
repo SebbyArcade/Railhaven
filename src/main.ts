@@ -19,7 +19,7 @@ import { gameReport } from './ui/report.ts';
 import { buyFleet, FLEET, type FleetKey, fleetLvl, refundOf, removeBuilding, rushOf, sellOffer, sellStock, toggleRush, upgradeBuilding } from './economy/upgrades.ts';
 import { foundTown, sizeName, tickTowns, upgradeTown } from './economy/towns.ts';
 import { buyTrainAt, tickTrains } from './economy/dispatch.ts';
-import { buyShip } from './ships/ships.ts';
+import { buyShip, shipPlace } from './ships/ships.ts';
 import { POI, poisOf } from './world/explore.ts';
 import { buyFishing, FISHING } from './economy/upgrades.ts';
 import { checkStuck } from './economy/nofail.ts';
@@ -119,8 +119,9 @@ cardEl.onclick = e => {
   }
   if (b.dataset.act === 'loadfile') { filePick.click(); return; }
   if (b.dataset.act === 'open') { // from the Orders board: show the place on the map and open its card
-    const kind = b.dataset.kind as 'town' | 'bld' | 'train', id = +b.dataset.id!, c = game.s.camera;
-    const at = kind === 'town' ? game.s.sites.find(s => s.id === id) : kind === 'bld' ? game.s.buildings?.find(x => x.id === id) : null;
+    const kind = b.dataset.kind as 'town' | 'bld' | 'train' | 'ship', id = +b.dataset.id!, c = game.s.camera;
+    const sh = kind === 'ship' ? game.s.ships?.find(x => x.id === id) : undefined;
+    const at = kind === 'town' ? game.s.sites.find(s => s.id === id) : kind === 'bld' ? game.s.buildings?.find(x => x.id === id) : sh ? shipPlace(game, sh) : null;
     if (at) { c.x = (at.x + 0.5) * 32; c.y = (at.y + 0.5) * 32; }
     openCard({ kind, id } as Card); return;
   }
