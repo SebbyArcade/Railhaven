@@ -1,5 +1,6 @@
 import type { Game } from '../state.ts';
 import { capOf, inputsOf, isFactory, isLinked, outputOf } from '../buildings/industries.ts';
+import { catchOf } from './upgrades.ts';
 
 /**
  * Industries joined to the railway fill their stock while they have room. Factories make their product from the
@@ -8,6 +9,12 @@ import { capOf, inputsOf, isFactory, isLinked, outputOf } from '../buildings/ind
 export function tickProduction(g: Game, dt: number) {
   for (const b of g.s.buildings ?? []) {
     if (!isLinked(g, b)) continue;
+    if (b.kind === 'dock') { // fishing boats land their catch at the dock, up to what it holds
+      if (!b.fish) continue;
+      const c = catchOf(b.fish), l = (b.landed ??= {});
+      for (const k of ['fish', 'shellfish'] as const) if (c[k]) l[k] = Math.min(capOf(b), (l[k] ?? 0) + c[k] * dt);
+      continue;
+    }
     const room = capOf(b) - b.stock;
     if (room <= 0) continue;
     if (!isFactory(b.kind)) { b.stock = Math.min(capOf(b), b.stock + outputOf(g, b) * dt); continue; }

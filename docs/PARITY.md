@@ -35,9 +35,9 @@ that makes sense. Details for each line: `legacy/CHANGES.md` (search the version
 - [x] Engine shed with stalls beside the line (spare trains parked inside come with buying trains in stage 3)
 
 ## Stage 3: core loop
-- [ ] Industries: lumber camp (forest, trees deplete and regrow), wheat farm (fields), coal/stone/iron mines in mountains, oil well, fishing (docks) (done: all but fishing; to do: trees deplete and regrow)
+- [ ] Industries: lumber camp (forest, trees deplete and regrow), wheat farm (fields), coal/stone/iron mines in mountains, oil well, fishing (docks) (done: all, fishing from docks; to do: trees deplete and regrow)
 - [ ] 2x4 yards with in/out loading tracks, more tracks by level, building art grows by level (done: yards with two loading tracks, art per kind; to do: more tracks by level)
-- [ ] Factories (Sawmill, Brickworks, Gristmill, Steel Mill, Refinery, Cannery, Textile Mill...), 1 raw → 1 product, unlock by Railway level (done: all but the Cannery, which comes with docks; factory levels come with upgrades)
+- [ ] Factories (Sawmill, Brickworks, Gristmill, Steel Mill, Refinery, Cannery, Textile Mill...), 1 raw → 1 product, unlock by Railway level (done: all, Cannery fish → canned fish at Railway level 2)
 - [x] Towns: order ladder Hamlet → Village → Town → City → Metropolis → Megacity → endless; tap to upgrade; steady buying after orders (specialties come with islands)
 - [ ] Shipping plan: each building ships to the nearest place that needs it, arrows on the map, pins (done: plan shared nearest-first with factories, arrow from an open building card; to do: pins)
 - [x] Pay per unit grows with distance (PAY .41), no passive income, train upkeep
@@ -49,7 +49,7 @@ that makes sense. Details for each line: `legacy/CHANGES.md` (search the version
 
 ## Stage 4: islands and sea
 - [ ] Scouting: drawn routes from towns/docks, pay per square, refunds, boats over sea
-- [ ] Docks/landings, dock upgrades (berths, storage, cranes, warehouse), fishing boats, shellfish (done: docks and landings, reach by sea, 3 levels of reach, sea charting, landings start their own railway; to do: berths/storage/cranes, fishing, shellfish)
+- [ ] Docks/landings, dock upgrades (berths, storage, cranes, warehouse), fishing boats, shellfish (done: docks and landings, reach by sea, 3 levels of reach, sea charting, landings start their own railway; fishing boats, bigger fleet, shellfish traps; dock card tiles with Back pages; to do: berths/storage/cranes, seafood in coastal orders)
 - [ ] Ships: buy at docks, roaming, sea lanes only over mapped water, storms, ferrying trains (done: cargo ships $3,000 bought at a dock, roam between docks with sea routes, wait for half a hold, goods for another island go train → dock → ship → landing → island trains; ship a train over to a landing; to do: ship upgrades and hold types, ship card, storms, two-hop routes)
 - [ ] Island specialties (+50%), resources per island, regional capitals, trade orders, long-haul imports
 - [ ] Landmarks (old halt, lookout, falls, lighthouse, ranger hut, ruins) with small perks; shipwrecks; maps to buy

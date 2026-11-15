@@ -15,12 +15,14 @@ export const GOODS = {
   oil: { name: 'Oil', icon: '🛢', value: 12 },
   wool: { name: 'Wool', icon: '🐑', value: 10 },
   fish: { name: 'Fish', icon: '🐟', value: 9 },
+  shellfish: { name: 'Shellfish', icon: '🦞', value: 16 },
   planks: { name: 'Planks', icon: '🪚', value: 14 },
   bricks: { name: 'Bricks', icon: '🧱', value: 14 },
   flour: { name: 'Flour', icon: '🍞', value: 18 },
   steel: { name: 'Steel', icon: '⚙️', value: 30 },
   fuel: { name: 'Fuel', icon: '⛽', value: 45 },
   cloth: { name: 'Cloth', icon: '🧵', value: 24 },
+  cans: { name: 'Canned fish', icon: '🥫', value: 22 },
 } as const;
 export type Good = keyof typeof GOODS;
 
@@ -45,6 +47,7 @@ export const INDUSTRIES = {
   mill: { name: 'Steel Mill', icon: '⚙️', makes: 'steel', price: 2500, rate: 0.6, needs: 'open flat land', in: { coal: 1, iron: 1 }, unlock: 2 },
   refinery: { name: 'Refinery', icon: '⛽', makes: 'fuel', price: 2500, rate: 0.6, needs: 'open flat land', in: { oil: 1 }, unlock: 2 },
   textile: { name: 'Textile Mill', icon: '🧵', makes: 'cloth', price: 2500, rate: 0.6, needs: 'open flat land', in: { wool: 1 }, unlock: 3 },
+  cannery: { name: 'Cannery', icon: '🥫', makes: 'cans', price: 2500, rate: 0.6, needs: 'open flat land', in: { fish: 1 }, unlock: 2 },
 } as const satisfies Record<string, KindInfo>;
 export type IndustryKind = keyof typeof INDUSTRIES;
 export const info = (k: IndustryKind): KindInfo => INDUSTRIES[k];
@@ -82,6 +85,8 @@ export interface Building {
   chart?: number;
   /** docks: goods a ship brought, waiting for this island's trains */
   landed?: Partial<Record<Good, number>>;
+  /** docks: fishing level (0 = no boats; 1 boats, 2 bigger fleet, 3 shellfish traps too) */
+  fish?: number;
   /** docks: goods waiting for a ship to another dock */
   outq?: import('../ships/ships.ts').SeaLoad[];
 }

@@ -4,7 +4,7 @@ import type { Game } from '../state.ts';
 import { TILE } from '../world/terrain.ts';
 import { bush, cottage, logEnd, logSide, person, puff } from './art.ts';
 
-const CRATE: Record<string, string> = { wood: '#8a5a2e', farm: '#d8b44a', stone: '#9a958c', coal: '#2e2b28', iron: '#8a5a4a', oil: '#3a3a48', wool: '#efeadf', sawmill: '#e0b878', brickworks: '#b5523b', gristmill: '#f4efe2', mill: '#9aa0a8', refinery: '#4a4a58', textile: '#5a7ab0' };
+const CRATE: Record<string, string> = { wood: '#8a5a2e', farm: '#d8b44a', stone: '#9a958c', coal: '#2e2b28', iron: '#8a5a4a', oil: '#3a3a48', wool: '#efeadf', sawmill: '#e0b878', brickworks: '#b5523b', gristmill: '#f4efe2', mill: '#9aa0a8', refinery: '#4a4a58', textile: '#5a7ab0', cannery: '#c0c6cc' };
 
 /**
  * An industry in its yard, as a little model: a loading platform along the yard, the building and its props on the
@@ -135,6 +135,12 @@ const FACTORY_ART = {
     for (let k = 0; k < 3; k++) { ctx.fillStyle = '#f2eee4'; ctx.beginPath(); ctx.ellipse(-50 + k * 5, 8, 2.4, 2, 0, 0, 7); ctx.fill(); }
     const cols = ['#c0392b', '#2f6f9a', '#e8a33c', '#5a9a4a'];
     for (let k = 0; k < 2 + lvl; k++) { ctx.fillStyle = cols[k % 4]!; ctx.fillRect(18 + (k % 3) * 8, 6 - Math.floor(k / 3) * 5, 7, 3.4); ctx.fillStyle = 'rgba(255,255,255,.3)'; ctx.fillRect(18 + (k % 3) * 8, 6 - Math.floor(k / 3) * 5, 7, 0.8); }
+    void H;
+  },
+  cannery: (ctx, tm, H, lvl) => { // a white-washed packing shed by the water, a steam boiler, fish boxes in, stacks of tins out
+    hall(ctx, tm, -18, 44, '#e6e2d6', '#3f6a8a', true, lvl);
+    for (let k = 0; k < 3; k++) { ctx.fillStyle = '#5a8aa8'; ctx.fillRect(-50 + k * 5, 6, 4, 3); ctx.fillStyle = 'rgba(255,255,255,.5)'; ctx.fillRect(-50 + k * 5, 6, 4, 0.8); }
+    for (let k = 0; k < 3 + lvl * 2; k++) { const u = 20 + (k % 4) * 4, v = 7 - Math.floor(k / 4) * 3; ctx.fillStyle = '#c0c6cc'; ctx.beginPath(); ctx.arc(u, v, 1.5, 0, 7); ctx.fill(); ctx.fillStyle = '#c0392b'; ctx.fillRect(u - 1.5, v - 0.4, 3, 0.8); }
     void H;
   },
 } satisfies Record<string, Art>;
