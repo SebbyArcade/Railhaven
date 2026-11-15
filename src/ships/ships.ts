@@ -181,7 +181,30 @@ export function tickShips(g: Game, dt: number) {
       const d = dockOf(g, r.id)!; if (ships.some(o => o !== s && (o.to === d.id || (o.to === undefined && o.at === d.id)))) continue;
       const n = [...waitingAt(d).values()].reduce((a, b) => a + b, 0); if (n > fn) { fn = n; far = d; }
     }
+    far ??= farther(g, ships, s, at, L()); // none next door: head toward the nearest dock further along the routes with goods waiting
     if (far) sail(g, s, at, far); else s.wait = SHIP_IDLE;
+  }
+}
+
+/**
+ * The first dock on the way to the nearest dock (by sea, over the routes) with goods waiting that no ship is at or
+ * heading to: so ships at one end of the sea routes come to collect goods piling up two or more routes away.
+ */
+function farther(g: Game, ships: CargoShip[], s: CargoShip, at: Building, lanes: Lane[]): Building | null {
+  const dist = new Map<number, number>([[at.id, 0]]), first = new Map<number, number>(), done = new Set<number>();
+  for (;;) {
+    let cur = -1, cd = Infinity;
+    for (const [id, d] of dist) if (!done.has(id) && d < cd) { cd = d; cur = id; }
+    if (cur < 0) return null;
+    done.add(cur);
+    if (cur !== at.id) {
+      const d = dockOf(g, cur);
+      if (d && [...waitingAt(d).values()].some(n => n > 0) && !ships.some(o => o !== s && (o.to === cur || (o.to === undefined && o.at === cur)))) return dockOf(g, first.get(cur)!) ?? null;
+    }
+    for (const r of lanesFrom(g, cur, lanes)) {
+      const nd = cd + r.d; if (nd >= (dist.get(r.id) ?? Infinity)) continue;
+      dist.set(r.id, nd); first.set(r.id, cur === at.id ? r.id : first.get(cur)!);
+    }
   }
 }
 

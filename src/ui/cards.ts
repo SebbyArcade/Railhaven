@@ -4,6 +4,7 @@ import { fallsMul, POI, POI_RARITY, poisOf, RARITY } from '../world/explore.ts';
 import { buildingSquares, yardSquares, bufOf, growsTracks, stripError, tracksOf, type Building, capOf, GOODS, type Good, INDUSTRIES, type IndustryKind, inputsOf, isFactory, isLinked, lockedText, outputOf, shareAt, forestOf, stumpsOf } from '../buildings/industries.ts';
 import { factoryState } from '../economy/production.ts';
 import { hasProject, nextParkPrice, orderMul, PARK_PRICE, parkSpot, parksOf, payMul, projectsFor, projectsOf, rewardMul } from '../buildings/parks.ts';
+import { isCapital, islandOfSite, regions, tradeOf, tradeReward, tradeWhy } from '../economy/trade.ts';
 import { FOUND_PRICE, orderDone, orderOf, reward, sizeName, steadyGoods, stepOf, townLinked, upgradePrice } from '../economy/towns.ts';
 import { type Dest, destinationsOf, destName, type Ship, shipPlan, siteOf } from '../economy/shipping.ts';
 import { FERRY_FEE, islandOfTrain, spareTrains, trainPrice, trainStatus } from '../economy/dispatch.ts';
@@ -63,7 +64,7 @@ export function cardHtml(g: Game, c: Card, view?: MapView | null): string | null
 
 function townCard(g: Game, t: Site, page?: string): string {
   const L = stepOf(t), o = orderOf(g, t), linked = townLinked(g, t), plan = shipPlan(g);
-  let h = `<div class="head"><b class="big">🏘</b><div><h2>${esc(t.name ?? 'Town')}</h2><span class="chip2">${sizeName(L)}</span> <span class="chip2">👥 ${Math.floor(t.pop ?? 0)}</span></div></div>`;
+  let h = `<div class="head"><b class="big">🏘</b><div><h2>${esc(t.name ?? 'Town')}</h2><span class="chip2">${sizeName(L)}</span> <span class="chip2">👥 ${Math.floor(t.pop ?? 0)}</span>${linked && isCapital(g, t) && g.s.caps && Object.keys(g.s.caps).length ? ` <span class="chip2">👑 Capital of ${esc(islandName(g, islandOfSite(g, t)))}</span>` : ''}</div></div>`;
   if (page === 'parks' || page === 'projects') return h + townPage(g, t, page);
   if (!linked) h += `<div class="warn">🔌 Not on the railway yet: ${hallOf(g.track, g.world.n, t, g.world.terr) ? 'join your line to either end of its station' : 'lay track straight across its square, past it beside it, or ending right beside it'} (🛤 Rails shows where with arrows)</div>`;
   const done = orderDone(g, t);
@@ -79,6 +80,7 @@ function townCard(g: Game, t: Site, page?: string): string {
     h += `<button class="act" data-act="upgrade" data-id="${t.id}" ${can ? '' : 'disabled'}>⬆ Grow into a ${sizeName(L + 1)} · ${fmtMoney(p)}</button>`;
     if (!can) h += `<small class="why">Need ${fmtMoney(p - g.s.money)} more: deliveries keep paying</small>`;
   } else { const fm = fallsMul(g, t.x, t.y), cm = rewardMul(g); h += `<div class="gift">🎁 ${fmtMoney(Math.round(reward(L) * fm * cm))} when the order is filled${fm > 1 ? ' (💧 Silver Falls +10%)' : ''}${cm > 1 ? ' (⛪ Cathedral +5%)' : ''}</div>`; }
+  if (linked) h += tradeHtml(g, t, plan);
   const st = steadyGoods(t, g);
   if (st.length) h += `<h3>🛒 Keeps buying</h3><div class="chips">${st.map(k => `<span class="chip2">${GOODS[k].icon} ${GOODS[k].name}</span>`).join('')}</div>`;
   const coming = g.s.trains.filter(x => x.job && sameDest(x.job.to, { kind: 'town', id: t.id })).length;
@@ -91,6 +93,34 @@ function townCard(g: Game, t: Site, page?: string): string {
     h += `<div class="tiles">` + tile('parks', '🌳', 'Parks', `${np} / ${PARK_PRICE.length}${np ? ` · orders −${np * 5}%` : ''}`) + tile('projects', '🏛', 'Town projects', `${pj} / ${projectsFor(g, t).length}`) + `</div>`;
   }
   return h;
+}
+
+/** A capital's 🤝 trade order: what it wants from which island, how far along, and why nothing comes. */
+function tradeHtml(g: Game, t: Site, plan: ReturnType<typeof shipPlan>): string {
+  if (!isCapital(g, t)) return '';
+  const o = tradeOf(g, t);
+  if (!o) {
+    if (t !== g.s.sites[0] || regions(g).size > 1) return '';
+    return `<div class="note">🤝 Trade between islands: link a town on another island and join the two by a ship route. Each island's 👑 capital then orders goods only the other island makes.</div>`;
+  }
+  const G = GOODS[o.good], from = esc(islandName(g, o.from)), why = tradeWhy(g, t, o);
+  let h = `<h3>🤝 Trade order ${o.n}</h3>`;
+  h += `<div class="row"><b class="ico">${G.icon}</b><div class="grow"><div class="line"><span>${G.name} from ${from}</span><span>${o.got} / ${o.need}</span></div>${bar(o.got / o.need, '#6bb8e8')}<small>${why ? `⚠ ${why}` : tradeSource(g, plan, t, o.good, o.from)}</small></div></div>`;
+  h += `<div class="gift">🎁 ${fmtMoney(Math.round(tradeReward(o.n) * rewardMul(g)))} when it is filled, and it counts as a filled order. Optional: ${esc(t.name ?? 'the town')} grows without it.</div>`;
+  return h;
+}
+
+/** Where a trade order's goods are: on trains here, on a ship, or being sent over from the far island. */
+function tradeSource(g: Game, plan: ReturnType<typeof shipPlan>, t: Site, k: Good, from: number): string {
+  const to = { kind: 'town' as const, id: t.id }, here = islandOfSite(g, t);
+  const coming = g.s.trains.filter(x => x.job && sameDest(x.job.to, to) && x.job.good === k).length;
+  if (coming) return `🚂 ${coming} train${coming > 1 ? 's' : ''} bringing it now`;
+  const afloat = (g.s.ships ?? []).reduce((a, s) => a + s.hold.filter(q => q.good === k).reduce((b, q) => b + q.n, 0), 0);
+  if (afloat) return `🚢 ${afloat} on a ship now`;
+  const sent = (g.s.buildings ?? []).some(b => islandOfB(g, b) === from && INDUSTRIES[b.kind].makes === k && plan.get(b.id)?.sea !== undefined
+    && islandOfB(g, g.s.buildings!.find(d => d.id === plan.get(b.id)!.sea)!) === here);
+  if (sent) return `⛴ ${esc(islandName(g, from))} sends it to its dock for a ship`;
+  return `🔀 ${esc(islandName(g, from))}'s ${GOODS[k].name.toLowerCase()} goes to places that need it first: make more there`;
 }
 
 /** The Parks and Town projects pages of a town card. */

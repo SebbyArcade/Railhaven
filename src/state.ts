@@ -107,6 +107,11 @@ export interface GameState {
   loads?: number; shipLoads?: number;
   /** orders already counted toward the all-games orders achievement */
   achOrd?: number;
+  /** 👑 region capitals (island → town id) and each capital's 🤝 trade order (by island) */
+  caps?: Record<number, number>;
+  trade?: Record<number, import('./economy/trade.ts').TradeOrder>;
+  /** trade orders filled */
+  tradeDone?: number;
 }
 
 /** The running game: saved state plus the world rebuilt from the seed. */
