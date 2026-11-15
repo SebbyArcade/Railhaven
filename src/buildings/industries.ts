@@ -80,6 +80,10 @@ export interface Building {
   paid?: number;
   /** docks: how far out the sea is already charted */
   chart?: number;
+  /** docks: goods a ship brought, waiting for this island's trains */
+  landed?: Partial<Record<Good, number>>;
+  /** docks: goods waiting for a ship to another dock */
+  outq?: import('../ships/ships.ts').SeaLoad[];
 }
 
 export const YARD_LEN = 4;

@@ -335,7 +335,7 @@ function pithead(ctx: CanvasRenderingContext2D, tm: number, H: (k: number) => nu
 
 /**
  * Dock: a plank pier on pilings over the water, a quayside crane swinging, crates and barrels, a harbour office,
- * bollards with mooring ropes, and a little steamer bobbing at the berth (a second one from level 2).
+ * and bollards for mooring (the cargo ships themselves are drawn where they are).
  */
 function dockArt(ctx: CanvasRenderingContext2D, tm: number, H: (k: number) => number, lvl: number) {
   // pilings showing under the deck edge, with ripples
@@ -365,9 +365,9 @@ function dockArt(ctx: CanvasRenderingContext2D, tm: number, H: (k: number) => nu
     puff(ctx, u0 + 4, v0 - 2, tm + k, true, 0.8);
     ctx.strokeStyle = 'rgba(220,200,160,.8)'; ctx.lineWidth = 0.3; ctx.beginPath(); ctx.moveTo(u0 - 12, v0 - 3); ctx.lineTo(u0 - 14, 4); ctx.moveTo(u0 + 9, v0 - 3); ctx.lineTo(u0 + 12, 4); ctx.stroke();
   };
-  boat(-26, 0); if (lvl >= 2) boat(30, 2);
+  void boat; // cargo ships are drawn on their own (they come and go)
   // crates and barrels waiting on the quay
-  for (let k = 0; k < 6; k++) { const u = 8 + (k % 3) * 4, v = -12 + ((k / 3) | 0) * 4; ctx.fillStyle = '#8a6a40'; ctx.fillRect(u, v, 3.4, 3.4); ctx.strokeStyle = 'rgba(0,0,0,.35)'; ctx.lineWidth = 0.3; ctx.strokeRect(u, v, 3.4, 3.4); ctx.beginPath(); ctx.moveTo(u, v); ctx.lineTo(u + 3.4, v + 3.4); ctx.stroke(); }
+  for (let k = 0; k < Math.min(9, 3 + 3 * lvl); k++) { const u = 8 + (k % 3) * 4, v = -12 + ((k / 3) | 0) * 4; ctx.fillStyle = '#8a6a40'; ctx.fillRect(u, v, 3.4, 3.4); ctx.strokeStyle = 'rgba(0,0,0,.35)'; ctx.lineWidth = 0.3; ctx.strokeRect(u, v, 3.4, 3.4); ctx.beginPath(); ctx.moveTo(u, v); ctx.lineTo(u + 3.4, v + 3.4); ctx.stroke(); }
   for (let k = 0; k < 4; k++) { const u = 24 + k * 3.2; ctx.fillStyle = '#6a4a2e'; ctx.beginPath(); ctx.arc(u, -10, 1.4, 0, 7); ctx.fill(); ctx.strokeStyle = '#3a2a1e'; ctx.lineWidth = 0.3; ctx.beginPath(); ctx.arc(u, -10, 1, 0, 7); ctx.stroke(); }
   // harbour office
   cottage(ctx, 46, -5, 14, 11, { wall: '#e8e0cc', roof: '#3f5a7a', chimney: 0.6, tm, smoke: true });
