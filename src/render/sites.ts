@@ -5,6 +5,7 @@ import type { Game, Site } from '../state.ts';
 import type { Hall } from '../buildings/stations.ts';
 import { buildingSide, stationDoor } from './stations.ts';
 import { isRevealed } from '../world/fog.ts';
+import { footprint } from '../buildings/industries.ts';
 import { TILE } from '../world/terrain.ts';
 import { bush, cottage, fence, person } from './art.ts';
 
@@ -102,6 +103,8 @@ function blockedAt(g: Game, hx: number, hy: number, w: number, hall?: Hall): boo
   for (const [ox, oy] of [[-w / 2, -7], [w / 2, -7], [-w / 2, 11], [w / 2, 11], [0, 2]]) {
     const x = Math.floor((hx + ox!) / TILE), y = Math.floor((hy + oy!) / TILE);
     if (g.track.has(y * n + x)) return true;
+    if (g.s.buildings?.some(b => footprint(n, b).includes(y * n + x))) return true; // nor on an industry
+    const tr = g.world.terr[y * n + x]; if (tr === undefined || tr === 0 || tr === 4) return true; // never in the water or on a mountain
     if (g.s.parks?.some(q => q.x === x && q.y === y)) return true; // a park or town project stands here
   }
   if (hall) {
