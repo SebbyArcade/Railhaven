@@ -15,9 +15,9 @@ for (const p of ports) {
   if (near.length) continue;
   const why = new Map<string, number>();
   for (let dy = -10; dy <= 10; dy++) for (let dx = -10; dx <= 10; dx++) for (const q of placementsAt('dock', p.x + dx, p.y + dy)) {
-    const e = placeError(g, q); const k = e ? e.replace(/\d+/g, '#').slice(0, 80) : 'OK'; why.set(k, (why.get(k) ?? 0) + 1);
+    const e = placeError(g, q); const k = e ? (/far by sea/.test(e) ? e : e.replace(/\d+/g, "#")).slice(0, 120) : "OK"; why.set(k, (why.get(k) ?? 0) + 1);
   }
-  for (const [k, v] of [...why].sort((a, b) => b[1] - a[1]).slice(0, 8)) console.log('   ', v, k);
+  for (const [k, v] of [...why].sort((a, b) => b[1] - a[1]).filter((e, j) => j < 8 || /sea|dock|island|reach/i.test(e[0]))) console.log('   ', v, k);
   // the land around: a small picture
   for (let dy = -6; dy <= 6; dy++) {
     let row = '    ';

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { newGame } from '../src/game.ts';
-import { isLinked, placeError, yardSquares } from '../src/buildings/industries.ts';
+import { buildingSquares, isLinked, placeError, placementsAt, yardSquares } from '../src/buildings/industries.ts';
+import { reveal } from '../src/world/fog.ts';
 import { isAnchor } from '../src/track/paint.ts';
 import { buyTrainAt } from '../src/economy/dispatch.ts';
 import { islandOfB } from '../src/ships/docks.ts';
@@ -22,5 +23,21 @@ describe('docks and landings', () => {
     const q = { kind: 'dock' as const, x: a.x + 3, y: a.y + 3, horizontal: true, side: 1 as const };
     expect(placeError(g, q)).toMatch(/pier stands over the water/);
     void n;
+  });
+
+  it('a dock fits on a ragged coast when at least half of its pier is over the water', () => {
+    const g = newGame(4242), n = g.world.n, t = g.world.terr; g.s.rlv = 1;
+    reveal(g, n / 2, n / 2, n);
+    let half = 0, one = 0;
+    for (let i = 0; i < n * n; i++) for (const q of placementsAt('dock', i % n, (i / n) | 0)) {
+      if (g.world.islandOf[yardSquares(n, q)[0]!] !== g.world.home) continue;
+      const pier = buildingSquares(n, q), sea = pier.filter(j => !t[j]).length;
+      if (pier.some(j => t[j] === 4) || yardSquares(n, q).some(j => !t[j])) continue;
+      const e = placeError(g, q);
+      if (sea === 2 && !e) half++;
+      if (sea === 1) { one++; expect(e).not.toBe(''); }
+    }
+    expect(half).toBeGreaterThan(0); // ragged spots on Ashford Isle now take a dock
+    expect(one).toBeGreaterThan(0);
   });
 });

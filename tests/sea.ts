@@ -1,6 +1,6 @@
 import { expect } from 'vitest';
 import { newGame, trackChanged } from '../src/game.ts';
-import { build, isLinked, placeError, placementsAt, yardSquares, type Building } from '../src/buildings/industries.ts';
+import { build, buildingSquares, isLinked, placeError, placementsAt, yardSquares, type Building } from '../src/buildings/industries.ts';
 import { buildPlan, extendPlan, startPlan } from '../src/track/paint.ts';
 import { squareCost } from '../src/track/rules.ts';
 import { reveal } from '../src/world/fog.ts';
@@ -11,6 +11,8 @@ import type { Game } from '../src/state.ts';
 export function lay(g: Game, target: number): boolean {
   const n = g.world.n, from = new Map<number, number>(), q: number[] = [];
   for (const i of g.linked ?? []) { from.set(i, -1); q.push(i); }
+  // buildings stand on their squares (a dock on a ragged coast has land under part of its pier): go round them
+  for (const b of g.s.buildings ?? []) for (const i of buildingSquares(n, b)) if (i !== target) from.set(i, -2);
   let hit = -1;
   for (let h = 0; h < q.length && hit < 0; h++) {
     const i = q[h]!;
@@ -38,6 +40,9 @@ export function linkB(g: Game, b: Building): boolean {
   return false;
 }
 
+/** The test scenes use docks on a straight shore (the whole pier over the water). */
+const openWater = (g: Game, q: Parameters<typeof buildingSquares>[1]) => buildingSquares(g.world.n, q).every(i => !g.world.terr[i]);
+
 /** A game with the whole map uncovered, a dock on Ashford Isle joined to the railway and a landing on another island. */
 export function dockAndLanding(seed: number): { g: Game; dock: Building; landing: Building } {
     const g = newGame(seed), n = g.world.n, a = g.s.sites[0]!;
@@ -50,7 +55,7 @@ export function dockAndLanding(seed: number): { g: Game; dock: Building; landing
     for (let i = 0; i < n * n; i++) {
       if (g.world.terr[i] || !g.world.ocean[i]) continue;
       const x = i % n, y = (i / n) | 0, dd = Math.hypot(x - a.x, y - a.y); if (dd > 40) continue;
-      for (const q of placementsAt('dock', x, y)) if (g.world.islandOf[yardSquares(n, q)[0]!] === g.world.home && !placeError(g, q)) spots.push({ q, d: dd });
+      for (const q of placementsAt('dock', x, y)) if (g.world.islandOf[yardSquares(n, q)[0]!] === g.world.home && openWater(g, q) && !placeError(g, q)) spots.push({ q, d: dd });
     }
     spots.sort((p, q) => p.d - q.d);
     let dock: Building | null = null;
@@ -62,7 +67,7 @@ export function dockAndLanding(seed: number): { g: Game; dock: Building; landing
       if (d[i]! < 0 || d[i]! > dockRange(dock)) continue;
       for (const q of placementsAt('dock', i % n, (i / n) | 0)) {
         const isl = g.world.islandOf[yardSquares(n, q)[0]!]!;
-        if (isl < 0 || isl === g.world.home || placeError(g, q)) continue;
+        if (isl < 0 || isl === g.world.home || !openWater(g, q) || placeError(g, q)) continue;
         const b = build(g, q); if (typeof b === 'string') continue;
         trackChanged(g); landing = b; break;
       }
