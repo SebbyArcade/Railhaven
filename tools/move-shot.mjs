@@ -1,0 +1,40 @@
+// Move my game in the browser: copy a code, load it in a fresh page, save a file. Usage: node tools/move-shot.mjs
+import { chromium } from 'playwright';
+import { existsSync, mkdirSync, readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+mkdirSync('shots', { recursive: true });
+const browser = await chromium.launch({ executablePath: existsSync('/opt/pw-browsers/chromium') ? '/opt/pw-browsers/chromium' : undefined });
+const ctx = await browser.newContext({ viewport: { width: 412, height: 860 }, deviceScaleFactor: 2, hasTouch: true, acceptDownloads: true });
+await ctx.grantPermissions(['clipboard-read', 'clipboard-write']);
+const errors = [];
+const page = await ctx.newPage(); page.on('pageerror', e => errors.push(String(e)));
+await page.goto('file://' + resolve('dist/index.html') + '?new&seed=4242');
+await page.waitForTimeout(800);
+await page.evaluate(() => { window.railhaven.game.s.money = 54321; });
+await page.click('#newGame'); await page.waitForTimeout(300);
+await page.click('#card button[data-page="move"]'); await page.waitForTimeout(300);
+await page.click('#card button[data-act="copycode"]'); await page.waitForTimeout(800);
+await page.screenshot({ path: 'shots/move-card.png' });
+const code = await page.$eval('#myCode', e => e.value);
+console.log('code', code.slice(0, 20), code.length, 'chars');
+const [dl] = await Promise.all([page.waitForEvent('download'), page.click('#card button[data-act="savefile"]')]);
+const file = resolve('shots/railhaven-save.txt'); await dl.saveAs(file);
+console.log('file same as code', readFileSync(file, 'utf8') === code);
+// the other side: a new game, then paste the code
+const p2 = await ctx.newPage(); p2.on('pageerror', e => errors.push(String(e)));
+await p2.goto('file://' + resolve('dist/index.html') + '?new&seed=7');
+await p2.waitForTimeout(800);
+await p2.click('#newGame'); await p2.waitForTimeout(300);
+await p2.click('#card button[data-page="paste"]'); await p2.waitForTimeout(300);
+await p2.fill('#pasteCode', code);
+await p2.click('#card button[data-act="loadpaste"]'); await p2.waitForTimeout(1500);
+console.log('pasted game', await p2.evaluate(() => `seed ${window.railhaven.game.s.seed} money ${Math.round(window.railhaven.game.s.money)}`));
+// and from the file
+await p2.click('#newGame'); await p2.waitForTimeout(300);
+await p2.evaluate(() => { window.railhaven.game.s.money = 1; });
+const [ch] = await Promise.all([p2.waitForEvent('filechooser'), p2.click('#card button[data-act="loadfile"]')]);
+await ch.setFiles(file); await p2.waitForTimeout(1500);
+console.log('file game', await p2.evaluate(() => `seed ${window.railhaven.game.s.seed} money ${Math.round(window.railhaven.game.s.money)}`));
+await p2.screenshot({ path: 'shots/move-loaded.png' });
+console.log(errors.join('\n') || 'no page errors');
+await browser.close();

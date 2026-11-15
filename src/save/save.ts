@@ -34,3 +34,22 @@ export function loadFrom(store: Storage): Game | null {
   if (!raw) return null;
   try { return loadGame(deserialize(raw)); } catch (e) { console.warn('Save could not be read', e); return null; }
 }
+
+/** A save code to move a game between browsers (Chrome and the Claude app keep separate saves): RAILHAVEN3: + gzip, base64. */
+export async function saveCode(g: Game): Promise<string> {
+  prepareSave(g);
+  const gz = new Blob([serialize(g.s)]).stream().pipeThrough(new CompressionStream('gzip'));
+  return 'RAILHAVEN3:' + toB64(new Uint8Array(await new Response(gz).arrayBuffer()));
+}
+
+/** A rebuild save from a code or a save file's text, or null when the text is something else (such as an old-game save). */
+export async function readSave(text: string): Promise<Game | null> {
+  const t = text.trim();
+  let json: string | null = null;
+  if (t.startsWith('RAILHAVEN3:')) {
+    const ds = new Blob([fromB64(t.slice(11).replace(/\s+/g, ''))]).stream().pipeThrough(new DecompressionStream('gzip'));
+    json = await new Response(ds).text();
+  } else if (t.startsWith('{') && /"version"\s*:/.test(t.slice(0, 200))) json = t;
+  if (!json) return null;
+  return loadGame(deserialize(json));
+}

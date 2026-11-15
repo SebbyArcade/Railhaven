@@ -3,7 +3,7 @@ import { BREAK_TEXT, breakRail, tickBreaks } from './track/breaks.ts';
 import { hallAt, hallsOf } from './buildings/stations.ts';
 import { type View, toSquare, toWorld } from './render/camera.ts';
 import { Renderer } from './render/renderer.ts';
-import { loadFrom, saveTo } from './save/save.ts';
+import { loadFrom, readSave, saveCode, saveTo } from './save/save.ts';
 import { isRevealed } from './world/fog.ts';
 import { TERRAIN_NAMES } from './world/terrain.ts';
 import { attachInput } from './ui/input.ts';
@@ -93,7 +93,8 @@ function openCard(c: Card | null) { tools.card = c; tools.selected = c?.kind ===
 function closeCard() { tools.card = null; tools.selected = null; renderCard(); }
 function renderCard() {
   if (tools.card?.kind === 'game' && tools.card.page === 'paste' && cardEl.querySelector('#pasteCode')) return; // keep what is being typed
-  const html = tools.card && (tools.card.kind === 'game' ? gameHtml(tools.card.page, !!oldSave(), importReport) : cardHtml(game, tools.card));
+  if (tools.card?.kind === 'game' && tools.card.page === 'move' && myCode && (cardEl.querySelector('#myCode') as HTMLTextAreaElement | null)?.value === myCode) return; // keep the code selectable
+  const html = tools.card && (tools.card.kind === 'game' ? gameHtml(tools.card.page, !!oldSave(), importReport, myCode) : cardHtml(game, tools.card));
   if (!html) { tools.card = null; cardEl.style.display = 'none'; return; }
   cardEl.innerHTML = `<button class="x" data-act="close">✕</button>${html}`; cardEl.style.display = 'block';
   if (performance.now() - newArmed < 3000) { const nb = cardEl.querySelector<HTMLButtonElement>('button[data-act="newmap"]'); if (nb) { nb.classList.add('sure'); nb.textContent = '⚠ Tap again to start a new map'; } }
@@ -112,6 +113,8 @@ cardEl.onclick = e => {
     newArmed = 0; startGame(freshGame()); return;
   }
   if (b.dataset.act === 'loadfile') { filePick.click(); return; }
+  if (b.dataset.act === 'copycode') { void saveCode(game).then(async c => { myCode = c; renderCard(); try { await navigator.clipboard.writeText(c); toast('📋 Code copied: paste it in 🗺 Game on the other side'); } catch { toast('Press on the code below, Select all, then Copy'); } }); return; }
+  if (b.dataset.act === 'savefile') { void saveCode(game).then(saveFile); return; }
   if (b.dataset.act === 'loadold') { const t = oldSave(); if (t) void bringOver(t); return; }
   if (b.dataset.act === 'loadpaste') { const t = (cardEl.querySelector('#pasteCode') as HTMLTextAreaElement | null)?.value ?? ''; if (t.trim()) void bringOver(t); else toast('Paste the code first'); return; }
   if (b.dataset.go !== undefined) { goMission(+b.dataset.go); return; }
@@ -310,19 +313,35 @@ for (const b of document.querySelectorAll<HTMLButtonElement>('#bar [data-mode]')
 let newArmed = 0;
 // 🗺 Game: a new map, or a game brought over from the old Railhaven
 const OLD_KEY = 'railhaven90';
-let importReport: string[] | null = null;
+let importReport: string[] | null = null, myCode: string | null = null;
 const oldSave = () => { try { return localStorage.getItem(OLD_KEY); } catch { return null; } };
-$('newGame').onclick = () => { if (tools.card?.kind === 'game') { closeCard(); return; } menuOpen = false; tools.mode = 'pan'; tools.cancel(); openCard({ kind: 'game', id: 0 }); };
+$('newGame').onclick = () => { if (tools.card?.kind === 'game') { closeCard(); return; } menuOpen = false; tools.mode = 'pan'; tools.cancel(); myCode = null; openCard({ kind: 'game', id: 0 }); };
 function startGame(g: Game) { game = g; tools.cancel(); closeCard(); renderer = new Renderer(game, tools); saveTo(localStorage, game); }
 async function bringOver(text: string) {
   try {
     toast('🚂 Bringing your game over…', 8000);
     await new Promise(r => setTimeout(r, 30));
+    const mine = await readSave(text);
+    if (mine) { startGame(mine); toast('✅ Your game is here', 2500); return; }
     const o = await decodeLegacy(text);
     if (!isLegacy(o)) { toast('This save is not from the old Railhaven'); return; }
     const { g, report } = importLegacy(o);
     startGame(g); importReport = report; openCard({ kind: 'game', id: 0, page: 'report' }); toast('✅ Your game is here', 2500);
   } catch (e) { toast('⚠ ' + ((e as Error).message || 'That save could not be read')); }
+}
+/** Save the code as a file: through Claude's download prompt inside the Claude app, a plain browser download elsewhere. */
+async function saveFile(code: string) {
+  const name = 'railhaven-save.txt', cl = (window as any).claude;
+  if (cl?.use) {
+    const dl = await Promise.race([cl.use('downloads'), new Promise(r => setTimeout(() => r(null), 3000))]) as any;
+    if (dl) {
+      try { await dl.save({ filename: name, data: code }); toast('💾 Saved ' + name); }
+      catch (e: any) { if (e?.code !== 'declined') toast('This app can\'t save files here: use 📋 Copy my code instead'); }
+      return;
+    }
+  }
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([code], { type: 'text/plain' })); a.download = name;
+  document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 5000); toast('💾 Saved ' + name);
 }
 const filePick = document.createElement('input'); filePick.type = 'file'; filePick.accept = '.json,.txt,application/json,text/plain';
 filePick.onchange = async () => { const f = filePick.files?.[0]; filePick.value = ''; if (f) await bringOver(await f.text()); };

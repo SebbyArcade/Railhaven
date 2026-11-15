@@ -1,6 +1,6 @@
 import type { Game, GameState, Resource, Site } from '../state.ts';
 import { loadGame, newGame, trackChanged } from '../game.ts';
-import { build, capOf, type Building, footprint, INDUSTRIES, type IndustryKind, isFactory, isLinked, placeError, placementsAt, priceOf, yardSquares, type Good } from '../buildings/industries.ts';
+import { build, capOf, type Building, footprint, INDUSTRIES, type IndustryKind, isFactory, isLinked, placeError, placementsAt, priceOf, buildingSquares, yardSquares, type Good } from '../buildings/industries.ts';
 import { stationLinkError } from '../buildings/stations.ts';
 import { orderOf, sizeCap } from '../economy/towns.ts';
 import { railLevel } from '../economy/dispatch.ts';
@@ -218,16 +218,21 @@ function placeNear(g: Game, kind: IndustryKind, x: number, y: number) {
   // at other deposits of that kind close by; a dock looks along the coast nearby; others close to where they stood
   const R = MINES.has(kind) ? 3 : kind === 'dock' ? 10 : 5;
   const res = INDUSTRIES[kind].makes;
+  const seen = new Set<string>();
   const centres = MINES.has(kind) ? [[x, y], ...g.s.sites.filter(s => s.kind === 'dep' && s.res === res && Math.hypot(s.x - x, s.y - y) <= 10 && (s.x !== x || s.y !== y)).map(s => [s.x, s.y])] : [[x, y]];
   for (const [cx, cy] of centres) for (let dy = -R - 1; dy <= R + 1; dy++) for (let dx = -R - 1; dx <= R + 1; dx++) {
     if (best && (cx !== x || cy !== y)) break; // a spot by the old deposit wins
     const px = cx! + dx - x, py = cy! + dy - y;
     for (const p of placementsAt(kind, x + px, y + py)) {
+      const key = `${p.x},${p.y},${+p.horizontal},${p.side}`; if (seen.has(key)) continue; seen.add(key); // each spot is reached from all 4 of its squares
       if (placeError(g, p)) continue;
       const ys = yardSquares(n, p), on = ys.filter(i => g.track.has(i)).length;
       const step = p.horizontal ? 1 : n, touch = [ys[0]! - step, ys.at(-1)! + step].filter(i => g.track.has(i)).length;
       const linkedEnd = [ys[0]! - step, ys.at(-1)! + step].filter(i => g.linked?.has(i)).length;
-      const sc = on * 3 + touch * 2 + linkedEnd * 4 - Math.hypot(px, py);
+      // distance from the old spot to the nearest square of the building row inside the search window (as if seen from each of its squares)
+      let dist = Infinity;
+      for (const q of buildingSquares(n, p)) { const u = q % n - x, v = ((q / n) | 0) - y; if (Math.abs(u - (cx! - x)) <= R + 1 && Math.abs(v - (cy! - y)) <= R + 1) dist = Math.min(dist, Math.hypot(u, v)); }
+      const sc = on * 3 + touch * 2 + linkedEnd * 4 - dist;
       if (sc > bs) { bs = sc; best = p; }
     }
   }

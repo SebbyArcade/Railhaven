@@ -59,7 +59,7 @@ that makes sense. Details for each line: `legacy/CHANGES.md` (search the version
 
 ## Stage 5: extras, save import, art
 - [x] Legacy save importer (localStorage `railhaven90` and RAILHAVEN2 codes/files) tested on every save in `tests/saves/` (tools/import-check.ts)
-- [ ] Move my game: export/import codes and files
+- [x] Move my game: export/import codes and files (🗺 Game → 📤 Move my game; RAILHAVEN3 codes, save files)
 - [ ] Cards: town (status + tiles), industry, factory, dock, train, ship; Orders board; Stuck list; alerts (❗) (done: town, industry and train cards, order badges over towns)
 - [ ] Map views: Problems, Demand, Resources, Fuel range, Exploration
 - [ ] Hints (💡), Recommended build, discovery cards, toasts queue, game report
