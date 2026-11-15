@@ -138,6 +138,8 @@ for (let s = 0; s < minutes * 60; s++) {
   if (s % 300 === 299) log.push(`min ${Math.round((s + 1) / 60)}: $${Math.round(g.s.money)} earned $${Math.round(g.s.earned ?? 0)} orders ${g.s.orders ?? 0} level ${g.s.rlv ?? 0} towns ${g.s.sites.filter(t => t.kind === 'town' && townLinked(g, t)).length} trains ${g.s.trains.length} buildings ${(g.s.buildings ?? []).length}`);
 }
 const idle = g.s.trains.filter(t => !t.job).length;
+const ms = g.s.ms;
+if (ms) log.push(`missions done ${ms.done.length} ($${ms.done.reduce((v, d) => v + d.reward, 0)}): ${ms.done.map(d => `${d.min}m ${d.title}`).join(' · ')}\n  now: ${[ms.main, ...ms.side].filter(Boolean).map(m => m!.title).join(' | ')}`);
 console.log(log.join('\n'));
 console.log(`seed ${seed}: ${minutes} game min in ${((Date.now() - t0) / 1000).toFixed(1)} s · idle trains ${idle}/${g.s.trains.length} · no-fail top-ups ${rescues}`);
 if (process.env.BOTDEBUG) for (const t of g.s.trains) console.log('train', t.id, JSON.stringify(t.job), 'v', t.v, 'dest', t.dest, 'plan', t.plan.length, 'refuge', t.refuge, 'cargo', JSON.stringify(t.cargo), 'head', g.net.pieces[t.trail.at(-1)!.piece]!.squares.at(-1));
