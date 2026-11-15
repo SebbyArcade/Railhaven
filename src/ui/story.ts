@@ -29,11 +29,11 @@ export function storyHtml(g: Game, page?: string): string {
       + `<small>Your next mission sits under the top bar. It follows your game: tap Go › and it shows you where.</small></div>`
       + `<button class="act" data-act="close">🚂 Let's go</button>`;
   }
-  let h = `<div class="head"><b class="big">${A.icon}</b><div><h2>Act ${act} · ${A.title}</h2><span class="chip2">⭐ Railway level ${L}</span> <span class="chip2">✅ ${M.done.length} missions done</span></div></div>`;
+  let h = `<div class="head"><b class="big">${A.icon}</b><div><h2>Act ${act} · ${A.title}</h2><span class="chip2">⭐ Railway level ${L}</span> <span class="chip2">${M.done.length || !(g.s.orders ?? 0) ? `✅ ${M.done.length} missions done` : `📋 ${g.s.orders} orders filled`}</span></div></div>`;
   if (page === 'journal') {
     h += `<h3>📜 Journal</h3>`;
     for (const d of [...M.done].reverse().slice(0, 12)) h += `<div class="row"><b class="ico">✅</b><div class="grow"><div class="line"><span>${esc(d.title)}</span><span>+${fmtMoney(d.reward)}</span></div><small>minute ${d.min}</small></div></div>`;
-    if (!M.done.length) h += `<div class="note">📜 Missions you finish are written here</div>`;
+    if (!M.done.length) h += `<div class="note">📜 Missions you finish are written here${(g.s.orders ?? 0) > 0 ? `. So far your railway has filled ${g.s.orders} town orders` : ""}</div>`;
     return h + back;
   }
   if (page === 'isl') {
@@ -61,6 +61,6 @@ export function storyHtml(g: Game, page?: string): string {
     h += `<h3>✨ Side missions</h3>`;
     M.side.forEach((s, i) => { const p = progressText(g, s); h += `<div class="row side"><div class="grow"><div class="line"><span>${esc(s.title)}${p.text ? ` · ${p.text}` : ''}</span><span>+${fmtMoney(s.reward)}</span></div></div><button class="mini" data-go="${i + 1}">Go ›</button></div>`; });
   }
-  h += `<div class="tiles"><button class="tile" data-act="page" data-page="journal">📜 Journal<small>${M.done.length} done</small></button><button class="tile" data-act="page" data-page="isl">🏝 Islands<small>${reachedIslands(g).size} reached</small></button></div>`;
+  h += `<div class="tiles"><button class="tile" data-act="page" data-page="journal">📜 Journal<small>${M.done.length || !(g.s.orders ?? 0) ? `${M.done.length} done` : `📋 ${g.s.orders} orders filled`}</small></button><button class="tile" data-act="page" data-page="isl">🏝 Islands<small>${reachedIslands(g).size} reached</small></button></div>`;
   return h;
 }

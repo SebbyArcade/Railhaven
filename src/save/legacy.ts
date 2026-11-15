@@ -169,16 +169,32 @@ export function importLegacy(o: any): ImportResult {
   }
 
   // trains: spread over the line, each on its own stretch away from stations and yards
+  // each train goes back near where it was in the old game, on the same island (trains can't cross the sea by
+  // themselves: putting them in track order once left 15 of 37 trains on one small island)
   const want = (o.trains ?? []).length, busy = new Set<number>();
   for (const b of g.s.buildings ?? []) for (const i of footprint(n, b)) busy.add(i);
+  const free = g.net.pieces.filter(p => p.squares.every(i => g.linked?.has(i)) && !p.squares.some(i => busy.has(i)));
+  const isl = g.world.islandOf, mid = (p: { squares: number[] }) => p.squares[p.squares.length >> 1]!;
   let trains = 0;
-  for (const p of g.net.pieces) {
-    if (trains >= want) break;
-    if (p.squares.some(i => busy.has(i)) || g.sys.holder.has(p.id) || !p.squares.every(i => g.linked?.has(i))) continue;
-    const t = placeTrain(g.net, g.s.nextId, { piece: p.id, dir: 1 }, 3);
-    if (t.trail.some(st => g.sys.holder.has(st.piece))) continue;
-    g.s.nextId++; g.s.trains.push(t); g.sys.rebuildHolds(); trains++;
-    for (const st of t.trail) for (const i of g.net.pieces[st.piece]!.squares) busy.add(i);
+  for (const ot of o.trains ?? []) {
+    const path: [number, number][] = Array.isArray(ot?.path) ? ot.path : [];
+    const at = path[Math.max(0, Math.min(path.length - 1, Math.floor(ot?.pos ?? 0)))];
+    const ox = at?.[0] ?? base.s.sites[0]!.x, oy = at?.[1] ?? base.s.sites[0]!.y;
+    // its island: where it stood (or, on a bridge, the nearest land square of its route)
+    let home = isl[oy * n + ox] ?? -1;
+    if (home < 0) for (const q of [...path].sort((a, b) => Math.hypot(a[0] - ox, a[1] - oy) - Math.hypot(b[0] - ox, b[1] - oy))) { const k = isl[q[1] * n + q[0]] ?? -1; if (k >= 0) { home = k; break; } }
+    const near = (p: { squares: number[] }) => { const s = mid(p); return Math.hypot(s % n - ox, Math.floor(s / n) - oy); };
+    const onIsl = (p: { squares: number[] }) => home < 0 || p.squares.every(i => isl[i] === home || isl[i]! < 0);
+    // its own island first, nearest first; if its island's line is full, the nearest free spot anywhere (it was paid for)
+    const cands = free.filter(p => !g.sys.holder.has(p.id)).sort((a, b) => +onIsl(b) - +onIsl(a) || near(a) - near(b));
+    for (const p of cands) {
+      if (p.squares.some(i => busy.has(i))) continue;
+      const t = placeTrain(g.net, g.s.nextId, { piece: p.id, dir: 1 }, 3);
+      if (t.trail.some(st => g.sys.holder.has(st.piece))) continue;
+      g.s.nextId++; g.s.trains.push(t); g.sys.rebuildHolds(); trains++;
+      for (const st of t.trail) for (const i of g.net.pieces[st.piece]!.squares) busy.add(i);
+      break;
+    }
   }
   const lostT = want - trains; if (lostT > 0) refund += lostT * 1000;
   report.push(`🚂 ${trains} trains back on the line${lostT > 0 ? ` · ${lostT} had no room: ${fmt(lostT * 1000)} paid back` : ''}`);

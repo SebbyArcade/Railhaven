@@ -46,6 +46,8 @@ export interface Train {
   lastPay?: { pay: number; at: number; n: number; good: string; to: { kind: 'town' | 'bld'; id: number } };
   /** seconds to wait in a refuge (out of another train's way) before trying again */
   refuge?: number;
+  /** seconds a goods train with a job has stood still on its way (held up by other trains); 0 once it moves */
+  stopT?: number;
   /** broken down: waits for the repair crew (see world/events.ts) */
   broke?: { crewAt: number; doneAt: number };
   /** head position when saved, to find the train again if the rails were rebuilt */
