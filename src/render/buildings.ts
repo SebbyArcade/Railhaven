@@ -1,6 +1,7 @@
 import { hash } from '../core/rng.ts';
 import { capOf, type Building, INDUSTRIES, isLinked } from '../buildings/industries.ts';
 import type { Game } from '../state.ts';
+import { barriersDown } from '../buildings/closing.ts';
 import { TILE } from '../world/terrain.ts';
 import { barrel, bush, cart, cottage, crate, dog, flowers, hayBale, hen, lamp, logEnd, logSide, person, pine, puff, sack, stoneWall } from './art.ts';
 
@@ -37,11 +38,12 @@ export function drawBuilding(ctx: CanvasRenderingContext2D, g: Game, b: Building
   if (zoom >= 1.6) {
     const d = INDUSTRIES[b.kind], fs = 9;
     ctx.font = `600 ${fs}px system-ui`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    const label = `${d.icon} ${d.name}${b.lvl > 1 ? ' ' + b.lvl : ''}`, w = ctx.measureText(label).width + 8;
+    const label = `${d.icon} ${d.name}${b.lvl > 1 ? ' ' + b.lvl : ''}${b.closed ? ' · closed' : ''}`, w = ctx.measureText(label).width + 8;
     const lx = cx, ly = cy + (b.horizontal ? b.side * 20 : 22);
     ctx.fillStyle = 'rgba(30,24,16,.8)'; ctx.fillRect(lx - w / 2, ly - 6, w, 12);
     ctx.fillStyle = '#f6e7c6'; ctx.fillText(label, lx, ly + 0.5);
   }
+  if (b.id >= 0) drawClosed(ctx, g, b, tm, zoom, cx, cy);
   if (b.id >= 0 && !isLinked(g, b)) { // not on the railway yet: a small red sign on the yard end (not on the placement preview)
     const ys = b.horizontal ? [(b.x + 0.5) * T, (b.y + 0.5) * T] : [(b.x + 0.5) * T, (b.y + 0.5) * T];
     const p = 0.6 + 0.4 * Math.sin(tm * 4);
@@ -49,6 +51,49 @@ export function drawBuilding(ctx: CanvasRenderingContext2D, g: Game, b: Building
     ctx.fillStyle = '#fff'; ctx.font = '700 9px system-ui'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('!', ys[0]!, ys[1]! + 0.5);
   }
   void n;
+}
+
+/** How far down each building's barrier arms are (0 up, 1 down), eased frame by frame. Drawing only. */
+const arms = new Map<number, { v: number; tm: number }>();
+
+/**
+ * ⛔ A closed building: red and white boom barriers across both ends of its yard (they swing down once the last train
+ * has left, and up again when it opens), and a no-entry sign on a post over the building.
+ */
+function drawClosed(ctx: CanvasRenderingContext2D, g: Game, b: Building, tm: number, zoom: number, cx: number, cy: number) {
+  let a = arms.get(b.id);
+  if (!b.closed && !a) return;
+  a ??= { v: 0, tm }; arms.set(b.id, a);
+  const want = barriersDown(g, b) ? 1 : 0, dt = Math.min(0.1, Math.max(0, tm - a.tm)); a.tm = tm;
+  a.v = want > a.v ? Math.min(1, a.v + dt / 1.4) : Math.max(0, a.v - dt / 1.4);
+  if (!b.closed && a.v <= 0) { arms.delete(b.id); return; }
+  const T = TILE, e = 1 - (1 - a.v) * (1 - a.v); // eased swing
+  const wide = (b.tracks ?? 2) > 2 ? 2 : 1; // the arm spans the loading tracks (and the strip once it has more)
+  for (const end of [0, 1] as const) {
+    // in yard terms: u along the yard (0..4 squares), s across it; the post stands on the building's side
+    const u = end === 0 ? 0.12 : 3.88, s0 = 0.5 + b.side * 0.42;
+    const px = b.horizontal ? (b.x + u) * T : (b.x + s0) * T, py = b.horizontal ? (b.y + s0) * T : (b.y + u) * T;
+    const len = (wide * T - 6) * (0.14 + 0.86 * e), dx = b.horizontal ? 0 : -b.side, dy = b.horizontal ? -b.side : 0;
+    // the arm: a pole with red and white bands, a counterweight behind the post
+    ctx.lineCap = 'butt';
+    ctx.strokeStyle = 'rgba(0,0,0,.28)'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(px + 1, py + 1.5); ctx.lineTo(px + dx * len + 1, py + dy * len + 1.5); ctx.stroke();
+    const seg = 5;
+    for (let k = 0; k * seg < len; k++) {
+      ctx.strokeStyle = k % 2 ? '#f4f1ea' : '#d8382c'; ctx.lineWidth = 2.2;
+      ctx.beginPath(); ctx.moveTo(px + dx * k * seg, py + dy * k * seg); ctx.lineTo(px + dx * Math.min(len, (k + 1) * seg), py + dy * Math.min(len, (k + 1) * seg)); ctx.stroke();
+    }
+    ctx.fillStyle = '#3a3a3a'; ctx.fillRect(px - dx * 4 - 1.6, py - dy * 4 - 1.6, 3.2, 3.2); // counterweight
+    ctx.fillStyle = '#2b2b2b'; ctx.beginPath(); ctx.arc(px, py, 2.2, 0, 7); ctx.fill(); // post
+    if (b.closed && Math.sin(tm * 6 + end * Math.PI) > 0) { ctx.fillStyle = '#ff4a3a'; ctx.beginPath(); ctx.arc(px + dx * len, py + dy * len, 1.4, 0, 7); ctx.fill(); } // tip lamp
+  }
+  if (!b.closed) return;
+  // the no-entry sign on a post above the building
+  const k = Math.max(1, 1.3 / zoom), bob = Math.sin(tm * 2 + b.id) * 0.8, X = cx, Y = cy - 0.7 * TILE + bob; // where the ❗ of a stuck building would be
+  ctx.fillStyle = '#5a4a3a'; ctx.fillRect(X - 0.8 * k, Y, 1.6 * k, 10 * k);
+  ctx.fillStyle = 'rgba(0,0,0,.3)'; ctx.beginPath(); ctx.arc(X + 1 * k, Y + 1 * k, 7.2 * k, 0, 7); ctx.fill();
+  ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(X, Y, 7.2 * k, 0, 7); ctx.fill();
+  ctx.fillStyle = '#d8382c'; ctx.beginPath(); ctx.arc(X, Y, 6.2 * k, 0, 7); ctx.fill();
+  ctx.fillStyle = '#fff'; ctx.fillRect(X - 4 * k, Y - 1.2 * k, 8 * k, 2.4 * k);
 }
 
 type Art = (ctx: CanvasRenderingContext2D, tm: number, H: (k: number) => number, lvl: number) => void;

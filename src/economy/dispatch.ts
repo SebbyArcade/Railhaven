@@ -12,6 +12,7 @@ import { tickScouts } from '../world/explore.ts';
 import { tickMissions } from '../progress/missions.ts';
 import { fleetMulOf, minLoad, rushDelivered, trainCap } from './upgrades.ts';
 import { V_MAX } from '../trains/train.ts';
+import { isRev } from '../track/route.ts';
 import { payMul } from '../buildings/parks.ts';
 import { deliverToTown, orderDone, reward, sizeName, stepOf } from './towns.ts';
 
@@ -89,7 +90,7 @@ function bestJob(g: Game, t: Train, plan: Plan): { b: Building; k: Good; ship: S
   const at = headSquare(g, t);
   let best: { b: Building; k: Good; ship: Ship } | null = null, bs = -Infinity;
   for (const b of g.s.buildings ?? []) {
-    if (!isLinked(g, b)) continue;
+    if (!isLinked(g, b) || b.closed) continue; // ⛔ closed: no train is sent there
     const reach = bldDist(g, b)[at]!; if (reach < 0) continue;
     const goods = isDock(b) ? Object.keys(b.landed ?? {}) as Good[] : [INDUSTRIES[b.kind].makes];
     for (const k of goods) {
@@ -102,10 +103,26 @@ function bestJob(g: Game, t: Train, plan: Plan): { b: Building; k: Good; ship: S
   return best;
 }
 
+/**
+ * A train on its way to a building that just closed: off to the best other load if there is one, else it stops at
+ * the end of the line it has already cleared and waits there for work (never at the barrier).
+ */
+function divert(g: Game, t: Train, plan: Plan) {
+  const best = bestJob(g, t, plan);
+  if (best) {
+    t.job = { src: best.b.id, to: best.ship.to, good: best.k, phase: 'toLoad', timer: 0, ...(best.ship.sea !== undefined ? { sea: best.ship.sea } : {}) };
+    if (g.sys.sendToArea(t, yardSquares(g.world.n, best.b))) return;
+    endJob(t);
+  }
+  let steps = 0, cut = 0;
+  for (; cut < t.plan.length; cut++) { if (steps >= t.held) break; if (!isRev(t.plan[cut])) steps++; }
+  t.plan = t.plan.slice(0, cut); g.sys.rebuildHolds();
+}
+
 /** Send a loaded train to where it unloads; if that place fell off the railway, to the nearest town that is still on it. */
 function sendLoaded(g: Game, t: Train) {
   const j = t.job!, sq = destSquares(g, j.to);
-  if (sq.length && g.sys.sendToArea(t, sq)) return;
+  if (!(j.to.kind === 'bld' && bldOf(g, j.to.id)?.closed) && sq.length && g.sys.sendToArea(t, sq)) return; // ⛔ a closed factory: take it to a town instead
   const to = nearestTown(g, t);
   if (to && g.sys.sendToArea(t, destSquares(g, to))) j.to = to;
   else j.timer = 5; // no way anywhere yet: wait and try again
@@ -194,6 +211,7 @@ export function tickTrains(g: Game, dt: number) {
     const src = (g.s.buildings ?? []).find(b => b.id === j.src);
     if (j.phase === 'toLoad') {
       if (!src) { endJob(t); continue; }
+      if (src.closed) { endJob(t); divert(g, t, P()); continue; } // ⛔ closed while the train was on its way: it finds other work
       if (!parked(t)) continue;
       if (!yardSquares(g.world.n, src).includes(headSquare(g, t))) { if (!g.sys.sendToArea(t, yardSquares(g.world.n, src))) endJob(t); continue; }
       j.phase = 'loading'; j.timer = LOAD_TIME;
@@ -206,8 +224,9 @@ export function tickTrains(g: Game, dt: number) {
       t.cargo = { good: j.good, n, d: ship?.d ?? 8 };
       j.phase = 'toDrop'; sendLoaded(g, t);
     } else if (j.phase === 'toDrop') {
+      if (j.to.kind === 'bld' && bldOf(g, j.to.id)?.closed && t.dest !== undefined) { sendLoaded(g, t); continue; } // ⛔ the factory closed: on to a town
       if (!parked(t)) continue;
-      if (destSquares(g, j.to).includes(headSquare(g, t))) { j.phase = 'unloading'; j.timer = LOAD_TIME; }
+      if (destSquares(g, j.to).includes(headSquare(g, t)) && !(j.to.kind === 'bld' && bldOf(g, j.to.id)?.closed)) { j.phase = 'unloading'; j.timer = LOAD_TIME; }
       else sendLoaded(g, t);
     } else if (j.phase === 'unloading') {
       if (j.to.kind === 'bld' ? bldOf(g, j.to.id) : siteOf(g, j.to.id)) unload(g, t); else { j.phase = 'toDrop'; sendLoaded(g, t); }

@@ -115,6 +115,8 @@ export interface Game {
   revs?: Map<number, { n: number; at: number }>;
   /** track squares joined to Ashford (rebuilt with the network) */
   linked?: Set<number>;
+  /** closed buildings whose barriers are down, as a key (derived) */
+  closedKey?: string;
   /** rail distances from buildings and towns (cleared when the track changes) */
   dist?: Map<string, Int32Array>;
   /** island specialties (cache) */
