@@ -5,24 +5,27 @@ import { orderDone, orderOf, orderProgress, sizeName, stepOf, townLinked, upgrad
 import { shipPlan } from '../economy/shipping.ts';
 import { RLV, UNLOCKS } from '../economy/dispatch.ts';
 import { fmtMoney } from './hud.ts';
+import { bodyPoint } from '../trains/train.ts';
+import { TILE } from '../world/terrain.ts';
 
 const esc = (s: string) => s.replace(/[&<>"]/g, c => `&#${c.charCodeAt(0)};`);
 const bar = (f: number, col: string) => `<div class="bar"><i style="width:${Math.round(Math.min(1, Math.max(0, f)) * 100)}%;background:${col}"></i></div>`;
 const open = (kind: 'town' | 'bld' | 'train', id: number, label = '📍') => `<button class="mini" data-act="open" data-kind="${kind}" data-id="${id}">${label}</button>`;
 
 /** What needs the player: towns ready to grow, buildings off the railway, factories short of goods, full buildings, idle trains. */
-export function stuckList(g: Game): { icon: string; text: string; btn: string }[] {
-  const out: { icon: string; text: string; btn: string }[] = [], plan = shipPlan(g);
-  for (const t of g.s.sites) if (t.kind === 'town' && townLinked(g, t) && orderDone(g, t)) out.push({ icon: '⬆', text: `${esc(t.name ?? 'A town')} can grow into a ${sizeName(stepOf(t) + 1)} (${fmtMoney(upgradePrice(stepOf(t)))})`, btn: open('town', t.id, 'Open ›') });
+export interface Stuck { icon: string; text: string; btn: string; x: number; y: number; /** the building it is about */ bld?: number }
+export function stuckList(g: Game, plan = shipPlan(g)): Stuck[] {
+  const out: Stuck[] = [];
+  for (const t of g.s.sites) if (t.kind === 'town' && townLinked(g, t) && orderDone(g, t)) out.push({ icon: '⬆', text: `${esc(t.name ?? 'A town')} can grow into a ${sizeName(stepOf(t) + 1)} (${fmtMoney(upgradePrice(stepOf(t)))})`, btn: open('town', t.id, 'Open ›'), x: t.x, y: t.y });
   for (const b of g.s.buildings ?? []) {
     const name = INDUSTRIES[b.kind].name;
-    if (!isLinked(g, b)) { out.push({ icon: '🔌', text: `The ${name} isn't on the railway: lay track to one end of its yard`, btn: open('bld', b.id) }); continue; }
-    if (isFactory(b.kind)) { const w = factoryState(g, b).waits; if (w.length) out.push({ icon: '⏳', text: `The ${name} waits for ${w.map(k => `${GOODS[k].icon} ${GOODS[k].name.toLowerCase()}`).join(' and ')}`, btn: open('bld', b.id) }); }
+    if (!isLinked(g, b)) { out.push({ icon: '🔌', text: `The ${name} isn't on the railway: lay track to one end of its yard`, btn: open('bld', b.id), x: b.x, y: b.y, bld: b.id }); continue; }
+    if (isFactory(b.kind)) { const w = factoryState(g, b).waits; if (w.length) out.push({ icon: '⏳', text: `The ${name} waits for ${w.map(k => `${GOODS[k].icon} ${GOODS[k].name.toLowerCase()}`).join(' and ')}`, btn: open('bld', b.id), x: b.x, y: b.y, bld: b.id }); }
     const k = INDUSTRIES[b.kind].makes as Good;
-    if (b.kind !== 'dock' && b.stock >= capOf(b) && !plan.get(b.id)) out.push({ icon: '📦', text: `The ${name} is full: no place on the railway needs ${GOODS[k].icon} ${GOODS[k].name.toLowerCase()} now`, btn: open('bld', b.id) });
+    if (b.kind !== 'dock' && b.stock >= capOf(b) && !plan.get(b.id)) out.push({ icon: '📦', text: `The ${name} is full: no place on the railway needs ${GOODS[k].icon} ${GOODS[k].name.toLowerCase()} now`, btn: open('bld', b.id), x: b.x, y: b.y, bld: b.id });
   }
   const idle = g.s.trains.filter(t => !t.job);
-  if (idle.length) out.push({ icon: '💤', text: `${idle.length} train${idle.length > 1 ? 's wait' : ' waits'} for a load`, btn: open('train', idle[0]!.id) });
+  if (idle.length) { const p = bodyPoint(g.net, idle[0]!, 0); out.push({ icon: '💤', text: `${idle.length} train${idle.length > 1 ? 's wait' : ' waits'} for a load`, btn: open('train', idle[0]!.id), x: p.x / TILE - 0.5, y: p.y / TILE - 0.5 }); }
   return out;
 }
 

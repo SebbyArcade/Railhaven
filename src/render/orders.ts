@@ -1,5 +1,5 @@
 import type { Game } from '../state.ts';
-import { GOODS, type Good, INDUSTRIES, yardSquares } from '../buildings/industries.ts';
+import { buildingSquares, GOODS, type Good, INDUSTRIES, yardSquares } from '../buildings/industries.ts';
 import { orderDone, orderOf, townLinked } from '../economy/towns.ts';
 import { type Ship, siteOf } from '../economy/shipping.ts';
 import { TILE } from '../world/terrain.ts';
@@ -48,4 +48,19 @@ export function drawShipArrow(ctx: CanvasRenderingContext2D, g: Game, plan: Map<
   const a = Math.atan2(by - cy, bx - cx);
   ctx.fillStyle = 'rgba(255,214,120,.95)'; ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(bx - 12 * Math.cos(a - 0.45), by - 12 * Math.sin(a - 0.45)); ctx.lineTo(bx - 12 * Math.cos(a + 0.45), by - 12 * Math.sin(a + 0.45)); ctx.fill();
   ctx.restore();
+}
+
+/** A small red ❗ over each building that is stuck (off the railway, waiting for a good, full with nowhere to send). Its card says why. */
+export function drawAlerts(ctx: CanvasRenderingContext2D, g: Game, ids: Set<number>, zoom: number, tm: number) {
+  if (!ids.size) return;
+  const n = g.world.n, s = Math.max(1, 1 / zoom * 1.3), b0 = Math.sin(tm * 3) * 1.5;
+  for (const b of g.s.buildings ?? []) {
+    if (!ids.has(b.id)) continue;
+    const sq = buildingSquares(n, b); let x = 0, y = 0; for (const i of sq) { x += i % n; y += (i / n) | 0; }
+    const X = (x / sq.length + 0.5) * TILE, Y = (y / sq.length - 0.2) * TILE + b0, r = 7.5 * s;
+    ctx.fillStyle = 'rgba(0,0,0,.3)'; ctx.beginPath(); ctx.arc(X + 1, Y + 1.5, r, 0, 7); ctx.fill();
+    ctx.fillStyle = '#fff4e8'; ctx.beginPath(); ctx.arc(X, Y, r, 0, 7); ctx.fill();
+    ctx.strokeStyle = '#d8442f'; ctx.lineWidth = 1.8 * s; ctx.stroke();
+    ctx.fillStyle = '#d8442f'; ctx.font = `800 ${11 * s}px system-ui`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('!', X, Y + 0.5);
+  }
 }

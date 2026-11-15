@@ -14,6 +14,7 @@ import { tickProduction } from './economy/production.ts';
 import type { Game } from './state.ts';
 import { footprint } from './buildings/industries.ts';
 import { type Card, cardHtml } from './ui/cards.ts';
+import { type MapView, VIEWS } from './ui/mapviews.ts';
 import { buyFleet, FLEET, type FleetKey, fleetLvl, refundOf, removeBuilding, rushOf, sellOffer, sellStock, toggleRush, upgradeBuilding } from './economy/upgrades.ts';
 import { foundTown, sizeName, tickTowns, upgradeTown } from './economy/towns.ts';
 import { buyTrainAt, tickTrains } from './economy/dispatch.ts';
@@ -45,7 +46,7 @@ const tools = new Tools(() => game);
 let renderer = new Renderer(game, tools);
 /** run the game rules for some seconds at once (screenshot checks and the bot) */
 function step(secs: number) { for (let k = 0; k < secs * 20; k++) { const dt = 0.05; game.s.t += dt; game.sys.tick(dt); tickProduction(game, dt); tickTowns(game, dt); tickTrains(game, dt); if (Math.floor(game.s.t / 5) !== Math.floor((game.s.t - dt) / 5)) checkStuck(game); if (tickBreaks(game)) breaksChanged(game); } }
-(window as any).railhaven = { get game() { return game; }, tools, step, openCard: (c: Card | null) => openCard(c), breakRail: (i: number) => { const b = breakRail(game, i); breaksChanged(game); return b; } };
+(window as any).railhaven = { get game() { return game; }, get renderer() { return renderer; }, tools, step, openCard: (c: Card | null) => openCard(c), breakRail: (i: number) => { const b = breakRail(game, i); breaksChanged(game); return b; } };
 
 const view: View = { w: 0, h: 0 };
 let dpr = 1;
@@ -66,6 +67,7 @@ attachInput(canvas, () => game.s.camera, () => view, () => game.world.n * 32, {
   dragStart(sx, sy) { const i = squareAt(sx, sy); return i >= 0 && tools.dragStart(i); },
   dragMove(sx, sy) { const i = squareAt(sx, sy); if (i >= 0) tools.dragOver(i); },
   tap(sx, sy) {
+    if (tools.view) { const a = renderer.arrows.find(o => Math.hypot(o.sx - sx, o.sy - sy) < 24); if (a) { game.s.camera.x = (a.m.x + 0.5) * 32; game.s.camera.y = (a.m.y + 0.5) * 32; return; } }
     const i = squareAt(sx, sy); if (i < 0) return;
     if (tools.mode === 'pan') { const [wx, wy] = toWorld(game.s.camera, view, sx, sy); if (tools.tapWorld(wx, wy)) { renderCard(); return; } }
     if (tools.tapSquare(i)) return;
@@ -93,8 +95,9 @@ function openCard(c: Card | null) { tools.card = c; tools.selected = c?.kind ===
 function closeCard() { tools.card = null; tools.selected = null; renderCard(); }
 function renderCard() {
   if (tools.card?.kind === 'game' && tools.card.page === 'paste' && cardEl.querySelector('#pasteCode')) return; // keep what is being typed
+  if (tools.card?.kind === 'map' && cardEl.style.display === 'block' && cardEl.querySelector('#mapQ')) return; // nothing on it changes: keep the search being typed
   if (tools.card?.kind === 'game' && tools.card.page === 'move' && myCode && (cardEl.querySelector('#myCode') as HTMLTextAreaElement | null)?.value === myCode) return; // keep the code selectable
-  const html = tools.card && (tools.card.kind === 'game' ? gameHtml(tools.card.page, !!oldSave(), importReport, myCode) : cardHtml(game, tools.card));
+  const html = tools.card && (tools.card.kind === 'game' ? gameHtml(tools.card.page, !!oldSave(), importReport, myCode) : cardHtml(game, tools.card, tools.view));
   if (!html) { tools.card = null; cardEl.style.display = 'none'; return; }
   cardEl.innerHTML = `<button class="x" data-act="close">✕</button>${html}`; cardEl.style.display = 'block';
   if (performance.now() - newArmed < 3000) { const nb = cardEl.querySelector<HTMLButtonElement>('button[data-act="newmap"]'); if (nb) { nb.classList.add('sure'); nb.textContent = '⚠ Tap again to start a new map'; } }
@@ -119,6 +122,7 @@ cardEl.onclick = e => {
     if (at) { c.x = (at.x + 0.5) * 32; c.y = (at.y + 0.5) * 32; }
     openCard({ kind, id } as Card); return;
   }
+  if (b.dataset.act === 'view') { setView((b.dataset.v || null) as MapView | null); closeCard(); return; }
   if (b.dataset.act === 'full') { const d = document.documentElement; if (document.fullscreenElement) void document.exitFullscreen?.(); else d.requestFullscreen?.().catch(() => toast('Full screen works when the game is opened in Chrome')); return; }
   if (b.dataset.act === 'copycode') { void saveCode(game).then(async c => { myCode = c; renderCard(); try { await navigator.clipboard.writeText(c); toast('📋 Code copied: paste it in 🗺 Game on the other side'); } catch { toast('Press on the code below, Select all, then Copy'); } }); return; }
   if (b.dataset.act === 'savefile') { void saveCode(game).then(saveFile); return; }
@@ -361,6 +365,7 @@ $('cancel').onclick = () => { tools.cancel(); };
 function updateUi() {
   for (const b of document.querySelectorAll<HTMLButtonElement>('#bar [data-mode]')) b.classList.toggle('on', b.dataset.mode === tools.mode);
   $('buildBtn').classList.toggle('on', tools.mode === 'build' || menuOpen);
+  $('mapBtn').classList.toggle('on', tools.card?.kind === 'map' || !!tools.view);
   menu.style.display = menuOpen ? 'grid' : 'none';
   if (menuOpen && Math.floor(performance.now() / 1000) !== lastMenu) { lastMenu = Math.floor(performance.now() / 1000); renderMenu(); } // prices refresh live
   tools.updateGlow(Math.floor(game.s.camera.x / 32), Math.floor(game.s.camera.y / 32));
@@ -395,6 +400,24 @@ function frame(now: number) {
   requestAnimationFrame(frame);
 }
 addEventListener('visibilitychange', () => { if (document.hidden) saveTo(localStorage, game); });
+// 👁 Map: the map views and Go to; tapping it again closes the card
+const viewTag = $('viewTag');
+function setView(v: MapView | null) {
+  tools.view = v; const d = VIEWS.find(x => x.k === v);
+  viewTag.style.display = d ? 'flex' : 'none';
+  if (d) viewTag.querySelector('span')!.innerHTML = `<b>${d.b}</b><br><small>${d.d}</small>`;
+}
+viewTag.onclick = e => { if ((e.target as HTMLElement).closest('button')) setView(null); };
+$('mapBtn').onclick = () => { if (tools.card?.kind === 'map') { closeCard(); return; } menuOpen = false; tools.mode = 'pan'; tools.cancel(); openCard({ kind: 'map', id: 0 }); };
+cardEl.addEventListener('input', e => {
+  const q = (e.target as HTMLInputElement); if (q.id !== 'mapQ') return;
+  const v = q.value.trim().toLowerCase();
+  for (const gr of cardEl.querySelectorAll<HTMLElement>('.ggrp')) {
+    let any = false;
+    for (const b of gr.querySelectorAll<HTMLElement>('.goto')) { const ok = !v || b.dataset.q!.includes(v); b.style.display = ok ? '' : 'none'; any ||= ok; }
+    gr.style.display = any ? '' : 'none';
+  }
+});
 // 📋 the Railway level chip opens the Orders board
 hud.onclick = e => { if ((e.target as HTMLElement).closest('[data-orders]')) { if (tools.card?.kind === 'orders') closeCard(); else { menuOpen = false; tools.mode = 'pan'; tools.cancel(); openCard({ kind: 'orders', id: 0 }); } } };
 // no money piles up while nobody is playing: after 5 minutes without a touch the game pauses until the next one

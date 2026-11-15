@@ -60,8 +60,8 @@ that makes sense. Details for each line: `legacy/CHANGES.md` (search the version
 ## Stage 5: extras, save import, art
 - [x] Legacy save importer (localStorage `railhaven90` and RAILHAVEN2 codes/files) tested on every save in `tests/saves/` (tools/import-check.ts)
 - [x] Move my game: export/import codes and files (🗺 Game → 📤 Move my game; RAILHAVEN3 codes, save files)
-- [ ] Cards: town (status + tiles), industry, factory, dock, train, ship; Orders board; Stuck list; alerts (❗) (done: town, industry, factory, dock, train cards, order badges over towns, 📋 Orders board with a ⚠ Needs you list; to do: ship card, ❗ alerts on the map)
-- [ ] Map views: Problems, Demand, Resources, Fuel range, Exploration
+- [ ] Cards: town (status + tiles), industry, factory, dock, train, ship; Orders board; Stuck list; alerts (❗) (done: town, industry, factory, dock, train cards, order badges over towns, 📋 Orders board with a ⚠ Needs you list, ❗ over stuck buildings on the map; to do: ship card)
+- [ ] Map views: Problems, Demand, Resources, Fuel range, Exploration (done: 👁 Map with Problems, Demand, Resources, Exploration, edge arrows and 📍 Go to search; to do: Fuel range, which comes with tenders)
 - [ ] Hints (💡), Recommended build, discovery cards, toasts queue, game report
 - [ ] Miniature art at today's level: towns (street grid, gardens, station buildings), industries, factories, docks, shed, trains (steam + cargo wagons), ships, people, smoke
 - [x] Pause when hidden / idle, full-screen button, side sheet on wide screens
