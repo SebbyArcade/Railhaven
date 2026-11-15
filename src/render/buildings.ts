@@ -1,11 +1,49 @@
 import { hash } from '../core/rng.ts';
-import { capOf, type Building, INDUSTRIES, isLinked } from '../buildings/industries.ts';
+import { capOf, type Building, GOODS, type Good, INDUSTRIES, isLinked } from '../buildings/industries.ts';
 import type { Game } from '../state.ts';
 import { barriersDown } from '../buildings/closing.ts';
 import { TILE } from '../world/terrain.ts';
 import { upright, barrel, bush, cart, cottage, crate, dog, flowers, hayBale, hen, lamp, logEnd, logSide, person, pine, puff, sack, stoneWall } from './art.ts';
 
 const CRATE: Record<string, string> = { wood: '#8a5a2e', farm: '#d8b44a', stone: '#9a958c', coal: '#2e2b28', iron: '#8a5a4a', oil: '#3a3a48', wool: '#efeadf', sawmill: '#e0b878', brickworks: '#b5523b', gristmill: '#f4efe2', mill: '#9aa0a8', refinery: '#4a4a58', textile: '#5a7ab0', cannery: '#c0c6cc' , glassworks: '#bfe0ee', toolworks: '#7a7e86', furniture: '#a87444', gold: '#e0b84a', gems: '#9ae0ff', jeweller: '#7a1e3a', cocoa: '#8a5a3a', chocolate: '#5a321e', rubber: '#e8e4d8', tyreworks: '#1e1e20' };
+
+/** Goods that look like heaps of stone or ore rather than crates. */
+const HEAPED = new Set(['stone', 'coal', 'iron', 'gold', 'gems']);
+
+/** Up to 30 goods on the loading platform (10 along it, three layers high), drawn as the good itself. */
+function stockPile(ctx: CanvasRenderingContext2D, b: Building, L: number) {
+  const n = Math.round(30 * Math.min(1, Math.max(0, b.stock) / capOf(b))), col = CRATE[b.kind] ?? '#8a6a40';
+  for (let k = 0; k < n; k++) {
+    const layer = Math.floor(k / 10), i = k % 10;
+    // each layer sits a little higher (toward the building) and is a little narrower, like a heap
+    const u = -L / 2 + 7 + i * 11 + layer * 2.2, v = -17.2 - layer * 1.3;
+    if (i >= 10 - layer) continue; // the top layers are shorter
+    if (b.kind === 'wood') logSide(ctx, u - 3.4, u + 3.4, v, 1.15);
+    else if (b.kind === 'farm') sack(ctx, u, v, '#e2c060');
+    else if (b.kind === 'wool') sack(ctx, u, v, '#f4f0e6');
+    else if (HEAPED.has(b.kind)) {
+      ctx.fillStyle = 'rgba(0,0,0,.25)'; ctx.beginPath(); ctx.ellipse(u + 0.6, v + 0.7, 2.6, 1.5, 0, 0, 7); ctx.fill();
+      ctx.fillStyle = col; ctx.beginPath(); ctx.ellipse(u, v, 2.6, 1.5, 0, 0, 7); ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,.22)'; ctx.beginPath(); ctx.arc(u - 0.9, v - 0.5, 0.7, 0, 7); ctx.fill();
+    } else crate(ctx, u - 1.6, v - 1.6, 3.2, col);
+  }
+}
+
+/** "🪵 64/80" in a small dark chip over the building; amber when the store is full. Constant size on screen. */
+function stockChip(ctx: CanvasRenderingContext2D, b: Building, cx: number, cy: number, zoom: number) {
+  const cap = capOf(b), have = Math.min(cap, Math.floor(Math.max(0, b.stock))), full = have >= cap;
+  const k = 1 / zoom, icon = GOODS[INDUSTRIES[b.kind].makes as Good]?.icon ?? '📦';
+  const text = `${icon} ${have}/${cap}${full ? ' full' : ''}`;
+  ctx.save(); ctx.translate(cx, cy - (zoom >= 1.6 ? 8 : 0)); ctx.scale(k, k);
+  ctx.font = '700 11px system-ui'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  const w = ctx.measureText(text).width + 12, h = 17;
+  ctx.fillStyle = full ? 'rgba(214,128,26,.95)' : 'rgba(30,24,16,.85)';
+  ctx.beginPath(); ctx.roundRect(-w / 2, -h / 2, w, h, 8); ctx.fill();
+  // a fill bar along the bottom of the chip
+  ctx.fillStyle = full ? '#ffe2a8' : '#8fd06a'; ctx.fillRect(-w / 2 + 6, h / 2 - 3, (w - 12) * have / cap, 1.6);
+  ctx.fillStyle = '#fff'; ctx.fillText(text, 0, -0.5);
+  ctx.restore();
+}
 
 /**
  * An industry in its yard, as a little model: a loading platform along the yard, the building and its props on the
@@ -22,18 +60,14 @@ export function drawBuilding(ctx: CanvasRenderingContext2D, g: Game, b: Building
   ctx.fillStyle = 'rgba(0,0,0,.2)'; ctx.fillRect(-L / 2 + 1, -19.4 + 1.2, L, 4.4);
   ctx.fillStyle = '#d0c4a8'; ctx.fillRect(-L / 2, -19.4, L, 4.4);
   ctx.fillStyle = '#efe3a8'; ctx.fillRect(-L / 2, -19.4, L, 0.6);
-  // crates on the platform, more as the stock grows
-  const crates = Math.round(10 * Math.min(1, b.stock / capOf(b))), col = CRATE[b.kind] ?? '#8a6a40';
-  for (let k = 0; k < crates; k++) {
-    const u = -L / 2 + 6 + k * 11, row = k % 2;
-    ctx.fillStyle = 'rgba(0,0,0,.25)'; ctx.fillRect(u + 0.8, -18.6 + row * 0 + 0.8, 5, 3.2);
-    ctx.fillStyle = col; ctx.fillRect(u, -18.6, 5, 3.2);
-    ctx.strokeStyle = 'rgba(0,0,0,.3)'; ctx.lineWidth = 0.4; ctx.strokeRect(u, -18.6, 5, 3.2);
-  }
+  // the goods pile up on the platform as the stock grows: a row along it, then a second and third layer on top
+  if (b.kind !== 'dock') stockPile(ctx, b, L);
   // half of all buildings are laid out the other way round along their yard (docks keep their pier and office as built)
   if (b.kind !== 'dock' && H(1) < 0.5) ctx.scale(-1, 1);
   ART[b.kind](ctx, tm, H, b.lvl);
   ctx.restore();
+  // how much is waiting, as a small chip that keeps its size on screen (hidden when zoomed far out)
+  if (b.kind !== 'dock' && b.id >= 0 && zoom >= 0.7) stockChip(ctx, b, cx, cy, zoom);
   // name, when close or when it is the only thing that tells you what this is
   if (zoom >= 1.6) {
     const d = INDUSTRIES[b.kind], fs = 9;
