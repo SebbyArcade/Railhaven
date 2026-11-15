@@ -537,8 +537,8 @@ cardEl.addEventListener('input', e => {
 });
 // 📋 the Railway level chip opens the Orders board
 hud.onclick = e => { if ((e.target as HTMLElement).closest('[data-orders]')) { if (tools.card?.kind === 'orders') closeCard(); else { menuOpen = false; tools.mode = 'pan'; tools.cancel(); openCard({ kind: 'orders', id: 0 }); } } };
-// no money piles up while nobody is playing: after 5 minutes without a touch the game pauses until the next one
-const IDLE_S = 300, pausedEl = $('paused');
+// no money piles up while nobody is playing: after 3 minutes without a touch the game pauses until the next one (Sébastien)
+const IDLE_S = 180, pausedEl = $('paused');
 let lastTouch = performance.now();
 for (const ev of ['pointerdown', 'keydown', 'wheel'] as const) addEventListener(ev, () => { lastTouch = performance.now(); if (pausedEl.style.display === 'flex') pausedEl.style.display = 'none'; }, { capture: true, passive: true });
 /** the home screen pauses the game behind it */
