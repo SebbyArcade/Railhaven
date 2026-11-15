@@ -36,7 +36,7 @@ that makes sense. Details for each line: `legacy/CHANGES.md` (search the version
 
 ## Stage 3: core loop
 - [ ] Industries: lumber camp (forest, trees deplete and regrow), wheat farm (fields), coal/stone/iron mines in mountains, oil well, fishing (docks) (done: all, fishing from docks; trees deplete and regrow)
-- [ ] 2x4 yards with in/out loading tracks, more tracks by level, building art grows by level (done: yards with two loading tracks, art per kind; to do: more tracks by level)
+- [ ] 2x4 yards with in/out loading tracks, more tracks by level, building art grows by level (done: yards with two loading tracks, art per kind; a 3rd loading track at level 2 and a 4th at level 3 on the strip beside the yard)
 - [ ] Factories (Sawmill, Brickworks, Gristmill, Steel Mill, Refinery, Cannery, Textile Mill...), 1 raw → 1 product, unlock by Railway level (done: all, Cannery fish → canned fish at Railway level 2)
 - [x] Towns: order ladder Hamlet → Village → Town → City → Metropolis → Megacity → endless; tap to upgrade; steady buying after orders (specialties come with islands)
 - [ ] Shipping plan: each building ships to the nearest place that needs it, arrows on the map, pins (done: plan shared nearest-first with factories, arrow from an open building card, 📌 pins)

@@ -11,6 +11,8 @@ export interface NetworkOptions {
   noWide?: (i: number) => boolean;
   /** squares that count as double even without the flag (station halls) */
   forceDouble?: (i: number) => boolean;
+  /** lane offsets on squares with more than two lanes side by side (yards with 3 or 4 loading tracks) */
+  lanes?: (i: number) => number[] | undefined;
 }
 
 /** The rail network built from painted squares. Rebuilt whenever track changes. */
@@ -43,7 +45,13 @@ export function buildNetwork(track: TrackMap, n: number, opt: NetworkOptions = {
     for (const d of sides(sq.links)) { const j = nb(i, d); const o = j >= 0 ? track.get(j) : undefined; if (o && o.links & bit(opposite(d))) m |= bit(d); }
     return m;
   };
-  const laneOffsets = (i: number, d: Dir): number[] => { const j = nb(i, d); return isDbl(i) && j >= 0 && isDbl(j) ? [-LANE, LANE] : [0]; };
+  const lanesOf = (i: number): number[] => opt.lanes?.(i) ?? (isDbl(i) ? [-LANE, LANE] : [0]);
+  const laneOffsets = (i: number, d: Dir): number[] => {
+    const j = nb(i, d); if (j < 0) return [0];
+    const a = lanesOf(i), b = lanesOf(j);
+    if (a.length < 2 || b.length < 2) return [0];
+    return a.length <= b.length ? a : b; // more lanes meet fewer: the side between them has the fewer
+  };
   const centre = (i: number): V2 => [((i % n) + 0.5) * T, (((i / n) | 0) + 0.5) * T];
   /** point on side d of square i, offset across the track by o */
   const port = (i: number, d: Dir, o: number): V2 => {
@@ -137,7 +145,11 @@ export function buildNetwork(track: TrackMap, n: number, opt: NetworkOptions = {
           const A1 = byDist(L1), A2 = byDist(L2);
           for (let k = 0; k < A1.length; k++) pairs.push([A1[k]!, A2[k]!]);
         }
-      } else for (const p of L1) for (const q of L2) pairs.push([p, q]); // single meets double: a turnout fanning to both lanes
+      } else { // fewer lanes meet more: a turnout fanning each of the many to the nearest of the few
+        const [few, many, flip] = L1.length < L2.length ? [L1, L2, false] : [L2, L1, true];
+        const off = (p: V2) => DX[d1] !== 0 ? p[1] : p[0];
+        for (const q of many) { const p = few.reduce((u, v) => Math.abs(off(v) - off(q)) < Math.abs(off(u) - off(q)) ? v : u); pairs.push(flip ? [q, p] : [p, q]); }
+      }
       for (const [p, q] of pairs) {
         let kind: Piece['kind'], k: number;
         if (straight) { const shift = Math.abs(DX[d1] !== 0 ? p[1] - q[1] : p[0] - q[0]); kind = shift > 0.1 ? 'fan' : 'straight'; k = shift > 0.1 ? 0.45 * T : T / 3; }

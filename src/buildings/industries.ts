@@ -93,6 +93,8 @@ export interface Building {
   fish?: number;
   /** where the player pinned its goods to go (else the plan picks) */
   pin?: { kind: 'town' | 'bld'; id: number };
+  /** loading tracks in the yard: 2, then a 3rd at level 2 and a 4th at level 3 on the strip beside the yard */
+  tracks?: number;
   /** docks: goods waiting for a ship to another dock */
   outq?: import('../ships/ships.ts').SeaLoad[];
 }
@@ -107,7 +109,40 @@ export function yardSquares(n: number, b: Pick<Building, 'x' | 'y' | 'horizontal
 export function buildingSquares(n: number, b: Pick<Building, 'x' | 'y' | 'horizontal' | 'side'>): number[] {
   return yardSquares(n, b).map(i => b.horizontal ? i + b.side * n : i + b.side);
 }
-export const footprint = (n: number, b: Pick<Building, 'x' | 'y' | 'horizontal' | 'side'>) => [...yardSquares(n, b), ...buildingSquares(n, b)];
+export const footprint = (n: number, b: Pick<Building, 'x' | 'y' | 'horizontal' | 'side'> & { tracks?: number }) => [...yardSquares(n, b), ...buildingSquares(n, b), ...((b.tracks ?? 2) > 2 ? stripSquares(n, b) : [])];
+
+/** Kinds whose yards grow extra loading tracks with their levels (farms grow fields instead; docks reach farther). */
+export const growsTracks = (k: IndustryKind) => k !== 'farm' && k !== 'wool' && k !== 'dock';
+export const tracksOf = (b: { tracks?: number }) => b.tracks ?? 2;
+/** The strip beside the yard, on the side away from the building: room for the 3rd and 4th loading tracks. */
+export function stripSquares(n: number, b: Pick<Building, 'x' | 'y' | 'horizontal' | 'side'>): number[] {
+  return yardSquares(n, b).map(i => b.horizontal ? i - b.side * n : i - b.side);
+}
+/** Where each loading track runs across the yard row, in px from its middle (the 3rd and 4th out on the strip). */
+export function yardLanes(b: Pick<Building, 'side'> & { tracks?: number }): number[] {
+  const s = -b.side, out = [-8, 8];
+  if (tracksOf(b) >= 3) out.push(24 * s);
+  if (tracksOf(b) >= 4) out.push(40 * s);
+  return out.sort((p, q) => p - q);
+}
+/** Why the strip beside the yard can't take more loading tracks, in plain words, or ''. */
+export function stripError(g: Game, b: Building): string {
+  const n = g.world.n;
+  for (const i of stripSquares(n, b)) {
+    if (g.track.has(i)) return 'your track runs along the strip beside its yard (the side away from the building): move that track off it';
+    const x = i % n, y = (i / n) | 0, t = g.world.terr[i];
+    if (x < 1 || y < 1 || x >= n - 1 || y >= n - 1) return 'its yard is at the edge of the map';
+    if (!isRevealed(g, i)) return 'the strip beside its yard is still in the fog';
+    if (t === T.Water) return 'there is water beside its yard';
+    if (t === T.Mountain) return 'there is mountain beside its yard';
+    for (const o of g.s.buildings ?? []) if (o !== b && footprint(n, o).includes(i)) return `the ${INDUSTRIES[o.kind].name} stands beside its yard`;
+    for (const s of g.s.sites) if (s.kind === 'town' && Math.abs(s.x - x) <= 1 && Math.abs(s.y - y) <= 1) return `${s.name} is right beside its yard`;
+    if (g.s.shed && g.s.shed.x === x && g.s.shed.y === y) return 'the engine shed stands beside its yard';
+    const st = g.s.sites.find(o => o.x === x && o.y === y && o.kind !== 'town');
+    if (st) return st.kind === 'plot' ? 'a settlement site is beside its yard' : 'a deposit is beside its yard';
+  }
+  return '';
+}
 
 /** Price of the next building of this kind: +25% for every one already built. */
 export function priceOf(g: Game, kind: IndustryKind): number {
@@ -167,7 +202,7 @@ export const harmText = (h: { b: Building; lost: number }[]) => h.length ? ` · 
 
 /** Squares already used by track, buildings, towns and the shed. */
 export function takenSquares(g: Game, except?: Building): Set<number> {
-  const key = `${g.track.size}/${g.s.buildings?.length ?? 0}/${g.s.shed?.x},${g.s.shed?.y}/${g.s.sites.filter(s => s.kind === 'town').length}`;
+  const key = `${g.track.size}/${g.s.buildings?.length ?? 0}/${(g.s.buildings ?? []).reduce((a, b) => a + tracksOf(b), 0)}/${g.s.shed?.x},${g.s.shed?.y}/${g.s.sites.filter(s => s.kind === 'town').length}`;
   if (!except && g.taken?.key === key && g.taken.net === g.net) return g.taken.set;
   const n = g.world.n, out = new Set<number>(g.track.keys());
   for (const b of g.s.buildings ?? []) if (b !== except) for (const i of footprint(n, b)) out.add(i);
@@ -312,6 +347,7 @@ export function yardLinkError(g: Game, a: number, b: number): string {
     if ((sq.includes(a) || sq.includes(b)) && horizontalLink !== bd.horizontal) return `Track can only enter the ${INDUSTRIES[bd.kind].name}'s yard at its two ends`;
     const bs = buildingSquares(n, bd);
     if (bs.includes(a) || bs.includes(b)) return `The ${INDUSTRIES[bd.kind].name} stands here`;
+    if (tracksOf(bd) > 2) { const st = stripSquares(n, bd); if (st.includes(a) || st.includes(b)) return `The ${INDUSTRIES[bd.kind].name}'s extra loading tracks run here`; }
   }
   return '';
 }

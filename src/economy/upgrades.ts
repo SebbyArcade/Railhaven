@@ -1,5 +1,5 @@
 import type { Game } from '../state.ts';
-import { type Building, GOODS, type Good, INDUSTRIES, isFactory, yardSquares } from '../buildings/industries.ts';
+import { type Building, GOODS, type Good, growsTracks, INDUSTRIES, isFactory, stripError, tracksOf, yardSquares } from '../buildings/industries.ts';
 import { type Dest, siteOf, bldOf } from './shipping.ts';
 import { orderOf } from './towns.ts';
 
@@ -15,13 +15,16 @@ export function levelPrice(b: Building): number {
 }
 
 /** What the next level gives, in plain words. */
-export const levelGain = (b: Building) => b.kind === 'dock' ? `reaches ${[70, 110][b.lvl - 1] ?? ''} squares by sea` : isFactory(b.kind) ? 'works faster, holds more' : '+50% output, +40 storage';
+export const levelGain = (b: Building) => (b.kind === 'dock' ? `reaches ${[70, 110][b.lvl - 1] ?? ''} squares by sea` : isFactory(b.kind) ? 'works faster, holds more' : '+50% output, +40 storage') + (growsTracks(b.kind) && tracksOf(b) < b.lvl + 2 ? `, ${['', '', '', '3rd', '4th'][b.lvl + 2]} loading track` : '');
 
 export function upgradeBuilding(g: Game, b: Building): string {
   if (b.lvl >= MAX_LVL) return 'It is at full size: build a second one to make more';
   const p = levelPrice(b);
   if (g.s.money < p) return `Need $${(p - Math.floor(g.s.money)).toLocaleString('en-US')} more`;
+  const more = growsTracks(b.kind) && tracksOf(b) < b.lvl + 2;
+  if (more && tracksOf(b) < 3) { const e = stripError(g, b); if (e) return `No room for another loading track: ${e}`; }
   g.s.money -= p; b.lvl++; b.paid = (b.paid ?? 0) + p;
+  if (more) b.tracks = Math.min(4, b.lvl + 1);
   return '';
 }
 

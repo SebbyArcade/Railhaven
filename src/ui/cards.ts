@@ -1,6 +1,6 @@
 import type { Game, Site } from '../state.ts';
 import { fallsMul, POI, POI_RARITY, poisOf, RARITY } from '../world/explore.ts';
-import { buildingSquares, bufOf, type Building, capOf, GOODS, type Good, INDUSTRIES, type IndustryKind, inputsOf, isFactory, isLinked, lockedText, outputOf, shareAt, forestOf, stumpsOf } from '../buildings/industries.ts';
+import { buildingSquares, bufOf, growsTracks, stripError, tracksOf, type Building, capOf, GOODS, type Good, INDUSTRIES, type IndustryKind, inputsOf, isFactory, isLinked, lockedText, outputOf, shareAt, forestOf, stumpsOf } from '../buildings/industries.ts';
 import { factoryState } from '../economy/production.ts';
 import { FOUND_PRICE, orderDone, orderOf, reward, sizeName, steadyGoods, stepOf, townLinked, upgradePrice } from '../economy/towns.ts';
 import { type Dest, destinationsOf, destName, type Ship, shipPlan, siteOf } from '../economy/shipping.ts';
@@ -233,9 +233,10 @@ function buildingCard(g: Game, b: Building, page?: string): string {
   h += `<div class="note">🚂 ${tr.length ? `${tr.length} train${tr.length > 1 ? 's' : ''} on this` : g.s.trains.length ? `Trains collect when ${Math.round(trainCap(g) * 0.75)} are ready` : 'Buy a train at the engine shed (🚂 Train)'}</div>`;
   // grow it, sell what's piled up, or take it down
   if (b.lvl < MAX_LVL) {
-    const p = levelPrice(b), can = g.s.money >= p;
+    const p = levelPrice(b), room = growsTracks(b.kind) && tracksOf(b) < 3 ? stripError(g, b) : '', can = g.s.money >= p && !room;
     h += `<button class="act" data-act="lvl" data-id="${b.id}" ${can ? '' : 'disabled'}>⬆ Level ${b.lvl + 1}: ${levelGain(b)} · ${fmtMoney(p)}</button>`;
-    if (!can) h += `<small class="why">Need ${fmtMoney(p - Math.floor(g.s.money))} more</small>`;
+    if (room) h += `<small class="why">🚧 No room for another loading track: ${room}</small>`;
+    else if (!can) h += `<small class="why">Need ${fmtMoney(p - Math.floor(g.s.money))} more</small>`;
   } else h += `<div class="gift">⭐ Full size (level ${MAX_LVL}): build a second one to make more</div>`;
   const so = sellOffer(b);
   h += `<div class="pair"><button class="act alt" data-act="sell" data-id="${b.id}" ${so.n > 0 ? '' : 'disabled'}>💸 Sell ${so.n} ${G.icon} · ${fmtMoney(so.pay)}</button>`;
