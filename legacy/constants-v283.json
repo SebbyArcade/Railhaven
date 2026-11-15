@@ -1,0 +1,870 @@
+{
+ "LADDER": [
+  {
+   "farm": 30,
+   "wood": 20
+  },
+  {
+   "farm": 60,
+   "wood": 40,
+   "stone": 30
+  },
+  {
+   "farm": 100,
+   "coal": 50,
+   "planks": 40,
+   "bricks": 30
+  },
+  {
+   "farm": 150,
+   "flour": 60,
+   "planks": 60,
+   "bricks": 60,
+   "steel": 40
+  },
+  {
+   "flour": 150,
+   "bricks": 120,
+   "steel": 100,
+   "fuel": 80
+  },
+  {
+   "farm": 190
+  },
+  {
+   "farm": 235
+  },
+  {
+   "farm": 295
+  },
+  {
+   "farm": 365
+  },
+  {
+   "farm": 460
+  },
+  {
+   "farm": 570
+  },
+  {
+   "farm": 715
+  },
+  {
+   "farm": 895
+  },
+  {
+   "farm": 1120
+  },
+  {
+   "farm": 1395
+  },
+  {
+   "farm": 1745
+  },
+  {
+   "farm": 2185
+  },
+  {
+   "farm": 2730
+  },
+  {
+   "farm": 3410
+  },
+  {
+   "farm": 4265
+  },
+  {
+   "farm": 5330
+  },
+  {
+   "farm": 6660
+  },
+  {
+   "farm": 8325
+  },
+  {
+   "farm": 10410
+  },
+  {
+   "farm": 13010
+  },
+  {
+   "farm": 16265
+  },
+  {
+   "farm": 20330
+  },
+  {
+   "farm": 25410
+  },
+  {
+   "farm": 31765
+  },
+  {
+   "farm": 39705
+  },
+  {
+   "farm": 49630
+  },
+  {
+   "farm": 62040
+  },
+  {
+   "farm": 77550
+  },
+  {
+   "farm": 96935
+  },
+  {
+   "farm": 121170
+  },
+  {
+   "farm": 151460
+  },
+  {
+   "farm": 189325
+  },
+  {
+   "farm": 236660
+  },
+  {
+   "farm": 295825
+  },
+  {
+   "farm": 369780
+  }
+ ],
+ "LREW": [
+  600,
+  1500,
+  3000,
+  6000,
+  12500,
+  15600,
+  18800,
+  21900,
+  25000,
+  28100,
+  31300,
+  34400,
+  37500,
+  40600,
+  43800,
+  46900,
+  50000,
+  53100,
+  56300,
+  59400,
+  62500,
+  65600,
+  68800,
+  71900,
+  75000,
+  78100,
+  81300,
+  84400,
+  87500,
+  90600,
+  93800,
+  96900,
+  100000,
+  103100,
+  106300,
+  109400,
+  112500,
+  115600,
+  118800,
+  121900
+ ],
+ "TLIM": [
+  100,
+  400,
+  1200,
+  3000,
+  8000,
+  20000,
+  27000,
+  36500,
+  49300,
+  66600,
+  89900,
+  121400,
+  163900,
+  221300,
+  298800,
+  403400,
+  544600,
+  735200,
+  992500,
+  1339900,
+  1808900,
+  2442000,
+  3296700,
+  4450500,
+  6008200,
+  8111100,
+  10950000,
+  14782500,
+  19956400,
+  26941100,
+  36370500,
+  49100200,
+  66285300,
+  89485200,
+  120805000,
+  163086800,
+  220167200,
+  297225700,
+  401254700,
+  541693800,
+  731286600
+ ],
+ "TCOST": [
+  250,
+  800,
+  2500,
+  6000,
+  15000
+ ],
+ "LPOP": [
+  15,
+  100,
+  400,
+  1200,
+  3000,
+  8000,
+  20000,
+  27000,
+  36500,
+  49300,
+  66600,
+  89900,
+  121400,
+  163900,
+  221300,
+  298800,
+  403400,
+  544600,
+  735200,
+  992500,
+  1339900,
+  1808900,
+  2442000,
+  3296700,
+  4450500,
+  6008200,
+  8111100,
+  10950000,
+  14782500,
+  19956400,
+  26941100,
+  36370500,
+  49100200,
+  66285300,
+  89485200,
+  120805000,
+  163086800,
+  220167200,
+  297225700,
+  401254700,
+  541693800
+ ],
+ "RLV": [
+  0,
+  2,
+  6,
+  12,
+  20,
+  30,
+  42,
+  56,
+  72,
+  90
+ ],
+ "RUNL": [
+  "",
+  "🏭 Sawmill, Brickworks and Gristmill · ⚓ Docks",
+  "🏭 Steel Mill and Refinery · ⚓ bigger ports",
+  "⚓ Deepwater ports",
+  "🏭 Factories and industries grow to level 4",
+  "🚂 Express engines: every train 15% faster",
+  "🏭 Factories and industries grow to level 5",
+  "🚃 Longer trains: +20% cargo everywhere",
+  "🚂 Express engines II: another 15% faster",
+  "Top level"
+ ],
+ "PAY": 0.41,
+ "FACP": 0.5,
+ "FAC": {
+  "sawmill": {
+   "in": {
+    "wood": 1
+   },
+   "out": "planks",
+   "lvl": 2
+  },
+  "brickworks": {
+   "in": {
+    "stone": 1
+   },
+   "out": "bricks",
+   "lvl": 2
+  },
+  "gristmill": {
+   "in": {
+    "farm": 1
+   },
+   "out": "flour",
+   "lvl": 2
+  },
+  "mill": {
+   "in": {
+    "coal": 1,
+    "iron": 1
+   },
+   "out": "steel",
+   "lvl": 3
+  },
+  "refinery": {
+   "in": {
+    "oil": 1
+   },
+   "out": "fuel",
+   "lvl": 3
+  },
+  "cannery": {
+   "in": {
+    "fish": 1
+   },
+   "out": "cans",
+   "lvl": 2
+  },
+  "textile": {
+   "in": {
+    "wool": 1
+   },
+   "out": "cloth",
+   "lvl": 3
+  }
+ },
+ "FACT": {
+  "rate": "fn:l=>.35+.25*l",
+  "buf": "fn:l=>30+20*l",
+  "maxL": 3,
+  "run": 0.5
+ },
+ "IND": {
+  "lvl": "fn:s=>s.lvl||1",
+  "rate": "fn:s=>r0(s)*(specOn(s)?1.5:1)",
+  "cap": "fn:s=>c0(s)*(specOn(s)?1.5:1)",
+  "maxL": 3
+ },
+ "TYPES": {
+  "coal": {
+   "n": "Coal Mine",
+   "g": "⚫",
+   "col": "#3a3530",
+   "rate": 6
+  },
+  "wood": {
+   "n": "Lumber Camp",
+   "g": "🪵",
+   "col": "#6b4a26",
+   "rate": 5
+  },
+  "farm": {
+   "n": "Wheat Farm",
+   "g": "🌾",
+   "col": "#c9a440",
+   "rate": 7
+  },
+  "iron": {
+   "n": "Iron Mine",
+   "g": "🧲",
+   "col": "#8a5a4a",
+   "rate": 9
+  },
+  "oil": {
+   "n": "Oil Well",
+   "g": "🛢",
+   "col": "#2b2b38",
+   "rate": 12
+  },
+  "stone": {
+   "n": "Stone Quarry",
+   "g": "🪨",
+   "col": "#7a7468",
+   "rate": 5
+  },
+  "plot": {
+   "n": "Settlement Site",
+   "g": "🚩"
+  },
+  "port": {
+   "n": "Port",
+   "g": "⚓"
+  },
+  "dep": {
+   "n": "Deposit",
+   "g": "⛰"
+  },
+  "sawmill": {
+   "n": "Sawmill",
+   "g": "🏭",
+   "col": "#7a5634"
+  },
+  "brickworks": {
+   "n": "Brickworks",
+   "g": "🏭",
+   "col": "#8a4a36"
+  },
+  "gristmill": {
+   "n": "Flour Mill",
+   "g": "🏭",
+   "col": "#86682c"
+  },
+  "mill": {
+   "n": "Steel Mill",
+   "g": "🏭",
+   "col": "#5a4e56"
+  },
+  "refinery": {
+   "n": "Refinery",
+   "g": "🏭",
+   "col": "#383848"
+  },
+  "fish": {
+   "n": "Fish",
+   "g": "🐟",
+   "rate": 9
+  },
+  "shell": {
+   "n": "Shellfish",
+   "g": "🦞",
+   "rate": 22
+  },
+  "planks": {
+   "n": "Planks",
+   "g": "🪚",
+   "rate": 14
+  },
+  "bricks": {
+   "n": "Bricks",
+   "g": "🧱",
+   "rate": 14
+  },
+  "flour": {
+   "n": "Flour",
+   "g": "🍞",
+   "rate": 18
+  },
+  "steel": {
+   "n": "Steel",
+   "g": "⚙️",
+   "rate": 30
+  },
+  "fuel": {
+   "n": "Fuel",
+   "g": "⛽",
+   "rate": 45
+  },
+  "cannery": {
+   "n": "Cannery",
+   "g": "🏭",
+   "col": "#2f6b86"
+  },
+  "cans": {
+   "n": "Canned fish",
+   "g": "🥫",
+   "rate": 26
+  },
+  "wool": {
+   "n": "Sheep Farm",
+   "g": "🐑",
+   "col": "#8a7a5a",
+   "rate": 10
+  },
+  "textile": {
+   "n": "Textile Mill",
+   "g": "🏭",
+   "col": "#7a4a6a"
+  },
+  "cloth": {
+   "n": "Cloth",
+   "g": "🧵",
+   "rate": 24
+  }
+ },
+ "BUILD": {
+  "wood": 600,
+  "farm": 800,
+  "coal": 1000,
+  "stone": 800,
+  "iron": 1500,
+  "oil": 2500,
+  "wool": 900
+ },
+ "COST": {
+  "train": 1000,
+  "refit": 250,
+  "trainRun": 0.6,
+  "trainWait": 0,
+  "trackRun": 0.006
+ },
+ "MATS": [
+  "wood",
+  "stone",
+  "farm",
+  "planks",
+  "bricks",
+  "flour",
+  "steel",
+  "coal",
+  "iron",
+  "oil",
+  "fuel"
+ ],
+ "GOOD": {
+  "fish": "Fish",
+  "shell": "Shellfish",
+  "coal": "Coal",
+  "wood": "Wood",
+  "farm": "Wheat",
+  "iron": "Iron",
+  "oil": "Oil",
+  "stone": "Stone",
+  "planks": "Planks",
+  "bricks": "Bricks",
+  "flour": "Flour",
+  "steel": "Steel",
+  "fuel": "Fuel",
+  "pass": "Passengers",
+  "cans": "Canned fish",
+  "wool": "Wool",
+  "cloth": "Cloth"
+ },
+ "DEP": {
+  "coal": "Coal seam",
+  "stone": "Rock outcrop",
+  "iron": "Iron deposit",
+  "oil": "Oil seep"
+ },
+ "SELLP": 0.6,
+ "UPG": {
+  "wag": {
+   "n": "🚃 Bigger wagons",
+   "d": "every train carries more",
+   "lv": [
+    1,
+    1.5,
+    2.25,
+    3.25
+   ],
+   "c": [
+    4500,
+    12000,
+    30000
+   ],
+   "t": "fn:l=>'load '+Math.round(20*[1,1.5,2.25,3.25][l])"
+  },
+  "eng": {
+   "n": "⚙ Stronger engines",
+   "d": "every train runs faster",
+   "lv": [
+    1,
+    1.25,
+    1.5,
+    1.8
+   ],
+   "c": [
+    6000,
+    15000,
+    37500
+   ],
+   "t": "fn:l=>['steam','fast steam','diesel','express diesel'][l]+' · ×'+[1,1.25,1.5,1.8][l]+' speed'"
+  },
+  "rng": {
+   "n": "⛽ Bigger tenders",
+   "d": "trains go further between refuels",
+   "lv": [
+    30,
+    45,
+    65,
+    100
+   ],
+   "c": [
+    3800,
+    10500,
+    22500
+   ],
+   "t": "fn:l=>[30,45,65,100][l]+' tiles from a town or water tower'"
+  },
+  "rep": {
+   "n": "🔧 Repair works",
+   "d": "well-kept trains cost less to run",
+   "lv": [
+    1,
+    0.75,
+    0.55
+   ],
+   "c": [
+    7500,
+    22500
+   ],
+   "t": "fn:l=>'upkeep −'+[0,25,45][l]+'%'"
+  }
+ },
+ "SHUP": "ERR SHUP is not defined",
+ "RUSH": "ERR RUSH is not defined",
+ "FISH": {
+  "c": [
+   {
+    "m": 4500
+   },
+   {
+    "m": 9000
+   },
+   {
+    "m": 18000
+   }
+  ],
+  "r": [
+   0,
+   0.6,
+   1.1,
+   1.1
+  ],
+  "sr": 0.5,
+  "n": [
+   "",
+   "🎣 Fishing boats",
+   "🎣 Bigger fleet",
+   "🦞 Shellfish traps"
+  ]
+ },
+ "SPEC": {
+  "port": {
+   "g": "🎣",
+   "n": "Fishing town",
+   "m": {
+    "farm": 0.7,
+    "flour": 0.7,
+    "wood": 1.3,
+    "planks": 1.3
+   },
+   "drop": "flour",
+   "d": "Eats fish: smaller wheat and flour orders, more wood for boats"
+  },
+  "mine": {
+   "g": "⛏",
+   "n": "Mining town",
+   "m": {
+    "coal": 1.5,
+    "steel": 1.4,
+    "stone": 1.4,
+    "farm": 0.8
+   },
+   "add": "coal",
+   "drop": "flour",
+   "d": "Wants coal, stone and steel; buys its bread elsewhere"
+  },
+  "timber": {
+   "g": "🪵",
+   "n": "Timber town",
+   "m": {
+    "wood": 1.4,
+    "planks": 1.5,
+    "stone": 0.7,
+    "bricks": 0.7
+   },
+   "add": "planks",
+   "drop": "bricks",
+   "d": "Builds in wood: more planks, fewer bricks"
+  },
+  "farm": {
+   "g": "🌾",
+   "n": "Farm town",
+   "m": {
+    "farm": 1.4,
+    "flour": 1.5,
+    "steel": 0.7,
+    "planks": 0.8
+   },
+   "add": "flour",
+   "drop": "steel",
+   "d": "Bakes for the region: more wheat and flour, less steel"
+  }
+ },
+ "RISL": {
+  "6": 2,
+  "8": 3,
+  "10": 4
+ },
+ "BRG": [
+  null,
+  {
+   "n": "🪵 Wooden trestle",
+   "d": 1,
+   "span": 3,
+   "c": 2500,
+   "lv": 1,
+   "t": "rivers, ponds and shallow water by the shore (up to 3 squares of water)"
+  },
+  {
+   "n": "🧱 Stone viaduct",
+   "d": 2,
+   "span": 5,
+   "c": 10000,
+   "lv": 2,
+   "t": "wide rivers and inlets (up to 5 squares of water)"
+  },
+  {
+   "n": "⚙️ Steel truss",
+   "d": 3,
+   "span": 8,
+   "c": 30000,
+   "lv": 4,
+   "t": "wide channels inside an island (up to 8 squares). Other islands are reached by ship"
+  }
+ ],
+ "LM": {
+  "foundry": {
+   "n": "⛰ Foundry",
+   "d": "Tunnels: track can cross mountains",
+   "c": {
+    "m": 6000,
+    "iron": 80,
+    "coal": 80
+   },
+   "lvl": 2
+  },
+  "works": {
+   "n": "🔶 Locomotive Works",
+   "d": "All trains +10% speed",
+   "c": {
+    "m": 10000,
+    "steel": 40,
+    "planks": 40
+   },
+   "lvl": 3
+  },
+  "clock": {
+   "n": "🕰 Clock Tower",
+   "d": "Town order rewards +25%",
+   "c": {
+    "m": 15000,
+    "bricks": 60,
+    "steel": 20
+   },
+   "lvl": 3
+  },
+  "viaduct": {
+   "n": "🌉 Bridge Works",
+   "d": "Track over water costs half",
+   "c": {
+    "m": 18000,
+    "steel": 40,
+    "bricks": 60
+   },
+   "lvl": 3
+  },
+  "expo": {
+   "n": "🎡 Exhibition Hall",
+   "d": "Every town grows 25% faster",
+   "c": {
+    "m": 30000,
+    "steel": 60,
+    "flour": 60
+   },
+   "lvl": 4
+  }
+ },
+ "CARGO": {
+  "hop": {
+   "n": "Hopper wagons",
+   "g": "⚫🧲",
+   "k": [
+    "coal",
+    "iron"
+   ],
+   "c": 3000
+  },
+  "tank": {
+   "n": "Tank wagons",
+   "g": "🛢⛽",
+   "k": [
+    "oil",
+    "fuel"
+   ],
+   "c": 6000
+  },
+  "flat": {
+   "n": "Flat wagons",
+   "g": "⚙️",
+   "k": [
+    "steel"
+   ],
+   "c": 5000
+  }
+ },
+ "TIERCAP": [
+  150,
+  400,
+  1200,
+  3000,
+  8000,
+  20000
+ ],
+ "LADDER_EXT": [
+  {
+   "farm": 30,
+   "wood": 20
+  },
+  {
+   "farm": 60,
+   "wood": 40,
+   "stone": 30
+  },
+  {
+   "farm": 100,
+   "coal": 50,
+   "planks": 40,
+   "bricks": 30
+  },
+  {
+   "farm": 150,
+   "flour": 60,
+   "planks": 60,
+   "bricks": 60,
+   "steel": 40
+  },
+  {
+   "flour": 150,
+   "bricks": 120,
+   "steel": 100,
+   "fuel": 80
+  },
+  {
+   "farm": 190
+  },
+  {
+   "farm": 235
+  },
+  {
+   "farm": 295
+  },
+  {
+   "farm": 365
+  },
+  {
+   "farm": 460
+  },
+  {
+   "farm": 570
+  },
+  {
+   "farm": 715
+  }
+ ],
+ "globals": "FISH LOC IDLE_S MAPR FISHREADY IRES RESN CI_T LESF LESN LESBTN LESK LESRE LT STEADYP STEADY_T NQ MAPPV MAPPK SCPV XP SHIPC SHOLD BRG BR_MAXD BRC NOGO REJ SCD SCDP DOCKMORE TTAB STAB BTAB ATSEL MMTAB ATAB TKTAB OTAB GFX2 HOUSE2 GFX3 UI4 GFX4 UI5 SMOOTH SHIPB SHIPP CHIPC TOWNC RTON UI5IC"
+}

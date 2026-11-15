@@ -6,9 +6,11 @@ import { drawFog } from './fog.ts';
 import { drawSites } from './sites.ts';
 import { drawHall } from './stations.ts';
 import { drawBreak, drawShed } from './shed.ts';
+import { drawBuilding } from './buildings.ts';
 import { shedSquare } from '../buildings/shed.ts';
 import { hallsOf } from '../buildings/stations.ts';
 import { landDistance } from '../track/rules.ts';
+import { buildingSquares, footprint, yardSquares } from '../buildings/industries.ts';
 import { TerrainCache } from './terrainCache.ts';
 import { drawWaterLive } from './terrainArt.ts';
 import { drawTrack } from './track.ts';
@@ -16,11 +18,17 @@ import { drawTrains } from './trains.ts';
 import type { Tools } from '../ui/tools.ts';
 import { bodyPoint } from '../trains/train.ts';
 
+/** Squares under a building (trees are cleared there). */
+function builtOn(g: Game, i: number): boolean {
+  const n = g.world.n;
+  return (g.s.buildings ?? []).some(b => footprint(n, b).includes(i));
+}
+
 /** Draws one frame. Reads the game, never changes it. */
 export class Renderer {
   readonly terrain: TerrainCache;
   constructor(private g: Game, private tools?: Tools) {
-    this.terrain = new TerrainCache(g.world, i => g.track.has(i) || i === shedSquare(g));
+    this.terrain = new TerrainCache(g.world, i => g.track.has(i) || i === shedSquare(g) || builtOn(g, i));
     g.terrainDirty = sq => this.terrain.invalidate(sq);
   }
 
@@ -45,6 +53,7 @@ export class Renderer {
     const halls = hallsOf(g.track, n, g.s.sites);
     for (const h of halls) if (vis(h.squares[1]) && isRevealed(g, h.squares[1])) drawHall(ctx, g.s.seed, h, cam.z);
     drawSites(ctx, g, x0, y0, x1, y1, cam.z, tm, halls);
+    for (const b of g.s.buildings ?? []) if (vis(b.y * n + b.x) && isRevealed(g, b.y * n + b.x)) drawBuilding(ctx, g, b, tm, cam.z);
     drawShed(ctx, g, tm);
     for (const b of g.s.breaks ?? []) if (vis(b.square)) drawBreak(ctx, g, b, tm);
     drawTrains(ctx, g.net, g.s.trains, tm);
@@ -64,6 +73,14 @@ export class Renderer {
     for (const i of t.dbl) box(i, 'rgba(120,190,255,.25)', 'rgba(150,210,255,.9)');
     if (t.removeAt !== null) box(t.removeAt, 'rgba(255,90,70,.3)', 'rgba(255,120,100,.95)');
     if (t.flash && performance.now() < t.flash.until) box(t.flash.square, 'rgba(255,60,40,.35)', 'rgba(255,80,60,1)');
+    if (t.mode === 'build') {
+      const p = 0.5 + 0.5 * Math.sin(tm * 3.5);
+      for (const i of t.glow) { const x = (i % n) * TILE, y = ((i / n) | 0) * TILE; ctx.fillStyle = `rgba(255,214,120,${0.1 + 0.14 * p})`; ctx.fillRect(x + 3, y + 3, TILE - 6, TILE - 6); }
+      if (t.preview) {
+        for (const i of yardSquares(n, t.preview)) box(i, 'rgba(150,210,255,.3)', 'rgba(170,220,255,.95)');
+        for (const i of buildingSquares(n, t.preview)) box(i, 'rgba(120,230,140,.32)', 'rgba(150,255,170,.95)');
+      }
+    }
     if (t.mode === 'rail' && !t.plan) { // show where track may start
       const a = this.g.s.sites[0]!, p = 0.5 + 0.5 * Math.sin(tm * 4);
       if (!this.g.track.size) box(a.y * n + a.x, `rgba(255,214,120,${0.15 + 0.2 * p})`, 'rgba(255,214,120,.9)');

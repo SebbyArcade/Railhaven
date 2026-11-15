@@ -8,6 +8,7 @@ import { trackFromSave, trackToSave } from './track/state.ts';
 import type { TrackMap } from './track/types.ts';
 import { TrainSystem } from './trains/train.ts';
 import { placeShed, shedSquare } from './buildings/shed.ts';
+import { type Building, linkedSquares, yardSquares } from './buildings/industries.ts';
 import { blockedPieces } from './track/breaks.ts';
 import { networkKey, relocate, snapshot } from './trains/relocate.ts';
 
@@ -25,14 +26,19 @@ export function buildWorld(s: GameState) {
   return world;
 }
 
-function makeNetwork(track: TrackMap, n: number, sites: Site[]): Network {
+function makeNetwork(track: TrackMap, n: number, sites: Site[], buildings: Building[] = []): Network {
   const halls = hallsOf(track, n, sites), dbl = doubleSquares(track, halls), still = new Set<number>();
   for (const h of halls) for (const i of [...h.squares, ...h.approaches]) still.add(i);
+  for (const b of buildings) { // yards: two loading tracks, the turnouts on the square past each end
+    const sq = yardSquares(n, b), along = b.horizontal ? 0b0101 : 0b1010, step = b.horizontal ? 1 : n;
+    for (const i of sq) { if (track.has(i)) dbl.add(i); still.add(i); }
+    for (const i of [sq[0]! - step, sq.at(-1)! + step]) { const t = track.get(i); still.add(i); if (t && (t.links & ~along) === 0) dbl.add(i); }
+  }
   return buildNetwork(track, n, { forceDouble: i => dbl.has(i), noWide: i => still.has(i) });
 }
 
 function assemble(s: GameState): Game {
-  const world = buildWorld(s), track = trackFromSave(s.track ?? []), net = makeNetwork(track, world.n, s.sites);
+  const world = buildWorld(s), track = trackFromSave(s.track ?? []), net = makeNetwork(track, world.n, s.sites, s.buildings);
   s.trains ??= []; s.nextId ??= 1;
   const g: Game = { s, world, track, net, sys: new TrainSystem(net, s.trains) };
   if (s.netKey !== networkKey(net)) {
@@ -40,7 +46,7 @@ function assemble(s: GameState): Game {
     for (const t of s.trains) if (t.at) relocate(net, t, t.at);
     s.netKey = networkKey(net);
   }
-  placeShed(g); g.sys.blocked = blockedPieces(g);
+  g.linked = linkedSquares(g); placeShed(g); g.sys.blocked = blockedPieces(g);
   for (const t of s.trains) if (t.dest !== undefined && t.plan.length === 0) g.sys.sendTo(t, t.dest);
   g.sys.rebuildHolds();
   return g;
@@ -75,7 +81,8 @@ export function prepareSave(g: Game) {
 /** After the track changed: rebuild the rails and put every train back where it stood. */
 export function trackChanged(g: Game) {
   const where = g.s.trains.map(t => snapshot(g.net, t));
-  g.net = makeNetwork(g.track, g.world.n, g.s.sites);
+  g.net = makeNetwork(g.track, g.world.n, g.s.sites, g.s.buildings);
+  g.linked = linkedSquares(g);
   g.sys.setNetwork(g.net);
   g.s.trains.forEach((t, k) => { relocate(g.net, t, where[k]!); });
   g.s.breaks = g.s.breaks?.filter(b => g.track.has(b.square));
