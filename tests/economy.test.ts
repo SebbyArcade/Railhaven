@@ -7,6 +7,9 @@ import { tickTowns, orderOf, upgradeTown } from '../src/economy/towns.ts';
 import { buyTrain, tickTrains, trainPrice } from '../src/economy/dispatch.ts';
 import { shipPlan } from '../src/economy/shipping.ts';
 import type { Game } from '../src/state.ts';
+import { buyFleet, levelPrice, refundOf, removeBuilding, sellStock, toggleRush, trainCap, upgradeBuilding } from '../src/economy/upgrades.ts';
+import { outputOf, capOf } from '../src/buildings/industries.ts';
+import { checkStuck } from '../src/economy/nofail.ts';
 
 /** a farm next to Ashford, joined by track */
 function farmGame(): { g: Game; b: Building } {
@@ -100,5 +103,42 @@ describe('towns, orders and goods trains', () => {
     run(g, 200);
     expect((mill.inbuf?.farm ?? 0) + mill.stock).toBeGreaterThan(0);
     expect(mill.stock).toBeGreaterThan(0);
+  });
+
+  it('building levels, selling stock and removing a building', () => {
+    const { g, b } = farmGame();
+    g.s.money = 1e5;
+    const out1 = outputOf(g, b), cap1 = capOf(b), p = levelPrice(b);
+    expect(upgradeBuilding(g, b)).toBe('');
+    expect(b.lvl).toBe(2); expect(outputOf(g, b)).toBeGreaterThan(out1); expect(capOf(b)).toBeGreaterThan(cap1);
+    expect(b.paid).toBe(800 + p);
+    upgradeBuilding(g, b); expect(upgradeBuilding(g, b)).toMatch(/full size/);
+    b.stock = 40; const m = g.s.money;
+    expect(sellStock(g, b)).toBe('');
+    expect(b.stock).toBe(10); expect(g.s.money).toBeGreaterThan(m);
+    const r = refundOf(b), m2 = g.s.money;
+    expect(removeBuilding(g, b)).toBe('');
+    expect(g.s.buildings!.includes(b)).toBe(false); expect(g.s.money).toBe(m2 + r);
+  });
+
+  it('fleet upgrades carry more; a rush sends goods there first', () => {
+    const { g, b } = farmGame();
+    g.s.money = 1e5;
+    expect(buyFleet(g, 'wag')).toBe(''); expect(trainCap(g)).toBe(30);
+    const ash = g.s.sites[0]!; ash.got = { farm: 30 }; // order's wheat in: the farm would sell extra
+    expect(toggleRush(g, { kind: 'town', id: ash.id }, 'farm')).toMatch(/Nothing left/);
+    ash.got = {};
+    expect(toggleRush(g, { kind: 'town', id: ash.id }, 'farm')).toBe('');
+    expect(shipPlan(g).get(b.id)).toMatchObject({ rush: true });
+  });
+
+  it('no-fail: a broke player with nothing earning gets topped up, once in a while, never while earning', () => {
+    const g = newGame(4242);
+    g.s.money = 50;
+    const add = checkStuck(g);
+    expect(add).toBeGreaterThan(0); expect(g.s.money).toBeGreaterThanOrEqual(1800);
+    g.s.money = 50; expect(checkStuck(g)).toBe(0); // not again straight away
+    const { g: g2 } = farmGame(); buyTrain(g2); g2.s.money = 10;
+    expect(checkStuck(g2)).toBe(0); // the farm will fill a train soon
   });
 });

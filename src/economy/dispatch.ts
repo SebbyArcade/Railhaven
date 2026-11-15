@@ -4,7 +4,9 @@ import { placeTrain } from '../trains/train.ts';
 import { type Building, GOODS, type Good, INDUSTRIES, isLinked, yardSquares } from '../buildings/industries.ts';
 import { hallOf } from '../buildings/stations.ts';
 import { shedSiding } from '../buildings/shed.ts';
-import { bldDist, bldOf, destName, destSquares, factoryRoom, MIN_LOAD, payFor, railDist, type Ship, shipPlan, siteOf, TRAIN_CAP } from './shipping.ts';
+import { bldDist, bldOf, destName, destSquares, factoryRoom, payFor, railDist, type Ship, shipPlan, siteOf } from './shipping.ts';
+import { fleetMulOf, minLoad, rushDelivered, trainCap } from './upgrades.ts';
+import { V_MAX } from '../trains/train.ts';
 import { deliverToTown, orderDone, reward, sizeName, stepOf } from './towns.ts';
 
 export const LOAD_TIME = 4;
@@ -43,7 +45,7 @@ export function buyTrain(g: Game): Train | string {
 }
 
 /** Units of stock already promised to trains on their way to collect. */
-const claimed = (g: Game, b: Building) => g.s.trains.reduce((a, t) => a + (t.job?.src === b.id && t.job.phase === 'toLoad' ? TRAIN_CAP : 0), 0);
+const claimed = (g: Game, b: Building) => g.s.trains.reduce((a, t) => a + (t.job?.src === b.id && t.job.phase === 'toLoad' ? trainCap(g) : 0), 0);
 
 /** Where the head of the train is (a track square). */
 export const headSquare = (g: Game, t: Train) => g.net.pieces[t.trail.at(-1)!.piece]!.squares.at(-1)!;
@@ -56,9 +58,9 @@ function bestJob(g: Game, t: Train, plan: Map<number, Ship>): { b: Building; shi
   let best: { b: Building; ship: Ship } | null = null, bs = -Infinity;
   for (const b of g.s.buildings ?? []) {
     const ship = plan.get(b.id); if (!ship || !isLinked(g, b)) continue;
-    const avail = b.stock - claimed(g, b); if (avail < MIN_LOAD) continue;
+    const avail = b.stock - claimed(g, b); if (avail < minLoad(g)) continue;
     const reach = bldDist(g, b)[at]!; if (reach < 0) continue;
-    const s = payFor(INDUSTRIES[b.kind].makes, Math.min(TRAIN_CAP, avail), ship.d, ship.why) / (reach + ship.d + 8) + (ship.why === 'order' ? 1e3 : 0);
+    const s = payFor(INDUSTRIES[b.kind].makes, Math.min(trainCap(g), avail), ship.d, ship.why) / (reach + ship.d + 8) + (ship.why === 'order' || ship.rush ? 1e3 : 0);
     if (s > bs) { bs = s; best = { b, ship }; }
   }
   return best;
@@ -87,7 +89,7 @@ function unload(g: Game, t: Train) {
   if (j.to.kind === 'bld') {
     const f = bldOf(g, j.to.id)!, n = Math.min(c.n, Math.floor(factoryRoom(f, k)));
     (f.inbuf ??= {})[k] = (f.inbuf[k] ?? 0) + n;
-    const v = payFor(k, n, c.d, 'factory'); pay(g, v);
+    let v = payFor(k, n, c.d, 'factory'); v -= rushDelivered(g, j.to, k, n, v); pay(g, v);
     t.lastPay = { pay: Math.round(v), at: g.s.t, n, good: k, to: j.to };
     c.n -= n;
     if (c.n > 0) { j.to = nearestTown(g, t) ?? j.to; j.phase = 'toDrop'; sendLoaded(g, t); return; }
@@ -95,8 +97,8 @@ function unload(g: Game, t: Train) {
   }
   const town = siteOf(g, j.to.id)!;
   const p = deliverToTown(g, town, k, c.n);
-  const v = payFor(k, p.order, c.d, 'order') + payFor(k, p.steady, c.d, 'steady') + payFor(k, p.surplus, c.d, 'extra');
-  pay(g, v);
+  let v = payFor(k, p.order, c.d, 'order') + payFor(k, p.steady, c.d, 'steady') + payFor(k, p.surplus, c.d, 'extra');
+  v -= rushDelivered(g, j.to, k, p.order, v); pay(g, v);
   t.lastPay = { pay: Math.round(v), at: g.s.t, n: c.n, good: k, to: j.to };
   if (!town.filled && orderDone(g, town)) {
     town.filled = true;
@@ -127,7 +129,8 @@ function nearestTown(g: Game, t: Train): { kind: 'town'; id: number } | null {
 export function tickTrains(g: Game, dt: number) {
   let plan: Map<number, Ship> | null = null;
   const P = () => (plan ??= shipPlan(g));
-  const fm = fleetMul(g.s.trains.length);
+  const fm = fleetMul(g.s.trains.length) * fleetMulOf(g, 'rep');
+  g.sys.vmax = V_MAX * fleetMulOf(g, 'eng');
   for (const t of g.s.trains) {
     if (t.v > 0) { const c = UPKEEP * fm * dt; g.s.money -= c; g.s.upkeep = (g.s.upkeep ?? 0) + c; }
     const j = t.job;
@@ -149,7 +152,7 @@ export function tickTrains(g: Game, dt: number) {
       j.phase = 'loading'; j.timer = LOAD_TIME;
     } else if (j.phase === 'loading') {
       if (!src) { endJob(t); continue; }
-      const n = Math.min(TRAIN_CAP, Math.floor(src.stock));
+      const n = Math.min(trainCap(g), Math.floor(src.stock));
       if (n <= 0) { endJob(t); continue; }
       src.stock -= n;
       const ship = P().get(src.id); if (ship) j.to = ship.to;
@@ -168,7 +171,7 @@ export function tickTrains(g: Game, dt: number) {
 /** What a train is doing, in plain words. */
 export function trainStatus(g: Game, t: Train): string {
   const j = t.job;
-  if (!j) return t.v > 0 ? '🚂 On its way' : `💤 Waiting for a load (a building needs ${MIN_LOAD} ready)`;
+  if (!j) return t.v > 0 ? '🚂 On its way' : `💤 Waiting for a load (a building needs ${minLoad(g)} ready)`;
   const src = (g.s.buildings ?? []).find(b => b.id === j.src), where = destName(g, j.to), icon = GOODS[j.good as Good]?.icon ?? '';
   const name = src ? INDUSTRIES[src.kind].name : 'the yard';
   if (j.phase === 'toLoad') return `🚂 Going to the ${name} for ${icon}`;

@@ -68,6 +68,8 @@ export class TrainSystem {
   holder = new Map<number, number>();
   constructor(public net: Network, public trains: Train[]) { this.rebuildHolds(); }
 
+  /** top speed (Engine shed upgrades raise it) */
+  vmax = V_MAX;
   /** pieces trains may not enter (broken rails) */
   blocked = new Set<number>();
   /** platform and yard tracks: either lane is fine there (keep-left is for the open line) */
@@ -218,7 +220,7 @@ export class TrainSystem {
       if (!this.tryHold(t)) break;
     }
     const auth = this.authority(t);
-    const target = Math.min(V_MAX, Math.sqrt(2 * DECEL * Math.max(0, auth - 0.5)));
+    const target = Math.min(this.vmax, Math.sqrt(2 * DECEL * Math.max(0, auth - 0.5)));
     t.v = t.v < target ? Math.min(target, t.v + ACCEL * dt) : Math.max(target, t.v - DECEL * dt);
     let go = Math.min(t.v * dt, auth);
     if (go <= 0.001) {
@@ -297,8 +299,9 @@ export class TrainSystem {
     const inWay = new Set<number>();
     for (const o of this.trains) if (o !== t) {
       let c = 0; for (const m of o.plan) { if (isRev(m)) continue; inWay.add(m.piece); for (const x of this.net.conflicts[m.piece]!) inWay.add(x); if (++c > 60) break; }
-      // never stand aside on another train's destination (it may be standing aside itself, with no plan right now)
-      if (o.dest !== undefined) for (const q of o.area ?? [o.dest]) for (const p of this.net.bySquare.get(q) ?? []) { inWay.add(p); for (const x of this.net.conflicts[p]!) inWay.add(x); }
+      // never stand aside on the destination of a train that is itself standing aside (it has no plan right now);
+      // a train with a plan only needs the pieces of that plan, so a station's other platform stays usable
+      if (o.dest !== undefined && !o.plan.length) for (const q of o.area ?? [o.dest]) for (const p of this.net.bySquare.get(q) ?? []) { inWay.add(p); for (const x of this.net.conflicts[p]!) inWay.add(x); }
     }
     // stagger retries so two trains standing aside don't come back at the same moment
     if (this.stepAside(t, inWay)) t.refuge = REFUGE_WAIT + (t.id % 3) * 1.5;
@@ -313,10 +316,15 @@ export class TrainSystem {
       head: t.trail.at(-1)!, tail: t.trail[0]!, trail: t.trail, trainLen: L, canReverseNow: true,
       extra: s => bodies.has(s.piece) ? Infinity : this.laneCost(s) + (() => { const h = this.holder.get(s.piece); return h !== undefined && h !== t.id ? 4000 : 0; })(),
       goal: s => !inWay.has(s.piece) && (this.net.passing[s.piece]! || (s.dir === 1 && !!this.net.pieces[s.piece]!.endB)),
-      accept: moves => { // the whole train must stand clear of the others' way
+      accept: moves => { // the whole train must stand clear of the others' way, its tail included
         let got = 0;
-        for (let k = moves.length - 1; k >= 0 && got < L + SIGNAL_GAP; k--) { const m = moves[k]!; if (isRev(m)) break; if (inWay.has(m.piece)) return false; got += this.net.pieces[m.piece]!.len; }
-        return got >= L || moves.length > 0;
+        const revs = moves.filter(isRev).length;
+        // where the rest of the body lies once the moves are done: on its old trail, from the tail end after a
+        // reversal at the start, from the head end with no reversal (other shapes: only the moves are checked)
+        const behind = revs === 0 ? [...t.trail].reverse() : revs === 1 && isRev(moves[0]!) ? t.trail : [];
+        for (let k = moves.length - 1; k >= 0 && got < L; k--) { const m = moves[k]!; if (isRev(m)) break; if (inWay.has(m.piece)) return false; got += this.net.pieces[m.piece]!.len; }
+        for (const st of behind) { if (got >= L) break; if (inWay.has(st.piece)) return false; got += this.net.pieces[st.piece]!.len; }
+        return got >= L || (behind.length === 0 && moves.length > 0);
       },
     });
     if (!refuge || !refuge.length) return false;

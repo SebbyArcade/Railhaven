@@ -42,10 +42,10 @@ that makes sense. Details for each line: `legacy/CHANGES.md` (search the version
 - [ ] Shipping plan: each building ships to the nearest place that needs it, arrows on the map, pins (done: plan shared nearest-first with factories, arrow from an open building card; to do: pins)
 - [x] Pay per unit grows with distance (PAY .41), no passive income, train upkeep
 - [ ] Railway level from orders filled (to level 10), unlocks (done: levels, bonus, factory unlocks; to do: the later unlocks)
-- [ ] Engine shed: buy trains (price curve, done), fleet upgrades (wagons, engines, tenders, repairs, wagon types, diesel), per island
-- [ ] Rush a good (max 3, fee 30%)
-- [ ] Remove building (half refund), sell stock, building prices rise per extra of a kind
-- [ ] No-fail safety net
+- [ ] Engine shed: buy trains (price curve, done), fleet upgrades (done: wagons, engines, repairs; to do with islands: tenders, wagon types, per island)
+- [x] Rush a good (max 3, fee 30%)
+- [x] Remove building (half refund), sell stock, building prices rise per extra of a kind, building levels 1-3
+- [x] No-fail safety net (top-up to the next useful step when broke with nothing earning, at most every 3 min)
 
 ## Stage 4: islands and sea
 - [ ] Scouting: drawn routes from towns/docks, pay per square, refunds, boats over sea

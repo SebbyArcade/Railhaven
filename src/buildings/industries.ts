@@ -73,6 +73,8 @@ export interface Building {
   inbuf?: Partial<Record<Good, number>>;
   /** the deposit a mine stands on */
   dep?: number;
+  /** money paid for it and its levels (half comes back if it is removed) */
+  paid?: number;
 }
 
 export const YARD_LEN = 4;
@@ -216,7 +218,7 @@ export function build(g: Game, p: ReturnType<typeof placementsAt>[number]): Buil
   if (price > g.s.money) return `Need $${(price - g.s.money).toLocaleString('en-US')} more`;
   g.s.money -= price;
   const dep = depositUnder(g, p);
-  const b: Building = { id: g.s.nextId++, ...p, lvl: 1, stock: 0, ...(dep ? { dep: dep.id } : {}) };
+  const b: Building = { id: g.s.nextId++, ...p, lvl: 1, stock: 0, paid: price, ...(dep ? { dep: dep.id } : {}) };
   (g.s.buildings ??= []).push(b);
   // the yard's own track: four squares in a line
   const n = g.world.n, sq = yardSquares(n, b);

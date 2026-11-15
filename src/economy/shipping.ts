@@ -2,8 +2,10 @@ import type { Game, Site } from '../state.ts';
 import { bufOf, type Building, GOODS, type Good, INDUSTRIES, inputsOf, isFactory, isLinked, yardSquares } from '../buildings/industries.ts';
 import { hallOf } from '../buildings/stations.ts';
 import { orderOf, steadyGoods, townLinked, townRoom } from './towns.ts';
+import { trainCap } from './upgrades.ts';
 
 /** Train load, and the least a train waits for before it sets off to collect (it leaves mostly full). */
+/** a train's load before any wagon upgrade (the real one is trainCap(g)) */
 export const TRAIN_CAP = 20;
 export const MIN_LOAD = 15;
 export const PAY = 0.41;
@@ -32,7 +34,7 @@ export const bldDist = (g: Game, b: Building) => railDist(g, 'b' + b.id, yardSqu
 
 export type Dest = { kind: 'town' | 'bld'; id: number };
 export type Why = 'order' | 'factory' | 'steady' | 'extra';
-export interface Ship { to: Dest; why: Why; d: number }
+export interface Ship { to: Dest; why: Why; d: number; rush?: boolean }
 
 export const siteOf = (g: Game, id: number): Site | undefined => g.s.sites.find(s => s.id === id);
 export const bldOf = (g: Game, id: number): Building | undefined => g.s.buildings?.find(b => b.id === id);
@@ -52,7 +54,7 @@ function enRoute(g: Game): Map<string, number> {
   for (const t of g.s.trains) {
     const j = t.job; if (!j) continue;
     const k = key(j.to, j.good as Good);
-    m.set(k, (m.get(k) ?? 0) + (t.cargo?.n ?? TRAIN_CAP));
+    m.set(k, (m.get(k) ?? 0) + (t.cargo?.n ?? trainCap(g)));
   }
   return m;
 }
@@ -89,11 +91,21 @@ export function shipPlan(g: Game): Map<number, Ship> {
     }
     return left.get(kk)!;
   };
+  // rushed goods first: every maker of the good on the railway sends there until the rush is covered
+  for (const r of g.s.rush ?? []) {
+    let want = r.left - (way.get(key(r.to, r.good)) ?? 0);
+    for (const p of pairs) {
+      if (want <= 0) break;
+      if (out.has(p.b.id) || goodOf(p.b) !== r.good || p.to.kind !== r.to.kind || p.to.id !== r.to.id) continue;
+      out.set(p.b.id, { to: p.to, why: p.f ? 'factory' : 'order', d: p.d, rush: true });
+      want -= trainCap(g);
+    }
+  }
   for (const why of ['need', 'steady'] as const) {
     for (const p of pairs) {
       if (out.has(p.b.id) || room(p, why) <= 0) continue;
       out.set(p.b.id, { to: p.to, why: why === 'steady' ? 'steady' : p.f ? 'factory' : 'order', d: p.d });
-      const kk = key(p.to, goodOf(p.b)) + why; left.set(kk, left.get(kk)! - TRAIN_CAP);
+      const kk = key(p.to, goodOf(p.b)) + why; left.set(kk, left.get(kk)! - trainCap(g));
     }
   }
   for (const p of pairs) if (!out.has(p.b.id) && p.t) out.set(p.b.id, { to: p.to, why: 'extra', d: p.d });

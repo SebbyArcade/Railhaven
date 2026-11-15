@@ -1,4 +1,4 @@
-import { breaksChanged, newGame } from './game.ts';
+import { breaksChanged, newGame, trackChanged } from './game.ts';
 import { BREAK_TEXT, breakRail, tickBreaks } from './track/breaks.ts';
 import { hallAt, hallsOf } from './buildings/stations.ts';
 import { type View, toSquare, toWorld } from './render/camera.ts';
@@ -9,13 +9,15 @@ import { TERRAIN_NAMES } from './world/terrain.ts';
 import { attachInput } from './ui/input.ts';
 import { fmtMoney, toast, updateHud } from './ui/hud.ts';
 import { MODE_HINT, type Mode, Tools } from './ui/tools.ts';
-import { INDUSTRIES, info, type IndustryKind, isFactory, lockedText, priceOf } from './buildings/industries.ts';
+import { GOODS, type Good, INDUSTRIES, info, type IndustryKind, isFactory, lockedText, priceOf } from './buildings/industries.ts';
 import { tickProduction } from './economy/production.ts';
 import type { Game } from './state.ts';
 import { footprint } from './buildings/industries.ts';
 import { type Card, cardHtml } from './ui/cards.ts';
+import { buyFleet, FLEET, type FleetKey, fleetLvl, refundOf, removeBuilding, rushOf, sellOffer, sellStock, toggleRush, upgradeBuilding } from './economy/upgrades.ts';
 import { foundTown, sizeName, tickTowns, upgradeTown } from './economy/towns.ts';
 import { tickTrains } from './economy/dispatch.ts';
+import { checkStuck } from './economy/nofail.ts';
 
 const canvas = document.getElementById('c') as HTMLCanvasElement;
 const ctx = canvas.getContext('2d')!;
@@ -27,7 +29,7 @@ let game: Game = (!params.has('new') && loadFrom(localStorage)) || newGame(param
 const tools = new Tools(() => game);
 let renderer = new Renderer(game, tools);
 /** run the game rules for some seconds at once (screenshot checks and the bot) */
-function step(secs: number) { for (let k = 0; k < secs * 20; k++) { const dt = 0.05; game.s.t += dt; game.sys.tick(dt); tickProduction(game, dt); tickTowns(game, dt); tickTrains(game, dt); if (tickBreaks(game)) breaksChanged(game); } }
+function step(secs: number) { for (let k = 0; k < secs * 20; k++) { const dt = 0.05; game.s.t += dt; game.sys.tick(dt); tickProduction(game, dt); tickTowns(game, dt); tickTrains(game, dt); if (Math.floor(game.s.t / 5) !== Math.floor((game.s.t - dt) / 5)) checkStuck(game); if (tickBreaks(game)) breaksChanged(game); } }
 (window as any).railhaven = { get game() { return game; }, tools, step, openCard: (c: Card | null) => openCard(c), breakRail: (i: number) => { const b = breakRail(game, i); breaksChanged(game); return b; } };
 
 const view: View = { w: 0, h: 0 };
@@ -56,7 +58,7 @@ attachInput(canvas, () => game.s.camera, () => view, () => game.world.n * 32, {
     if (!isRevealed(game, i)) { toast('Unexplored fog. Scouting comes in a later stage.'); return; }
     const br = game.s.breaks?.find(b => b.square === i);
     if (br) { const s = Math.ceil(br.crewAt - game.s.t); toast(`${BREAK_TEXT[br.kind]}: trains go round or wait. ${s > 0 ? `Repair crew arrives in ${s} s` : `Repair crew at work, ${Math.ceil(br.doneAt - game.s.t)} s left`}`); return; }
-    if (game.s.shed && game.s.shed.x === x && game.s.shed.y === y) { toast('🏚 Engine shed: trains will be bought and kept here'); return; }
+    if (game.s.shed && game.s.shed.x === x && game.s.shed.y === y) { openCard({ kind: 'shed', id: 0 }); return; }
     const site = hallAt(hallsOf(game.track, n, game.s.sites), i)?.town ?? game.s.sites.find(s => Math.abs(s.x - x) <= 1 && Math.abs(s.y - y) <= 1);
     const bld = game.s.buildings?.find(b => footprint(n, b).includes(i));
     if (bld) { openCard({ kind: 'bld', id: bld.id }); return; }
@@ -76,10 +78,30 @@ function renderCard() {
   const html = tools.card && cardHtml(game, tools.card);
   if (!html) { tools.card = null; cardEl.style.display = 'none'; return; }
   cardEl.innerHTML = `<button class="x" data-act="close">✕</button>${html}`; cardEl.style.display = 'block';
+  if (armed && performance.now() < armed.until) { // the first Remove tap: ask again
+    const b = cardEl.querySelector<HTMLButtonElement>(`button[data-act="remove"][data-id="${armed.id}"]`);
+    if (b) { b.classList.add('sure'); b.textContent = '⚠ Tap again to remove it'; }
+  }
 }
+let armed: { id: number; until: number } | null = null;
 cardEl.onclick = e => {
   const b = (e.target as HTMLElement).closest('button'); if (!b) return;
   if (b.dataset.act === 'close') { closeCard(); return; }
+  const bld = game.s.buildings?.find(x => x.id === +(b.dataset.id ?? -1));
+  if (b.dataset.act === 'lvl' && bld) { const why = upgradeBuilding(game, bld); toast(why || `⬆ ${info(bld.kind).name} is now level ${bld.lvl}`); renderCard(); return; }
+  if (b.dataset.act === 'sell' && bld) { const o = sellOffer(bld), why = sellStock(game, bld); toast(why || `💸 Sold ${o.n} for ${fmtMoney(o.pay)}`); renderCard(); return; }
+  if (b.dataset.act === 'remove' && bld) {
+    if (!armed || armed.id !== bld.id || performance.now() > armed.until) { armed = { id: bld.id, until: performance.now() + 4000 }; renderCard(); return; }
+    armed = null; const r = refundOf(bld), why = removeBuilding(game, bld);
+    if (why) { toast(why); renderCard(); return; }
+    trackChanged(game); game.terrainDirty?.(footprint(game.world.n, bld)); closeCard();
+    toast(`🗑 ${info(bld.kind).name} removed · +${fmtMoney(r)} back`); return;
+  }
+  if (b.dataset.act === 'rush') {
+    const to = { kind: b.dataset.kind as 'town' | 'bld', id: +b.dataset.id! }, k = b.dataset.good as Good, on = !!rushOf(game, to, k);
+    const why = toggleRush(game, to, k); toast(why || (on ? '⭐ Rush stopped' : `⭐ Rushing ${GOODS[k].name.toLowerCase()}: its makers send here first`)); renderCard(); return;
+  }
+  if (b.dataset.act === 'fleet') { const k = b.dataset.k as FleetKey, why = buyFleet(game, k); toast(why || `${FLEET[k].icon} ${FLEET[k].name}: ${FLEET[k].text(fleetLvl(game, k))}`); renderCard(); return; }
   if (b.dataset.act === 'found') {
     const p = game.s.sites.find(s => s.id === +b.dataset.id!)!, name = p.name;
     const why = foundTown(game, p);
@@ -148,7 +170,7 @@ function updateUi() {
 let last = performance.now(), saveT = 0, lastMenu = 0, lastCard = 0, newsAt = 0;
 function frame(now: number) {
   const dt = Math.min(0.1, (now - last) / 1000); last = now;
-  if (!document.hidden) { game.s.t += dt; game.sys.tick(dt); tickProduction(game, dt); tickTowns(game, dt); tickTrains(game, dt); if (tickBreaks(game)) breaksChanged(game); }
+  if (!document.hidden) { game.s.t += dt; game.sys.tick(dt); tickProduction(game, dt); tickTowns(game, dt); tickTrains(game, dt); if (Math.floor(game.s.t / 5) !== Math.floor((game.s.t - dt) / 5)) checkStuck(game); if (tickBreaks(game)) breaksChanged(game); }
   if (game.news?.length && now > newsAt) { toast(game.news.shift()!, 4000); newsAt = now + 4200; }
   if (Math.floor(now / 1000) !== lastCard) { lastCard = Math.floor(now / 1000); renderCard(); }
   saveT += dt; if (saveT > 5) { saveT = 0; saveTo(localStorage, game); }
