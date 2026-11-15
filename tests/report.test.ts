@@ -18,6 +18,5 @@ describe('the game report and bottlenecks', () => {
     const bn = bottlenecks(g);
     for (const x of bn) { expect(x.towns.length).toBeGreaterThanOrEqual(2); expect(x.makers.length).toBeGreaterThan(0); }
     expect(stuckList(g).filter(s => s.icon === '🐢').length).toBe(bn.length);
-    fs.writeFileSync('shots/report-s14.txt', r);
   });
 });
