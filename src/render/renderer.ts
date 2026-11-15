@@ -27,6 +27,7 @@ import { drawAlerts, drawShipArrow, drawTownBadges } from './orders.ts';
 import { stuckList } from '../ui/orders.ts';
 import { drawView, ViewCache } from './views.ts';
 import { seasonOf } from '../world/season.ts';
+import { stumpPhase } from '../economy/production.ts';
 import { shipPlace } from '../ships/ships.ts';
 
 /** Squares under a building (trees are cleared there). */
@@ -45,7 +46,7 @@ export class Renderer {
   /** the map view's edge arrows on screen, so a tap on one can go there */
   readonly arrows: { sx: number; sy: number; m: import('../ui/mapviews.ts').Mark }[] = [];
   constructor(private g: Game, private tools?: Tools) {
-    this.terrain = new TerrainCache(g.world, i => g.track.has(i) || i === shedSquare(g) || builtOn(g, i));
+    this.terrain = new TerrainCache(g.world, i => g.track.has(i) || i === shedSquare(g) || builtOn(g, i), i => stumpPhase(g, i));
     g.terrainDirty = sq => this.terrain.invalidate(sq);
   }
 

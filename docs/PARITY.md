@@ -35,7 +35,7 @@ that makes sense. Details for each line: `legacy/CHANGES.md` (search the version
 - [x] Engine shed with stalls beside the line (spare trains parked inside come with buying trains in stage 3)
 
 ## Stage 3: core loop
-- [ ] Industries: lumber camp (forest, trees deplete and regrow), wheat farm (fields), coal/stone/iron mines in mountains, oil well, fishing (docks) (done: all, fishing from docks; to do: trees deplete and regrow)
+- [ ] Industries: lumber camp (forest, trees deplete and regrow), wheat farm (fields), coal/stone/iron mines in mountains, oil well, fishing (docks) (done: all, fishing from docks; trees deplete and regrow)
 - [ ] 2x4 yards with in/out loading tracks, more tracks by level, building art grows by level (done: yards with two loading tracks, art per kind; to do: more tracks by level)
 - [ ] Factories (Sawmill, Brickworks, Gristmill, Steel Mill, Refinery, Cannery, Textile Mill...), 1 raw → 1 product, unlock by Railway level (done: all, Cannery fish → canned fish at Railway level 2)
 - [x] Towns: order ladder Hamlet → Village → Town → City → Metropolis → Megacity → endless; tap to upgrade; steady buying after orders (specialties come with islands)

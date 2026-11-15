@@ -63,6 +63,9 @@ export interface GameState {
   orders?: number;
   /** game time of the last no-fail top-up */
   rescueAt?: number;
+  /** forests: wood cut so far from a forest square (each holds TREE_WOOD), and when a cut-down square grows back (game time) */
+  cut?: Record<number, number>;
+  stumps?: Record<number, number>;
   /** Engine shed fleet upgrade levels */
   fleet?: Partial<Record<'wag' | 'eng' | 'rep', number>>;
   /** goods being rushed (at most three) */
@@ -107,4 +110,6 @@ export interface Game {
   news?: string[];
   /** set by the renderer: squares whose baked terrain must be redrawn (track hides trees) */
   terrainDirty?: (squares: number[]) => void;
+  /** forest squares already redrawn as saplings */
+  sapl?: Set<number>;
 }
