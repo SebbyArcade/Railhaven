@@ -54,7 +54,8 @@ that makes sense. Details for each line: `legacy/CHANGES.md` (search the version
 - [ ] Island specialties (+50%), resources per island, regional capitals, trade orders, long-haul imports (done: iron and oil only on outer islands, landing crews survey their island, specialties +50% with ★ labels, coastal seafood orders; to do: regional capitals, trade orders, long-haul imports)
 - [ ] Landmarks (old halt, lookout, falls, lighthouse, ranger hut, ruins) with small perks; shipwrecks; maps to buy
 - [ ] Town parks/projects, town specialties
-- [ ] Adaptive missions with Mira, opening story, guided lessons
+- [x] Adaptive missions with Mira (main + 2 side missions, rewards, swap), acts by Railway level with opening cards, journal, islands page
+- [ ] Guided lessons (first 9 steps with a pointer)
 
 ## Stage 5: extras, save import, art
 - [ ] Legacy save importer (localStorage `railhaven90` and RAILHAVEN2 codes/files) tested on every save in `tests/saves/`

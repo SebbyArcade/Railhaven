@@ -10,7 +10,7 @@
   #hud { position: fixed; top: max(8px, env(safe-area-inset-top)); left: 8px; display: flex; gap: 6px; pointer-events: none; }
   .chip { background: rgba(28,22,16,.88); border: 1px solid #6b5132; border-radius: 14px; padding: 4px 10px; font-weight: 600; font-size: 14px; }
   .chip.money { color: #ffd27a; }
-  #toast { position: fixed; left: 50%; top: calc(max(8px, env(safe-area-inset-top)) + 54px); transform: translateX(-50%); background: rgba(28,22,16,.94); border: 1px solid #c99a5b; border-radius: 12px; padding: 8px 14px; font-size: 14px; opacity: 0; transition: opacity .3s; pointer-events: none; max-width: 86vw; text-align: center; }
+  #toast { position: fixed; left: 50%; top: calc(max(8px, env(safe-area-inset-top)) + 70px); transform: translateX(-50%); background: rgba(28,22,16,.94); border: 1px solid #c99a5b; border-radius: 12px; padding: 8px 14px; font-size: 14px; opacity: 0; transition: opacity .3s; pointer-events: none; max-width: 86vw; text-align: center; }
   #bar { position: fixed; bottom: max(10px, env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%); display: flex; gap: 6px; }
   #bar button { background: #3a2a18; color: #ffe9c4; border: 1px solid #c99a5b; border-radius: 12px; padding: 8px 10px; font-size: 14px; font-weight: 600; min-width: 52px; }
   @media (max-width: 480px) { #bar { gap: 3px; width: 98vw; } #bar button { flex: 1; padding: 7px 1px; font-size: 12px; min-width: 0; } }
@@ -63,13 +63,20 @@
   #card .mini { margin-top: 5px; background: #3a3020; color: #ffd27a; border: 1px solid #8a6a2a; border-radius: 9px; padding: 4px 9px; font-size: 12px; font-weight: 700; }
   #card .mini.on { background: #8a6a2a; color: #fff; } #card .mini:disabled { opacity: .45; }
   #card .chips { display: flex; flex-wrap: wrap; gap: 4px; }
-  #stage { position: fixed; top: calc(max(8px, env(safe-area-inset-top)) + 32px); left: 10px; font-size: 11px; opacity: .7; pointer-events: none; }
+  #mission { position: fixed; top: calc(max(8px, env(safe-area-inset-top)) + 34px); left: 8px; max-width: min(92vw, 440px); display: none; align-items: center; gap: 6px; background: rgba(40,28,14,.92); border: 1px solid #e8a33c; border-radius: 14px; padding: 3px 4px 3px 10px; font-size: 13px; font-weight: 600; color: #ffe9c4; box-sizing: border-box; }
+  #mission .mtext { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } #mission b { color: #ffd27a; }
+  #mission button { background: #2f8f8a; color: #fff; border: 0; border-radius: 10px; padding: 5px 10px; font-size: 13px; font-weight: 700; flex: none; }
+  #card .mira { font-style: italic; color: #f0dcb0; font-size: 13px; margin: 2px 0 6px; }
+  #card .row.main { border-left-color: #e8a33c; background: #33240f; } #card .row.side { border-left-color: #6a9ad0; align-items: center; } #card .row.ok { border-left-color: #5cc46a; }
+  #card small.say { font-style: italic; color: #f0dcb0; }
+  #card .actcard { text-align: center; padding: 4px 8px 0; } #card .actcard .aic { font-size: 40px; } #card .actcard .cap { letter-spacing: 2px; opacity: .75; }
+  #card .actcard h2 { font-family: Georgia, serif; font-size: 22px; margin: 4px 0; } #card .actcard p { font-size: 15px; line-height: 1.4; margin: 6px 0; }
 </style>
 </head>
 <body>
 <canvas id="c"></canvas>
 <div id="hud"></div>
-<div id="stage">Rebuild preview · stage 3 in progress: factories</div>
+<div id="mission"></div>
 <div id="toast"></div>
 <div id="hint"></div>
 <button id="undo">↶ Undo</button>

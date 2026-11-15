@@ -72,6 +72,8 @@ export interface GameState {
   pois?: import('./world/explore.ts').Poi[];
   /** scouts out exploring */
   scouts?: import('./world/explore.ts').Scout[];
+  /** missions with Mira, and the act shown */
+  ms?: import('./progress/missions.ts').MissionState;
   /** cargo ships */
   ships?: import('./ships/ships.ts').CargoShip[];
   /** money earned and spent, for the report */

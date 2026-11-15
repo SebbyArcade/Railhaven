@@ -21,6 +21,10 @@ import { buyShip } from './ships/ships.ts';
 import { POI, poisOf } from './world/explore.ts';
 import { buyFishing, FISHING } from './economy/upgrades.ts';
 import { checkStuck } from './economy/nofail.ts';
+import { ashford, missionsOf, msOf, swapMission } from './progress/missions.ts';
+import { missionPill } from './ui/story.ts';
+import { townLinked } from './economy/towns.ts';
+import { islandOfB } from './ships/docks.ts';
 
 const canvas = document.getElementById('c') as HTMLCanvasElement;
 const ctx = canvas.getContext('2d')!;
@@ -92,6 +96,8 @@ let armed: { id: number; until: number } | null = null;
 cardEl.onclick = e => {
   const b = (e.target as HTMLElement).closest('button'); if (!b) return;
   if (b.dataset.act === 'close') { closeCard(); return; }
+  if (b.dataset.go !== undefined) { goMission(+b.dataset.go); return; }
+  if (b.dataset.act === 'swap') { const why = swapMission(game, +b.dataset.m!); toast(why || `🎯 New mission: ${msOf(game).main?.title}`); renderCard(); return; }
   const bld = game.s.buildings?.find(x => x.id === +(b.dataset.id ?? -1));
   if (b.dataset.act === 'page' && tools.card) { openCard({ ...tools.card, page: b.dataset.page || undefined } as Card); return; }
   if (b.dataset.act === 'fish' && bld) { const why = buyFishing(game, bld); toast(why || `🎣 ${FISHING[(bld.fish ?? 1) - 1]!.name} at the dock`); renderCard(); return; }
@@ -123,6 +129,46 @@ cardEl.onclick = e => {
   }
 };
 
+// Missions: the pill under the top bar opens the story card; Go › shows where to act
+const pill = $('mission');
+pill.onclick = e => {
+  const b = (e.target as HTMLElement).closest('button');
+  if (b?.dataset.go !== undefined) { goMission(+b.dataset.go); return; }
+  if (tools.card?.kind === 'story') closeCard(); else openCard({ kind: 'story', id: 0 });
+};
+const lookAt = (x: number, y: number) => { const c = game.s.camera; c.x = (x + 0.5) * 32; c.y = (y + 0.5) * 32; };
+function startBuild(k: IndustryKind) {
+  const lock = lockedText(game, k);
+  if (lock) { toast(`${lock}: fill more town orders to raise your Railway level`); return; }
+  menuOpen = false;
+  const spot = tools.chooseBuild(k);
+  if (!spot) return;
+  // the nearest spot is off screen: bring it into view (the camera moves, nothing is built)
+  const c = game.s.camera, [sx, sy] = [(spot.x + 0.5) * 32, (spot.y + 0.5) * 32];
+  if (Math.abs(sx - c.x) * c.z > view.w * 0.4 || Math.abs(sy - c.y) * c.z > view.h * 0.3) { c.x = sx; c.y = sy; toast('The nearest spot that fits is glowing here'); }
+}
+/** Go › on a mission: open the place it is about, or start the build it asks for. */
+function goMission(i: number) {
+  const m = missionsOf(game)[i]; if (!m) return;
+  closeCard(); menuOpen = false; tools.mode = 'pan'; tools.cancel();
+  const site = m.site !== undefined ? game.s.sites.find(s => s.id === m.site) : undefined, n = game.world.n;
+  if (m.ty === 'build') { startBuild(m.k!); return; }
+  if (m.ty === 'find') {
+    const from = game.s.sites.filter(t => t.kind === 'town' && townLinked(game, t)).sort((p, q) => Math.hypot(p.x - site!.x, p.y - site!.y) - Math.hypot(q.x - site!.x, q.y - site!.y))[0] ?? ashford(game);
+    lookAt(Math.round((from.x * 2 + site!.x) / 3), Math.round((from.y * 2 + site!.y) / 3));
+    tools.setMode('scout'); toast(`🔭 Tap ${from.name}, then draw the scout's route into the fog`); return;
+  }
+  if (m.ty === 'reach') {
+    const isl = game.world.islands[m.isl!]!;
+    if (isRevealed(game, isl.cy * n + isl.cx)) { lookAt(isl.cx, isl.cy); startBuild('dock'); return; }
+    const d = (game.s.buildings ?? []).find(b => b.kind === 'dock' && islandOfB(game, b) === game.world.home);
+    if (d) { lookAt(d.x, d.y); openCard({ kind: 'bld', id: d.id, page: 'isl' }); }
+    toast(`🌫 ${isl.name} is still in the fog: send a scout boat from your dock to find its shore`); return;
+  }
+  if (m.ty === 'fish') { const b = game.s.buildings?.find(x => x.id === m.bld); if (b) { lookAt(b.x, b.y); openCard({ kind: 'bld', id: b.id, page: 'fish' }); } return; }
+  if (site) { lookAt(site.x, site.y); if (m.ty === 'order') openCard({ kind: 'town', id: site.id }); else toast(`🛤 ${m.how}`); }
+}
+
 // Build menu: colourful tiles, one per industry
 const menu = $('buildMenu');
 let menuOpen = false;
@@ -137,13 +183,7 @@ function renderMenu() {
 }
 menu.onclick = e => {
   const b = (e.target as HTMLElement).closest('button'); if (!b) return;
-  const lock = lockedText(game, b.dataset.k as IndustryKind);
-  if (lock) { toast(`${lock}: fill more town orders to raise your Railway level`); return; }
-  const spot = tools.chooseBuild(b.dataset.k as IndustryKind); menuOpen = false;
-  if (!spot) return;
-  // the nearest spot is off screen: bring it into view (the camera moves, nothing is built)
-  const c = game.s.camera, [sx, sy] = [(spot.x + 0.5) * 32, (spot.y + 0.5) * 32];
-  if (Math.abs(sx - c.x) * c.z > view.w * 0.4 || Math.abs(sy - c.y) * c.z > view.h * 0.3) { c.x = sx; c.y = sy; toast('The nearest spot that fits is glowing here'); }
+  startBuild(b.dataset.k as IndustryKind);
 };
 $('buildBtn').onclick = () => {
   if (tools.mode === 'build' || menuOpen) { menuOpen = false; tools.setMode('pan'); tools.mode = 'pan'; tools.buildKind = null; return; }
@@ -184,8 +224,14 @@ let last = performance.now(), saveT = 0, lastMenu = 0, lastCard = 0, newsAt = 0;
 function frame(now: number) {
   const dt = Math.min(0.1, (now - last) / 1000); last = now;
   if (!document.hidden) { game.s.t += dt; game.sys.tick(dt); tickProduction(game, dt); tickTowns(game, dt); tickTrains(game, dt); if (Math.floor(game.s.t / 5) !== Math.floor((game.s.t - dt) / 5)) checkStuck(game); if (tickBreaks(game)) breaksChanged(game); }
-  if (game.news?.length && now > newsAt) { toast(game.news.shift()!, 4000); newsAt = now + 4200; }
-  if (Math.floor(now / 1000) !== lastCard) { lastCard = Math.floor(now / 1000); renderCard(); }
+  if (game.news?.length && now > newsAt && !(tools.card?.kind === 'story' && tools.card.page === 'act')) { toast(game.news.shift()!, 4000); newsAt = now + 4200; }
+  if (Math.floor(now / 1000) !== lastCard) {
+    lastCard = Math.floor(now / 1000);
+    const M = msOf(game); // a new act opens its card once nothing else is open
+    if (M.actNew && !tools.card && tools.mode === 'pan' && !menuOpen) { M.actNew = false; openCard({ kind: 'story', id: 0, page: 'act' }); }
+    renderCard();
+    const ph = missionPill(game); if (pill.innerHTML !== ph) pill.innerHTML = ph; pill.style.display = ph ? 'flex' : 'none';
+  }
   saveT += dt; if (saveT > 5) { saveT = 0; saveTo(localStorage, game); }
   renderer.draw(ctx, view, dpr, now / 1000);
   updateHud(hud, game);
