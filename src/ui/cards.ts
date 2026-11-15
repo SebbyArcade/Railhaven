@@ -1,6 +1,6 @@
 import type { Game, Site } from '../state.ts';
 import { fallsMul, POI, POI_RARITY, poisOf, RARITY } from '../world/explore.ts';
-import { buildingSquares, bufOf, growsTracks, stripError, tracksOf, type Building, capOf, GOODS, type Good, INDUSTRIES, type IndustryKind, inputsOf, isFactory, isLinked, lockedText, outputOf, shareAt, forestOf, stumpsOf } from '../buildings/industries.ts';
+import { buildingSquares, yardSquares, bufOf, growsTracks, stripError, tracksOf, type Building, capOf, GOODS, type Good, INDUSTRIES, type IndustryKind, inputsOf, isFactory, isLinked, lockedText, outputOf, shareAt, forestOf, stumpsOf } from '../buildings/industries.ts';
 import { factoryState } from '../economy/production.ts';
 import { hasProject, nextParkPrice, orderMul, PARK_PRICE, parkSpot, parksOf, payMul, PROJECTS, projectsOf } from '../buildings/parks.ts';
 import { FOUND_PRICE, orderDone, orderOf, reward, sizeName, steadyGoods, stepOf, townLinked, upgradePrice } from '../economy/towns.ts';
@@ -229,9 +229,10 @@ function buildingCard(g: Game, b: Building, page?: string): string {
   let h = `<div class="head"><b class="big">${d.icon}</b><div><h2>${d.name}</h2><span class="chip2">Level ${b.lvl}</span> <span class="chip2">${G.icon} ${Math.round(outputOf(g, b) * 60)}/min</span>${sm > 1 ? ' <span class="chip2">★ island specialty +50%</span>' : ''}</div></div>`;
   if (b.fire && g.s.t < b.fire.doneAt) { const c = Math.ceil(b.fire.crewAt - g.s.t); h += `<div class="warn">🔥 On fire: it makes nothing for now. ${c > 0 ? `The fire crew arrives in ${c} s` : `The fire crew is putting it out, ${Math.ceil(b.fire.doneAt - g.s.t)} s left`}. Nothing is lost.</div>`; }
   if (!linked) h += `<div class="warn">🔌 Not on the railway yet: lay track from your line to one end of its yard</div>`;
+  if (b.closed) h += `<div class="warn">⛔ Closed: it makes nothing${fac ? ', takes nothing in' : ''} and the barriers keep trains out. Its ${G.icon} stock waits here.</div><button class="act" data-act="shut" data-id="${b.id}">✅ Open it again</button>`;
   if (fac) {
     const st = factoryState(g, b);
-    if (linked) h += st.busy ? `<div class="gift">🟢 Working: making ${G.icon} ${G.name}</div>` : b.stock >= cap ? `<div class="warn">📦 Full: waiting for a train to collect</div>` : `<div class="warn">🟠 Waiting for ${st.waits.map(w => GOODS[w].icon + ' ' + GOODS[w].name).join(' and ')}</div>`;
+    if (linked && !b.closed) h += st.busy ? `<div class="gift">🟢 Working: making ${G.icon} ${G.name}</div>` : b.stock >= cap ? `<div class="warn">📦 Full: waiting for a train to collect</div>` : `<div class="warn">🟠 Waiting for ${st.waits.map(w => GOODS[w].icon + ' ' + GOODS[w].name).join(' and ')}</div>`;
     h += `<h3>① Brings in</h3>`;
     for (const w of inputsOf(b.kind)) {
       const have = Math.floor(b.inbuf?.[w] ?? 0), max = bufOf(b);
@@ -262,10 +263,10 @@ function buildingCard(g: Game, b: Building, page?: string): string {
     return h + `<small class="why">A pinned building keeps sending there, even when somewhere else needs it more.</small><button class="act back" data-act="page" data-page="">‹ Back</button>`;
   }
   if (ship) h += `<div class="row"><b class="ico">${pinned ? '📌' : '➡'}</b><div class="grow"><div class="line"><span>Sends to <b>${esc(destName(g, ship.to))}</b></span><span>${ship.d} squares</span></div><small>${why(ship.why)}${pinned ? ' · 📌 you chose this' : ''}</small></div><button class="mini" data-act="page" data-page="pin">📌 Choose</button></div>`;
-  else if (linked) h += `<div class="warn">🏘 No town on the railway yet to take it</div>`;
+  else if (linked && !b.closed) h += `<div class="warn">🏘 No town on the railway yet to take it</div>`;
   if (b.pin && !pinned) h += `<div class="warn">📌 It is pinned to ${esc(destName(g, b.pin as Dest))}, which its trains can't reach now: it sends automatically meanwhile</div>`;
   const tr = g.s.trains.filter(t => t.job?.src === b.id || (t.job && sameDest(t.job.to, { kind: 'bld', id: b.id })));
-  h += `<div class="note">🚂 ${tr.length ? `${tr.length} train${tr.length > 1 ? 's' : ''} on this` : g.s.trains.length ? `Trains collect when ${Math.round(trainCap(g) * 0.75)} are ready` : 'Buy a train at the engine shed (🚂 Train)'}</div>`;
+  if (!b.closed) h += `<div class="note">🚂 ${tr.length ? `${tr.length} train${tr.length > 1 ? 's' : ''} on this` : g.s.trains.length ? `Trains collect when ${Math.round(trainCap(g) * 0.75)} are ready` : 'Buy a train at the engine shed (🚂 Train)'}</div>`;
   // grow it, sell what's piled up, or take it down
   if (b.lvl < MAX_LVL) {
     const p = levelPrice(b), room = growsTracks(b.kind) && tracksOf(b) < 3 ? stripError(g, b) : '', can = g.s.money >= p && !room;
@@ -273,11 +274,18 @@ function buildingCard(g: Game, b: Building, page?: string): string {
     if (room) h += `<small class="why">🚧 No room for another loading track: ${room}</small>`;
     else if (!can) h += `<small class="why">Need ${fmtMoney(p - Math.floor(g.s.money))} more</small>`;
   } else h += `<div class="gift">⭐ Full size (level ${MAX_LVL}): build a second one to make more</div>`;
+  if (!b.closed) h += `<button class="act alt" data-act="shut" data-id="${b.id}">⛔ Close for now</button><small class="why">Closed, it makes nothing${fac ? ' and takes nothing in' : ''}, and barriers keep trains out of its yard${yardThrough(g, b) ? ' (trains that pass through it go another way or wait)' : ''}. Open it again any time.</small>`;
   const so = sellOffer(b);
   h += `<div class="pair"><button class="act alt" data-act="sell" data-id="${b.id}" ${so.n > 0 ? '' : 'disabled'}>💸 Sell ${so.n} ${G.icon} · ${fmtMoney(so.pay)}</button>`;
   h += `<button class="act warnb" data-act="remove" data-id="${b.id}">🗑 Remove · get ${fmtMoney(refundOf(b))}</button></div>`;
   h += `<small class="why">Selling takes 3/4 of its stock at 60% of the price; deliveries pay more. Removing gives back half of what you paid${b.dep ? ' and frees the deposit' : ''}; its yard track stays.</small>`;
   return h;
+}
+
+/** Does the line run on past both ends of the yard (so trains pass through it)? */
+function yardThrough(g: Game, b: Building): boolean {
+  const ys = yardSquares(g.world.n, b), [a, z] = b.horizontal ? [2, 0] : [3, 1];
+  return !!((g.track.get(ys[0]!)?.links ?? 0) & (1 << a)) && !!((g.track.get(ys.at(-1)!)?.links ?? 0) & (1 << z));
 }
 
 /** A small button on an order or input row: rush it (its makers send here first, 30% fee), or stop rushing. */

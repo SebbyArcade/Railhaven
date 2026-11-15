@@ -1,6 +1,7 @@
 import { hash } from '../core/rng.ts';
 import type { Game } from '../state.ts';
 import { hallsOf } from '../buildings/stations.ts';
+import { closedPieces, tickClosures } from '../buildings/closing.ts';
 
 /**
  * Broken rails: now and then a busy stretch of line is blocked (a rockslide, washout, fallen tree or heat buckle).
@@ -20,10 +21,11 @@ export const BREAK_TEXT: Record<Break['kind'], string> = {
   rockslide: '🪨 Rockslide', washout: '🌊 Washout', 'fallen tree': '🌳 Fallen tree', 'heat buckle': '☀️ Heat buckle',
 };
 
-/** Pieces trains can't enter because of broken rails. */
+/** Pieces trains can't enter because of broken rails (or the barriers of a closed building). */
 export function blockedPieces(g: Game): Set<number> {
   const out = new Set<number>();
   for (const b of g.s.breaks ?? []) for (const p of g.net.bySquare.get(b.square) ?? []) out.add(p);
+  for (const p of closedPieces(g)) out.add(p); // ⛔ barriers down at closed buildings
   return out;
 }
 
@@ -61,6 +63,7 @@ export function tickBreaks(g: Game): boolean {
     if ((s.breaks?.length ?? 0) < MAX_ACTIVE && breakRail(g)) changed = true;
   }
   if (s.breaks?.some(b => s.t >= b.doneAt)) { s.breaks = s.breaks.filter(b => s.t < b.doneAt); changed = true; }
+  if (tickClosures(g)) changed = true; // ⛔ a closed building's barriers went up or down
   return changed;
 }
 

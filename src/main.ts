@@ -21,6 +21,7 @@ import { TERRAIN_NAMES } from './world/terrain.ts';
 import { attachInput } from './ui/input.ts';
 import { fmtMoney, toast, updateHud } from './ui/hud.ts';
 import { MODE_HINT, type Mode, Tools } from './ui/tools.ts';
+import { setClosed } from './buildings/closing.ts';
 import { GOODS, type Good, INDUSTRIES, info, type IndustryKind, isFactory, lockedText, priceOf } from './buildings/industries.ts';
 import { tickProduction } from './economy/production.ts';
 import type { Game } from './state.ts';
@@ -213,6 +214,7 @@ cardEl.onclick = e => {
   if (b.dataset.act === 'ship' && bld) { const s = buyShip(game, bld); toast(typeof s === 'string' ? s : '🚢 A cargo ship is ready at the dock: it sails where goods wait'); renderCard(); return; }
   if (b.dataset.act === 'trainat' && bld) { const t = buyTrainAt(game, bld); if (typeof t === 'string') toast(t); else { toast(`🚂 Train ${t.id} came over by boat and is looking for a load`); } renderCard(); return; }
   if (b.dataset.act === 'lvl' && bld) { const why = upgradeBuilding(game, bld); toast(why || `⬆ ${info(bld.kind).name} is now level ${bld.lvl}${(bld.tracks ?? 2) > 2 ? ` · ${bld.tracks} loading tracks` : ''}`); if (!why) { trackChanged(game); game.terrainDirty?.(footprint(game.world.n, bld)); } renderCard(); return; }
+  if (b.dataset.act === 'shut' && bld) { const on = !bld.closed, why = setClosed(bld, on); toast(why || (on ? `⛔ ${INDUSTRIES[bld.kind].name} closed: barriers come down once the last train leaves` : `✅ ${INDUSTRIES[bld.kind].name} open again`)); renderCard(); return; }
   if (b.dataset.act === 'sell' && bld) { const o = sellOffer(bld), why = sellStock(game, bld); toast(why || `💸 Sold ${o.n} for ${fmtMoney(o.pay)}`); renderCard(); return; }
   if (b.dataset.act === 'remove' && bld) {
     if (!armed || armed.id !== bld.id || performance.now() > armed.until) { armed = { id: bld.id, until: performance.now() + 4000 }; renderCard(); return; }

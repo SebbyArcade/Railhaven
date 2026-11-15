@@ -93,6 +93,8 @@ export interface Building {
   fish?: number;
   /** where the player pinned its goods to go (else the plan picks) */
   pin?: { kind: 'town' | 'bld'; id: number };
+  /** ⛔ closed by the player: makes nothing, takes nothing, barriers keep trains out */
+  closed?: boolean;
   /** loading tracks in the yard: 2, then a 3rd at level 2 and a 4th at level 3 on the strip beside the yard */
   tracks?: number;
   /** docks: goods waiting for a ship to another dock */

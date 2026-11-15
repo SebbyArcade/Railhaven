@@ -78,7 +78,7 @@ export const factoryRoom = (f: Building, k: Good) => Math.max(0, bufOf(f) - (f.i
 export function shipPlan(g: Game): Plan {
   const out = new Map<string, Ship>(), n = g.world.n;
   const towns = g.s.sites.filter(t => t.kind === 'town' && townLinked(g, t));
-  const bs = (g.s.buildings ?? []).filter(b => isLinked(g, b));
+  const bs = (g.s.buildings ?? []).filter(b => isLinked(g, b) && !b.closed); // ⛔ closed: sends nothing, takes nothing
   const facs = bs.filter(b => isFactory(b.kind));
   const way = enRoute(g);
   // sources: every building's own good, and goods landed at docks (sent on by that island's trains)
@@ -181,7 +181,7 @@ export function destinationsOf(g: Game, b: Building): { to: Dest; d: number; why
     out.push({ to: { kind: 'town', id: t.id }, d, why });
   }
   for (const f of g.s.buildings ?? []) {
-    if (f === b || !isFactory(f.kind) || !inputsOf(f.kind).includes(k) || !isLinked(g, f)) continue;
+    if (f === b || !isFactory(f.kind) || !inputsOf(f.kind).includes(k) || !isLinked(g, f) || f.closed) continue;
     const d = dist[yardSquares(n, f)[1]!]!; if (d >= 0) out.push({ to: { kind: 'bld', id: f.id }, d, why: 'factory' });
   }
   return out.sort((p, q) => p.d - q.d);

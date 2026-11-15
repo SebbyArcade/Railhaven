@@ -28,6 +28,7 @@ export function stuckList(g: Game, plan = shipPlan(g)): Stuck[] {
   const out: Stuck[] = [];
   for (const t of g.s.sites) if (t.kind === 'town' && townLinked(g, t) && orderDone(g, t)) out.push({ icon: '⬆', text: `${esc(t.name ?? 'A town')} can grow into a ${sizeName(stepOf(t) + 1)} (${fmtMoney(upgradePrice(stepOf(t)))})`, btn: open('town', t.id, 'Open ›'), x: t.x, y: t.y });
   for (const b of g.s.buildings ?? []) {
+    if (b.closed) continue; // ⛔ closed on purpose: not a problem
     const name = placeName(g, b);
     if (!isLinked(g, b)) { out.push({ icon: '🔌', text: `The ${name} isn't on the railway: lay track to one end of its yard`, btn: open('bld', b.id), x: b.x, y: b.y, bld: b.id }); continue; }
     if (isFactory(b.kind)) { const w = factoryState(g, b).waits; if (w.length) out.push({ icon: '⏳', text: `The ${name} waits for ${w.map(k => `${GOODS[k].icon} ${GOODS[k].name.toLowerCase()}`).join(' and ')}`, btn: open('bld', b.id), x: b.x, y: b.y, bld: b.id }); }
@@ -43,9 +44,9 @@ export function stuckList(g: Game, plan = shipPlan(g)): Stuck[] {
     x.makers = x.near;
     const b = x.makers.find(m => isFactory(m.kind) && factoryState(g, m).waits.length) ?? [...x.makers].sort((p, q) => p.lvl - q.lvl)[0]!;
     const name = placeName(g, b), w = isFactory(b.kind) ? factoryState(g, b).waits : [];
-    const fix = w.length ? `the ${name} is short of ${w.map(k => `${GOODS[k].icon} ${GOODS[k].name.toLowerCase()}`).join(' and ')}: bring more in`
+    const fix = b.closed ? `the ${name} is closed: open it again` : w.length ? `the ${name} is short of ${w.map(k => `${GOODS[k].icon} ${GOODS[k].name.toLowerCase()}`).join(' and ')}: bring more in`
       : b.lvl < MAX_LVL ? `the ${name} can't keep up: upgrade it or build another` : `the ${name} can't keep up: build another`;
-    out.push({ icon: '🐢', text: `${x.towns.length} towns wait for ${GOODS[x.good].icon} ${GOODS[x.good].name.toLowerCase()}: ${fix}`, btn: open('bld', b.id), x: b.x, y: b.y, bld: b.id });
+    out.push({ icon: '🐢', text: `${x.towns.length} towns wait for ${GOODS[x.good].icon} ${GOODS[x.good].name.toLowerCase()}: ${fix}`, btn: open('bld', b.id), x: b.x, y: b.y, ...(b.closed ? {} : { bld: b.id }) });
   }
   const idle = g.s.trains.filter(t => !t.job);
   if (idle.length) { const p = bodyPoint(g.net, idle[0]!, 0); out.push({ icon: '💤', text: `${idle.length} train${idle.length > 1 ? 's wait' : ' waits'} for a load`, btn: open('train', idle[0]!.id), x: p.x / TILE - 0.5, y: p.y / TILE - 0.5 }); }

@@ -10,7 +10,7 @@ import { catchOf } from './upgrades.ts';
 export function tickProduction(g: Game, dt: number) {
   tickForests(g);
   for (const b of g.s.buildings ?? []) {
-    if (!isLinked(g, b) || (b.fire && g.s.t < b.fire.doneAt)) continue; // a building on fire makes nothing
+    if (!isLinked(g, b) || b.closed || (b.fire && g.s.t < b.fire.doneAt)) continue; // a closed building, or one on fire, makes nothing
     if (b.kind === 'dock') { // fishing boats land their catch at the dock, up to what it holds
       if (!b.fish) continue;
       const c = catchOf(b.fish), l = (b.landed ??= {}), m = specMul(g, g.world.islandOf[yardSquares(g.world.n, b)[0]!]!, 'fish');
