@@ -35,5 +35,7 @@ await page.waitForTimeout(300); await skip(); await look(); await page.waitForTi
 // a few minutes on: people are back and the hamlet grows around its station
 await page.evaluate(([x, y]) => { const g = window.railhaven.game; const t = g.s.sites.find(s => s.x === x && s.y === y); t.pop = 120; t.lvl = 1; }, [x, y]);
 await page.waitForTimeout(500); await page.screenshot({ path: 'shots/entry-town.png' });
+await page.evaluate(([x, y]) => { const g = window.railhaven.game; g.s.camera.x = (x + 1.2) * 32; g.s.camera.y = (y - 0.3) * 32; g.s.camera.z = 3.2; }, [x, y]);
+await page.waitForTimeout(500); await page.screenshot({ path: 'shots/entry-road.png' });
 console.log(info, errors.join('\n') || 'no page errors');
 await browser.close();
