@@ -85,9 +85,14 @@ export class Renderer {
     if (t.mode === 'build') {
       const p = 0.5 + 0.5 * Math.sin(tm * 3.5);
       for (const i of t.glow) { const x = (i % n) * TILE, y = ((i / n) | 0) * TILE; ctx.fillStyle = `rgba(255,214,120,${0.1 + 0.14 * p})`; ctx.fillRect(x + 3, y + 3, TILE - 6, TILE - 6); }
-      if (t.preview) {
-        for (const i of yardSquares(n, t.preview)) box(i, 'rgba(150,210,255,.3)', 'rgba(170,220,255,.95)');
-        for (const i of buildingSquares(n, t.preview)) box(i, 'rgba(120,230,140,.32)', 'rgba(150,255,170,.95)');
+      if (t.preview) { // the outline: loading tracks blue, building green; red where it can't go
+        const bad = !!t.previewErr;
+        for (const i of yardSquares(n, t.preview)) box(i, bad ? 'rgba(255,90,70,.28)' : 'rgba(150,210,255,.3)', bad ? 'rgba(255,120,100,.95)' : 'rgba(170,220,255,.95)');
+        for (const i of buildingSquares(n, t.preview)) box(i, bad ? 'rgba(255,90,70,.36)' : 'rgba(120,230,140,.32)', bad ? 'rgba(255,120,100,.95)' : 'rgba(150,255,170,.95)');
+        // a drag handle in the middle of the building row
+        const bs = buildingSquares(n, t.preview), m = bs[1]!, m2 = bs[2]!, hx = ((m % n) + (m2 % n)) / 2 * TILE + TILE / 2, hy = (((m / n) | 0) + ((m2 / n) | 0)) / 2 * TILE + TILE / 2;
+        ctx.fillStyle = 'rgba(28,22,16,.75)'; ctx.beginPath(); ctx.arc(hx, hy, 9, 0, 7); ctx.fill();
+        ctx.fillStyle = '#fff'; ctx.font = '700 11px system-ui'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('✥', hx, hy + 0.5);
       }
     }
     if (t.mode === 'rail' && !t.plan) { // show where track may start

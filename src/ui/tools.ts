@@ -7,7 +7,7 @@ import { buyTrain, trainPrice } from '../economy/dispatch.ts';
 import { bodyPoint, trainLength } from '../trains/train.ts';
 import { fmtMoney, toast } from './hud.ts';
 import type { Card } from './cards.ts';
-import { bestPlacement, build, footprint, INDUSTRIES, type IndustryKind, isLinked, placeError, placementsAt, priceOf, shareAt, harmOf, harmText, nearestSpot, noSpotText } from '../buildings/industries.ts';
+import { bestPlacement, build, footprint, INDUSTRIES, type IndustryKind, isLinked, placeError, placementsAt, priceOf, shareAt, harmOf, harmText, nearestSpot, noSpotText, lockedText } from '../buildings/industries.ts';
 
 type Placement = ReturnType<typeof placementsAt>[number];
 
@@ -19,7 +19,7 @@ export const MODE_HINT: Record<Mode, string> = {
   double: '═ Tap or drag along your track to make it double. Trains keep left, so two can pass.',
   remove: '✂ Tap a track square to remove it.',
   train: '🚂 Trains roll out of the engine shed and run themselves: each takes the best waiting load where it is needed.',
-  build: '🏗 Pick what to build, then tap a glowing spot. ⟳ Turn changes which way it faces.',
+  build: '🏗 Drag the outline where you want it: blue squares are its loading tracks, green its building. ⟳ Turn rotates it.',
 };
 
 /** The build tools: what the player is doing, and the confirm bar it needs. */
@@ -38,8 +38,10 @@ export class Tools {
   buildKind: IndustryKind | null = null;
   glow = new Set<number>();
   private glowKey = '';
+  /** the building being placed: a 2×4 outline the player drags around (red when it can't go there) */
   preview: Placement | null = null;
-  private previewAt = -1;
+  previewErr = '';
+  private dragOff: [number, number] | null = null;
 
   constructor(private g: () => Game) {}
 
@@ -48,15 +50,35 @@ export class Tools {
     this.cancel();
   }
 
-  cancel() { this.plan = null; this.dbl.clear(); this.removeAt = null; this.preview = null; this.previewAt = -1; if (this.mode !== 'build') this.buildKind = null; }
+  cancel() { this.plan = null; this.dbl.clear(); this.removeAt = null; this.preview = null; this.previewErr = ''; this.dragOff = null; if (this.mode !== 'build') this.buildKind = null; }
 
   /** choose what to build: glowing squares show where it fits */
   chooseBuild(k: IndustryKind): { x: number; y: number } | null {
     this.mode = 'build'; this.buildKind = k; this.preview = null; this.glowKey = '';
     const g = this.g(), c = g.s.camera, cx = Math.floor(c.x / 32), cy = Math.floor(c.y / 32);
     const spot = nearestSpot(g, k, cx, cy);
+    // the outline appears at once: on the nearest spot that fits, or in the middle of the view (red, with the reason)
+    const at = spot ? bestPlacement(g, k, spot.x, spot.y).place : null;
+    this.setPreview(at ?? { kind: k, ...placeAround(true, 1, cx, cy) });
     if (!spot) { toast(noSpotText(k)); return null; }
     return spot;
+  }
+
+  private setPreview(p: Placement) {
+    const g = this.g();
+    this.preview = p;
+    this.previewErr = lockedText(g, p.kind) || placeError(g, p);
+  }
+
+  /** Move the outline so the tapped square is in its building row (keeping the way it faces if that fits). */
+  private moveTo(x: number, y: number) {
+    const g = this.g(), k = this.buildKind!, cur = this.preview;
+    const same = cur ? placementsAt(k, x, y).filter(p => p.horizontal === cur.horizontal && p.side === cur.side && !placeError(g, p)) : [];
+    const best = same[0] ?? bestPlacement(g, k, x, y).place;
+    if (best) { this.setPreview(best); return; }
+    const h = cur?.horizontal ?? true, side = cur?.side ?? 1;
+    // nothing fits here: show it anyway, red, with the tapped square in its building row
+    this.setPreview(h ? { kind: k, x: x - 1, y: y - side, horizontal: h, side } : { kind: k, x: x - side, y: y - 1, horizontal: h, side });
   }
 
   /** recompute the glowing squares around the view (cheap enough to call each frame: cached on what matters) */
@@ -75,7 +97,10 @@ export class Tools {
 
   // ---- painting
   dragStart(i: number): boolean {
-    const g = this.g();
+    const g = this.g(), n = g.world.n;
+    if (this.mode === 'build' && this.preview && footprint(n, this.preview).includes(i)) { // grab the outline
+      this.dragOff = [(i % n) - this.preview.x, ((i / n) | 0) - this.preview.y]; return true;
+    }
     if (this.mode === 'rail') {
       if (this.plan && this.plan.path.includes(i)) { this.plan.path = this.plan.path.slice(0, this.plan.path.indexOf(i) + 1); return true; }
       const p = startPlan(g, i); if (!p) return false;
@@ -86,7 +111,12 @@ export class Tools {
   }
 
   dragOver(i: number) {
-    const g = this.g();
+    const g = this.g(), n = g.world.n;
+    if (this.mode === 'build' && this.preview && this.dragOff) {
+      const p = { ...this.preview, x: (i % n) - this.dragOff[0], y: ((i / n) | 0) - this.dragOff[1] };
+      if (p.x !== this.preview.x || p.y !== this.preview.y) this.setPreview(p);
+      return;
+    }
     if (this.mode === 'rail' && this.plan) {
       extendPlan(g, this.plan, i);
       if (this.plan.refused) { this.refuse(this.plan.refused.square, this.plan.refused.why); this.plan.refused = undefined; }
@@ -104,11 +134,8 @@ export class Tools {
     }
     if (this.mode === 'double') { if (g.track.has(i)) { if (this.dbl.has(i)) this.dbl.delete(i); else this.dbl.add(i); } return true; }
     if (this.mode === 'build' && this.buildKind) {
-      const x = i % n, y = (i / n) | 0;
-      if (this.previewAt === i && this.preview) { this.turn(); return true; } // tap again: turn it
-      const b = bestPlacement(g, this.buildKind, x, y);
-      if (!b.place) { this.refuse(i, b.why); return true; }
-      this.preview = b.place; this.previewAt = i;
+      if (this.preview && footprint(n, this.preview).includes(i)) { this.dragOff = null; return true; } // a tap on the outline itself: leave it
+      this.moveTo(i % n, (i / n) | 0);
       return true;
     }
     if (this.mode === 'remove') { this.removeAt = g.track.has(i) ? i : null; if (!g.track.has(i)) toast('No track here'); return true; }
@@ -116,16 +143,19 @@ export class Tools {
     return false;
   }
 
-  /** Turn the building being placed to the next way that fits on the same spot. */
+  /** Turn the outline a quarter turn about its middle (it may turn red: the bar says why). */
   turn() {
-    const g = this.g(), n = g.world.n, i = this.previewAt;
-    if (!this.buildKind || !this.preview || i < 0) return;
-    const all = placementsAt(this.buildKind, i % n, (i / n) | 0).filter(p => !placeError(g, p));
-    // ways that differ: direction and side (shifting along the row is not a turn)
-    const ways = all.filter((p, k) => all.findIndex(q => q.horizontal === p.horizontal && q.side === p.side) === k);
-    if (ways.length < 2) { toast('Only one way fits on this spot: try a more open spot to turn it'); return; }
-    const cur = ways.findIndex(p => p.horizontal === this.preview!.horizontal && p.side === this.preview!.side);
-    this.preview = ways[(cur + 1) % ways.length]!;
+    const p = this.preview; if (!p) return;
+    const ways: [boolean, 1 | -1][] = [[true, 1], [false, -1], [true, -1], [false, 1]];
+    const k = ways.findIndex(([h, s]) => h === p.horizontal && s === p.side), [h, side] = ways[(k + 1) % 4]!;
+    const [cx, cy] = centreOf(p);
+    // prefer a nearby spot that fits this way round, so a turn next to an obstacle still works
+    const g = this.g();
+    for (const [dx, dy] of [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const q = { kind: p.kind, ...placeAround(h, side, cx + dx, cy + dy) };
+      if (!placeError(g, q)) { this.setPreview(q); return; }
+    }
+    this.setPreview({ kind: p.kind, ...placeAround(h, side, cx, cy) });
   }
 
   /** a tap near a train selects it */
@@ -171,6 +201,9 @@ export class Tools {
       const p = trainPrice(g);
       return { text: g.s.shed ? `🚂 Buy train ${g.s.trains.length + 1} · ${fmtMoney(p)}` : '🏚 Lay a straight bit of line near Ashford: the engine shed goes beside it', ok: '✓ Buy', can: !!g.s.shed && p <= g.s.money };
     }
+    if (this.mode === 'build' && this.preview && this.previewErr) {
+      return { text: `⚠ ${this.previewErr}`, ok: '✓ Build', can: false, turn: true };
+    }
     if (this.mode === 'build' && this.preview) {
       const k = this.preview.kind, price = priceOf(g, k), out = Math.round(INDUSTRIES[k].rate * shareAt(g, this.preview) * 60);
       return { text: `${INDUSTRIES[k].icon} ${INDUSTRIES[k].name} · ${fmtMoney(price)} · makes ${out}/min${harmText(harmOf(g, footprint(g.world.n, this.preview)))}`, ok: '✓ Build', can: price <= g.s.money, turn: true };
@@ -202,7 +235,7 @@ export class Tools {
       const b = build(g, this.preview); if (typeof b === 'string') { toast(b); return; }
       trackChanged(g); g.terrainDirty?.(footprint(g.world.n, b));
       toast(isLinked(g, b) ? `${INDUSTRIES[b.kind].icon} ${INDUSTRIES[b.kind].name} built` : `${INDUSTRIES[b.kind].icon} Built! Now lay track from your railway to one end of its yard`);
-      this.preview = null; this.previewAt = -1; this.glowKey = '';
+      this.preview = null; this.previewErr = ''; this.glowKey = '';
     } else if (this.mode === 'train') {
       const t = buyTrain(g); if (typeof t === 'string') { toast(t); return; }
       this.selected = t.id; toast(`🚂 Train ${t.id} is out of the shed and looking for a load`);
@@ -213,4 +246,17 @@ export class Tools {
       removeSquare(g.track, g.world.n, i); trackChanged(g); g.terrainDirty?.([i]); this.removeAt = null;
     }
   }
+}
+
+/** A building's footprint (two rows of four) placed so its middle is at (cx, cy), facing the given way. */
+function placeAround(horizontal: boolean, side: 1 | -1, cx: number, cy: number): { x: number; y: number; horizontal: boolean; side: 1 | -1 } {
+  if (horizontal) { const left = Math.round(cx - 1.5), top = Math.round(cy - 0.5); return { x: left, y: side > 0 ? top : top + 1, horizontal, side }; }
+  const left = Math.round(cx - 0.5), top = Math.round(cy - 1.5);
+  return { x: side > 0 ? left : left + 1, y: top, horizontal, side };
+}
+
+/** The middle of a footprint, in squares. */
+function centreOf(p: { x: number; y: number; horizontal: boolean; side: 1 | -1 }): [number, number] {
+  if (p.horizontal) return [p.x + 1.5, (p.side > 0 ? p.y : p.y - 1) + 0.5];
+  return [(p.side > 0 ? p.x : p.x - 1) + 0.5, p.y + 1.5];
 }

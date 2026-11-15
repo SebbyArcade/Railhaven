@@ -10,7 +10,7 @@
   #hud { position: fixed; top: max(8px, env(safe-area-inset-top)); left: 8px; display: flex; gap: 6px; pointer-events: none; }
   .chip { background: rgba(28,22,16,.88); border: 1px solid #6b5132; border-radius: 14px; padding: 4px 10px; font-weight: 600; font-size: 14px; }
   .chip.money { color: #ffd27a; }
-  #toast { position: fixed; left: 50%; bottom: 84px; transform: translateX(-50%); background: rgba(28,22,16,.94); border: 1px solid #c99a5b; border-radius: 12px; padding: 8px 14px; font-size: 14px; opacity: 0; transition: opacity .3s; pointer-events: none; max-width: 86vw; text-align: center; }
+  #toast { position: fixed; left: 50%; top: calc(max(8px, env(safe-area-inset-top)) + 54px); transform: translateX(-50%); background: rgba(28,22,16,.94); border: 1px solid #c99a5b; border-radius: 12px; padding: 8px 14px; font-size: 14px; opacity: 0; transition: opacity .3s; pointer-events: none; max-width: 86vw; text-align: center; }
   #bar { position: fixed; bottom: max(10px, env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%); display: flex; gap: 6px; }
   #bar button { background: #3a2a18; color: #ffe9c4; border: 1px solid #c99a5b; border-radius: 12px; padding: 8px 10px; font-size: 14px; font-weight: 600; min-width: 52px; }
   #bar button.on { background: #e8a33c; color: #2a1c0c; border-color: #ffd27a; }
