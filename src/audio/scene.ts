@@ -30,7 +30,7 @@ export const QUIET_ZOOM = 0.6, FULL_ZOOM = 1.1;
 export const nearness = (z: number) => Math.max(0, Math.min(1, (z - QUIET_ZOOM) / (FULL_ZOOM - QUIET_ZOOM)));
 
 /** How loud a thing at world point (wx, wy) is from the camera, and its pan. Things just off screen are faint. */
-function place(g: Game, v: View, wx: number, wy: number): { vol: number; pan: number } {
+export function place(g: Game, v: View, wx: number, wy: number): { vol: number; pan: number } {
   const c = g.s.camera, sx = (wx - c.x) * c.z, sy = (wy - c.y) * c.z;
   const r = Math.max(v.w, v.h) * 0.6, d = Math.hypot(sx, sy * 1.2) / r;
   const vol = d >= 1 ? 0 : (1 - d) * (1 - d) * Math.min(1, c.z / 1.4);

@@ -1,6 +1,7 @@
 import { destName } from './economy/shipping.ts';
 import { Sound } from './audio/sound.ts';
 import { hearScene } from './audio/scene.ts';
+import { cueMemo, cues, type CueMemo } from './audio/cues.ts';
 import { breaksChanged, newGame, trackChanged } from './game.ts';
 import { BREAK_TEXT, breakRail, tickBreaks } from './track/breaks.ts';
 import { tickEvents } from './world/events.ts';
@@ -206,7 +207,9 @@ cardEl.onclick = e => {
     else { delete t.pin; toast('🔄 It sends automatically again'); }
     openCard({ kind: 'bld', id: t.id }); return;
   }
-  if (b.dataset.act === 'snd') { const k = b.dataset.k as 'music' | 'sfx'; sound.unlock(); sound.set(k, !sound.settings[k]); renderCard(); return; }
+  if (b.dataset.act === 'snd') { const k = b.dataset.k as 'music' | 'sfx'; sound.unlock(); sound.set(k, !sound.settings[k]); if (sound.settings[k]) sound.set('muted', false); showMute(); renderCard(); return; }
+  if (b.dataset.act === 'unmute') { sound.unlock(); sound.set('muted', false); showMute(); renderCard(); return; }
+  if (b.dataset.act === 'vol') { const k = b.dataset.k as 'musicVol' | 'sfxVol'; sound.unlock(); sound.volume(k, +b.dataset.v!); showMute(); renderCard(); return; }
   if (b.dataset.act === 'full') { const d = document.documentElement; if (document.fullscreenElement) void document.exitFullscreen?.(); else d.requestFullscreen?.().catch(() => toast('Full screen works when the game is opened in Chrome')); return; }
   if (b.dataset.act === 'copycode') { void saveCode(game).then(async c => { myCode = c; renderCard(); try { await navigator.clipboard.writeText(c); toast('📋 Code copied: paste it in 🏠 Home → ⚙ Settings on the other side'); } catch { toast('Press on the code below, Select all, then Copy'); } }); return; }
   if (b.dataset.act === 'copystats') { const t = cardEl.querySelector<HTMLTextAreaElement>('#stats'); if (t) { t.value = gameReport(game); void navigator.clipboard.writeText(t.value).then(() => toast('📋 Report copied: paste it in the chat'), () => { t.select(); toast('Press on the report, Select all, then Copy'); }); } return; }
@@ -500,7 +503,11 @@ function updateUi() {
 }
 
 let lastSeason = -1;
-const sound = new Sound(); let soundT = 0;
+const sound = new Sound(); let soundT = 0, cueOf: Game | null = null, memo: CueMemo | null = null;
+const muteBtn = $('mute');
+const showMute = () => { const m = sound.settings.muted; muteBtn.textContent = m ? '🔇' : '🔊'; muteBtn.classList.toggle('off', m); muteBtn.title = m ? 'Sound off: tap to turn it on' : 'Tap to silence the game'; };
+showMute();
+muteBtn.addEventListener('click', e => { e.stopPropagation(); sound.unlock(); sound.set('muted', !sound.settings.muted); showMute(); toast(sound.settings.muted ? '🔇 Sound off · tap again to hear the game' : '🔊 Sound on · volume in 🏠 Home → ⚙ Settings', 2200); if (tools.card?.kind === 'game') renderCard(); });
 for (const ev of ['pointerdown', 'touchstart', 'keydown']) window.addEventListener(ev, () => sound.unlock(), { capture: true, passive: true });
 let last0 = 0, last = performance.now(), saveT = 0, lastMenu = 0, lastCard = 0, newsAt = 0;
 function frame(now: number) {
@@ -509,7 +516,10 @@ function frame(now: number) {
   if (!document.hidden && !idle()) { game.s.t += dt; game.sys.tick(dt); tickProduction(game, dt); tickTowns(game, dt); tickTrains(game, dt); if (Math.floor(game.s.t / 5) !== Math.floor((game.s.t - dt) / 5)) checkStuck(game); if (+tickBreaks(game) + +tickEvents(game, dt)) breaksChanged(game); }
   { const se = seasonOf(game.s.t); if (se !== lastSeason) { if (lastSeason >= 0) (game.news ??= []).push(`${SEASONS[se]} has come`); lastSeason = se; } }
   sound.season = seasonOf(game.s.t); sound.pause(document.hidden || idle());
-  if (now - soundT > 100) { soundT = now; sound.update(hearScene(game, view)); }
+  if (now - soundT > 100) {
+    soundT = now; sound.update(hearScene(game, view));
+    if (cueOf !== game || !memo) { cueOf = game; memo = cueMemo(game); } else sound.cue(cues(game, view, memo)); // a new or loaded game starts quiet
+  }
   if (game.news?.length && now > newsAt && !(tools.card?.kind === 'story' && tools.card.page === 'act')) { toast(game.news.shift()!, 4000); newsAt = now + 4200; }
   if (Math.floor(now / 1000) !== lastCard) {
     lastCard = Math.floor(now / 1000);
