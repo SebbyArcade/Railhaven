@@ -115,6 +115,14 @@ export function shipPlan(g: Game): Plan {
       want -= trainCap(g);
     }
   }
+  // pinned buildings: the player chose where their goods go
+  for (const s of srcs) {
+    const pin = s.b.pin; if (!pin || isDock(s.b) || out.has(s.sk)) continue;
+    const p = pairs.find(q => q.s === s && q.to.kind === pin.kind && q.to.id === pin.id); if (!p) continue;
+    const why: Why = p.f ? 'factory' : room(p, 'need') > 0 ? 'order' : room(p, 'steady') > 0 ? 'steady' : 'extra';
+    out.set(s.sk, { to: p.to, why, d: p.d });
+    if (why === 'order' || why === 'factory') { const kk = key(p.to, s.k) + 'need'; left.set(kk, left.get(kk)! - trainCap(g)); }
+  }
   const take = (why: 'need' | 'steady') => {
     for (const p of pairs) {
       if (out.has(p.s.sk) || room(p, why) <= 0) continue;
@@ -161,6 +169,22 @@ function seaNeeds(g: Game, srcs: { b: Building; k: Good; sk: string }[], out: Ma
     out.set(s.sk, best);
     bound.set(bk, bound.get(bk)! + trainCap(g));
   }
+}
+
+/** Every place on the railway a building could send its goods, nearest first, with how it would be paid there. */
+export function destinationsOf(g: Game, b: Building): { to: Dest; d: number; why: Why }[] {
+  const n = g.world.n, k = goodOf(b), dist = bldDist(g, b), out: { to: Dest; d: number; why: Why }[] = [];
+  for (const t of g.s.sites) {
+    if (t.kind !== 'town' || !townLinked(g, t)) continue;
+    const h = hallOf(g.track, n, t); const d = h ? dist[h.squares[1]!]! : -1; if (d < 0) continue;
+    const why: Why = orderOf(g, t)[k] && townRoom(g, t, k).order > 0 ? 'order' : steadyGoods(t, g).includes(k) ? 'steady' : 'extra';
+    out.push({ to: { kind: 'town', id: t.id }, d, why });
+  }
+  for (const f of g.s.buildings ?? []) {
+    if (f === b || !isFactory(f.kind) || !inputsOf(f.kind).includes(k) || !isLinked(g, f)) continue;
+    const d = dist[yardSquares(n, f)[1]!]!; if (d >= 0) out.push({ to: { kind: 'bld', id: f.id }, d, why: 'factory' });
+  }
+  return out.sort((p, q) => p.d - q.d);
 }
 
 /** What a load of n units pays when delivered there. */

@@ -1,0 +1,20 @@
+// 📌 Choose where a building sends its goods. Usage: node tools/pin-shot.mjs save.json
+import { chromium } from 'playwright';
+import { existsSync, readFileSync, mkdirSync } from 'node:fs';
+import { resolve } from 'node:path';
+mkdirSync('shots', { recursive: true });
+const [file] = process.argv.slice(2);
+const browser = await chromium.launch({ executablePath: existsSync('/opt/pw-browsers/chromium') ? '/opt/pw-browsers/chromium' : undefined });
+const page = await browser.newPage({ viewport: { width: 412, height: 860 }, deviceScaleFactor: 2, hasTouch: true });
+const errors = []; page.on('pageerror', e => errors.push(String(e)));
+await page.addInitScript(s => { localStorage.setItem('railhaven2', s); }, readFileSync(file, 'utf8'));
+await page.goto('file://' + resolve('dist/index.html'));
+await page.waitForTimeout(1500);
+await page.evaluate(() => { const r = window.railhaven, b = r.game.s.buildings.find(x => x.kind === 'wood'); r.openCard({ kind: 'bld', id: b.id }); const c = r.game.s.camera; c.x = b.x * 32; c.y = b.y * 32; });
+await page.waitForTimeout(800);
+await page.click('#card button[data-page="pin"]'); await page.waitForTimeout(600);
+await page.screenshot({ path: 'shots/pin-page.png' });
+await page.click('#card button[data-act="pin"][data-kind]:not(.on) >> nth=1'); await page.waitForTimeout(1500);
+await page.screenshot({ path: 'shots/pin-done.png' });
+console.log(await page.evaluate(() => { const r = window.railhaven, b = r.game.s.buildings.find(x => x.kind === 'wood'); return JSON.stringify(b.pin); }), errors.join('\n') || 'no page errors');
+await browser.close();
