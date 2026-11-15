@@ -10,6 +10,7 @@ import { bodyPoint, trainLength } from '../trains/train.ts';
 import { fmtMoney, toast } from './hud.ts';
 import type { Card } from './cards.ts';
 import { badSquares, bestPlacement, build, footprint, INDUSTRIES, type IndustryKind, isLinked, placeError, placementsAt, priceOf, shareAt, harmOf, harmText, nearestSpot, noSpotText, lockedText, linkedSquares, yardSquares } from '../buildings/industries.ts';
+import { refundOf, removeBuilding } from '../economy/upgrades.ts';
 import { townLinked } from '../economy/towns.ts';
 import { hallOf } from '../buildings/stations.ts';
 import { placeName } from './orders.ts';
@@ -24,7 +25,7 @@ export const MODE_HINT: Record<Mode, string> = {
   double: '═ Tap or drag along your track to make it double. Trains keep left, so two can pass.',
   remove: '✂ Tap a track square to remove it.',
   train: '🚂 Trains roll out of the engine shed and run themselves: each takes the best waiting load where it is needed.',
-  build: '🏗 Drag the picture where you want it. Blue row = loading track: your rails join it in line, at either end (gold arrows), from any distance. ⟳ Turn rotates it.',
+  build: '🏗 Drag the picture where you want it. Blue row = loading track: your rails join it in line, at either end (gold arrows). Tap a ⟳ corner to turn it, double-tap it to build. ↶ Undo takes it back.',
   scout: '🔭 Tap a glowing town (scouts on foot) or dock (a boat), then drag or tap to draw the route into the fog.',
 };
 
@@ -34,6 +35,10 @@ export class Tools {
   plan: PaintPlan | null = null;
   dbl = new Set<number>();
   removeAt: number | null = null;
+  /** the building just built: Undo takes it back with a full refund (until the next build, or for a minute) */
+  lastBuild: { id: number; paid: number; at: number } | null = null;
+  /** when the outline was last tapped (a second tap soon after builds it) */
+  private outlineTapAt = 0;
   /** what removing that square would cut off the railway ('' when nothing) */
   removeCut = '';
   selected: number | null = null;
@@ -226,7 +231,12 @@ export class Tools {
     }
     if (this.mode === 'double') { if (g.track.has(i)) { if (this.dbl.has(i)) this.dbl.delete(i); else this.dbl.add(i); } return true; }
     if (this.mode === 'build' && this.buildKind) {
-      if (this.preview && footprint(n, this.preview).includes(i)) { this.dragOff = null; return true; } // a tap on the outline itself: leave it
+      if (this.preview && turnSquares(n, this.preview).includes(i)) { this.turn(); return true; } // a corner arrow: turn it
+      if (this.preview && footprint(n, this.preview).includes(i)) { // a tap on the outline: a second tap soon after builds it
+        this.dragOff = null; const now = performance.now();
+        if (now - this.outlineTapAt < 450 && !this.previewErr) { this.outlineTapAt = 0; this.confirm(); } else this.outlineTapAt = now;
+        return true;
+      }
       this.moveTo(i % n, (i / n) | 0);
       return true;
     }
@@ -271,7 +281,18 @@ export class Tools {
   }
 
   /** can the last stroke be undone right now (no train on its new squares)? */
+  /** The building Undo would take back, if any. */
+  undoBuilding() {
+    const g = this.g(), lb = this.lastBuild;
+    if (!lb || performance.now() - lb.at > 60000) return null;
+    const b = g.s.buildings?.find(x => x.id === lb.id); if (!b) return null;
+    const yard = new Set(yardSquares(g.world.n, b));
+    if (g.s.trains.some(t => t.trail.some(s => g.net.pieces[s.piece]!.squares.some(q => yard.has(q))) || t.job?.src === b.id)) return null; // a train already uses it
+    return b;
+  }
+
   canUndo(): boolean {
+    if (this.undoBuilding()) return true;
     const g = this.g(), b = this.lastStroke;
     if (!b || this.mode !== 'rail') return false;
     const fresh = new Set(b.before.filter(([, o]) => !o).map(([i]) => i));
@@ -279,7 +300,14 @@ export class Tools {
   }
 
   undo() {
-    const g = this.g(), b = this.lastStroke;
+    const g = this.g(), ub = this.undoBuilding();
+    if (ub) { // take back the building just built, with all its money
+      const paid = this.lastBuild!.paid, err = removeBuilding(g, ub); if (err) { toast(err); return; }
+      g.s.money += paid - refundOf(ub); this.lastBuild = null;
+      trackChanged(g); g.terrainDirty?.(footprint(g.world.n, ub));
+      toast(`${INDUSTRIES[ub.kind].icon} ${INDUSTRIES[ub.kind].name} taken back · ${fmtMoney(paid)} back`); return;
+    }
+    const b = this.lastStroke;
     if (!b) return;
     if (!this.canUndo()) { toast('A train is on that track'); return; }
     undoStroke(g, b); this.lastStroke = null; this.plan = null;
@@ -339,9 +367,10 @@ export class Tools {
       g.s.money -= c; for (const i of add) g.track.get(i)!.dbl = true; this.lastStroke = null;
       trackChanged(g); this.dbl.clear();
     } else if (this.mode === 'build' && this.preview) {
-      const b = build(g, this.preview); if (typeof b === 'string') { toast(b); return; }
+      const m0 = g.s.money, b = build(g, this.preview); if (typeof b === 'string') { toast(b); return; }
+      this.lastBuild = { id: b.id, paid: m0 - g.s.money, at: performance.now() };
       trackChanged(g); g.terrainDirty?.(footprint(g.world.n, b));
-      toast(isLinked(g, b) ? `${INDUSTRIES[b.kind].icon} ${INDUSTRIES[b.kind].name} built` : `${INDUSTRIES[b.kind].icon} Built! Now lay track from your railway to one end of its yard`);
+      toast(isLinked(g, b) ? `${INDUSTRIES[b.kind].icon} ${INDUSTRIES[b.kind].name} built · ↶ Undo if it's the wrong spot` : `${INDUSTRIES[b.kind].icon} Built! Now lay track from your railway to one end of its yard · ↶ Undo if it's the wrong spot`);
       this.preview = null; this.previewErr = ''; this.glowKey = '';
     } else if (this.mode === 'train') {
       const t = buyTrain(g); if (typeof t === 'string') { toast(t); return; }
@@ -367,6 +396,13 @@ export function cutText(g: Game, i: number): string {
   for (const b of g.s.buildings ?? []) { const y = yardSquares(n, b)[0]!; if (was.has(y) && !after.has(y)) names.push(`the ${placeName(g, b)}`); }
   if (!names.length) return '';
   return names.length <= 3 ? names.join(names.length === 2 ? ' and ' : ', ') : `${names.slice(0, 2).join(', ')} and ${names.length - 2} more`;
+}
+
+/** The four squares just off the outline's corners, where the ⟳ turn arrows are drawn. */
+export function turnSquares(n: number, p: { x: number; y: number; horizontal: boolean; side: 1 | -1 }): number[] {
+  const f = footprint(n, p), xs = f.map(i => i % n), ys = f.map(i => (i / n) | 0);
+  const x0 = Math.min(...xs) - 1, x1 = Math.max(...xs) + 1, y0 = Math.min(...ys) - 1, y1 = Math.max(...ys) + 1;
+  return [y0 * n + x0, y0 * n + x1, y1 * n + x0, y1 * n + x1];
 }
 
 /** A building's footprint (two rows of four) placed so its middle is at (cx, cy), facing the given way. */

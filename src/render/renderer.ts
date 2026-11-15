@@ -13,6 +13,7 @@ import { shedSquare } from '../buildings/shed.ts';
 import { hallsOf } from '../buildings/stations.ts';
 import { landDistance } from '../track/rules.ts';
 import { buildingSquares, footprint, isLinked, yardSquares } from '../buildings/industries.ts';
+import { turnSquares } from '../ui/tools.ts';
 import { townLinked } from '../economy/towns.ts';
 import { TerrainCache } from './terrainCache.ts';
 import { drawWaterLive } from './terrainArt.ts';
@@ -157,6 +158,14 @@ export class Renderer {
         const bs = buildingSquares(n, t.preview), m = bs[1]!, m2 = bs[2]!, hx = ((m % n) + (m2 % n)) / 2 * TILE + TILE / 2, hy = (((m / n) | 0) + ((m2 / n) | 0)) / 2 * TILE + TILE / 2;
         ctx.fillStyle = 'rgba(28,22,16,.75)'; ctx.beginPath(); ctx.arc(hx, hy, 9, 0, 7); ctx.fill();
         ctx.fillStyle = '#fff'; ctx.font = '700 11px system-ui'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('✥', hx, hy + 0.5);
+        // ⟳ turn arrows just off each corner: tap one to turn the building a quarter turn
+        const k = Math.max(1, 1.2 / this.g.s.camera.z), r = 9 * k;
+        for (const c of turnSquares(n, t.preview)) {
+          const X = (c % n + 0.5) * TILE, Y = (((c / n) | 0) + 0.5) * TILE;
+          ctx.fillStyle = 'rgba(40,90,150,.92)'; ctx.beginPath(); ctx.arc(X, Y, r, 0, 7); ctx.fill(); ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.2 * k; ctx.stroke();
+          ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.8 * k; ctx.beginPath(); ctx.arc(X, Y, r * 0.5, -Math.PI * 0.9, Math.PI * 0.5); ctx.stroke();
+          const ax = X, ay = Y + r * 0.5; ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.moveTo(ax + 3 * k, ay); ctx.lineTo(ax - 1.5 * k, ay - 3 * k); ctx.lineTo(ax - 1.5 * k, ay + 3 * k); ctx.fill();
+        }
       }
     }
     if (t.mode === 'rail' && !t.plan) this.drawRailGuide(ctx, tm, box);
