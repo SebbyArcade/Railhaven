@@ -48,6 +48,7 @@ const islandsWithTowns = (g: Game) => new Set(linkedTowns(g).map(t => islandAt(g
 const docks = (g: Game) => blds(g).filter(b => b.kind === 'dock');
 const dockIslands = (g: Game) => new Set(docks(g).map(b => g.world.islandOf[b.y * g.world.n + b.x] ?? -1)).size;
 const explored = (g: Game) => { let n = 0; for (const v of g.s.fog) for (let b = v; b; b &= b - 1) n++; return n / (g.world.n * g.world.n); };
+const railIslands = (g: Game) => new Set(g.s.track.map(t => g.world.islandOf[t[0]]).filter(k => k !== undefined && k >= 0)).size;
 const doubled = (g: Game) => g.s.track.filter(t => t[2]).length;
 const TOP_LVL = RLV.length - 1;
 /** Fresh Start: a map counts once it reaches this Railway level, so starting and quitting doesn't count */
@@ -131,13 +132,15 @@ export const MEDALS: Medal[] = [
   { id: 'mira', g: 'railway', icon: '🎯', name: "Mira's Favourite", how: "Finish 25 of Mira's missions in one game", xp: 25, prog: g => [msOf(g).done.length, 25] },
   { id: 'fleet', g: 'railway', icon: '🚃', name: 'Big Fleet', how: 'Run 20 trains at once', xp: 25, prog: g => [g.s.trains.length, 20] },
   { id: 'fleet40', g: 'railway', icon: '🚄', name: 'Rolling Stock', how: 'Run 40 trains at once', xp: 50, prog: g => [g.s.trains.length, 40] },
-  { id: 'track100', g: 'track', icon: '🛤', name: 'Branch Line', how: 'Lay 100 squares of track in one game', xp: 10, prog: g => [g.s.track.length, 100] },
-  { id: 'track500', g: 'track', icon: '🚞', name: 'Main Line', how: 'Lay 500 squares of track in one game', xp: 25, prog: g => [g.s.track.length, 500] },
-  { id: 'track1000', g: 'track', icon: '🛤', name: 'Iron Road', how: 'Lay 1,000 squares of track in one game', xp: 50, prog: g => [g.s.track.length, 1000] },
-  { id: 'track2500', g: 'track', icon: '🌍', name: 'Coast to Coast', how: 'Lay 2,500 squares of track in one game', xp: 75, prog: g => [g.s.track.length, 2500] },
-  { id: 'reach60', g: 'track', icon: '📏', name: 'Long Haul', how: 'Run a line 60 squares out from Ashford, along the rails', xp: 25, prog: g => [reach(g), 60] },
-  { id: 'reach150', g: 'track', icon: '🧵', name: 'End of the Line', how: 'Run a line 150 squares out from Ashford, along the rails', xp: 50, prog: g => [reach(g), 150] },
-  { id: 'double250', g: 'track', icon: '═', name: 'Double the Line', how: 'Double 250 squares of track in one game', xp: 25, prog: g => [doubled(g), 250] },
+  { id: 'track250', g: 'track', icon: '🛤', name: 'Branch Line', how: 'Lay 250 squares of track in one game', xp: 10, prog: g => [g.s.track.length, 250] },
+  { id: 'track1000', g: 'track', icon: '🚞', name: 'Main Line', how: 'Lay 1,000 squares of track in one game', xp: 25, prog: g => [g.s.track.length, 1000] },
+  { id: 'track2500', g: 'track', icon: '🛤', name: 'Iron Road', how: 'Lay 2,500 squares of track in one game', xp: 50, prog: g => [g.s.track.length, 2500] },
+  { id: 'track5000', g: 'track', icon: '🌍', name: 'Coast to Coast', how: 'Lay 5,000 squares of track in one game', xp: 75, prog: g => [g.s.track.length, 5000] },
+  { id: 'reach70', g: 'track', icon: '📏', name: 'Long Haul', how: 'Run a line 70 squares out from Ashford, along the rails', xp: 50, prog: g => [reach(g), 70] },
+  { id: 'railisl3', g: 'track', icon: '🏝', name: 'Island Lines', how: 'Have rails on 3 islands in one game', xp: 25, prog: g => [railIslands(g), 3] },
+  { id: 'railisl6', g: 'track', icon: '🌉', name: 'Rails Across the Sea', how: 'Have rails on 6 islands in one game', xp: 75, prog: g => [railIslands(g), 6] },
+  { id: 'double500', g: 'track', icon: '═', name: 'Double the Line', how: 'Double 500 squares of track in one game', xp: 25, prog: g => [doubled(g), 500] },
+  { id: 'double1500', g: 'track', icon: '🚄', name: 'Four-Track Mainline', how: 'Double 1,500 squares of track in one game', xp: 50, prog: g => [doubled(g), 1500] },
   { id: 'games3', g: 'railway', icon: '🗂', name: 'Fresh Start', how: `Play three different maps to Railway level ${FRESH_LVL}`, xp: 25, prog: (_g, p) => [p.seeds.length, 3] },
 ];
 
