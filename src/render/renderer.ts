@@ -18,6 +18,7 @@ import { TerrainCache } from './terrainCache.ts';
 import { drawWaterLive } from './terrainArt.ts';
 import { drawTrack } from './track.ts';
 import { drawTrains } from './trains.ts';
+import { drawMishaps, drawStorm, stormFlash } from './events.ts';
 import { drawShips } from './ships.ts';
 import { drawExplore } from './explore.ts';
 import { islandSpec, SPEC_TEXT } from '../world/specialty.ts';
@@ -78,6 +79,7 @@ export class Renderer {
     for (const b of g.s.breaks ?? []) if (vis(b.square)) drawBreak(ctx, g, b, tm);
     drawTrains(ctx, g.net, g.s.trains, tm);
     drawShed(ctx, g, tm); // after trains: a train on the siding runs in under its roof
+    drawMishaps(ctx, g, tm, vis);
     drawShips(ctx, g, tm, (x, y) => x >= x0 - 2 && x <= x1 + 2 && y >= y0 - 2 && y <= y1 + 2 && !!isRevealed(g, Math.round(y) * n + Math.round(x)));
     drawExplore(ctx, g, this.tools, tm, (x, y) => x >= x0 - 2 && x <= x1 + 2 && y >= y0 - 2 && y <= y1 + 2, cam.z);
     if (tm - this.planAt > 1) { this.planAt = tm; this.plan = shipPlan(g); this.alerts = new Set(stuckList(g, this.plan).filter(x => x.bld !== undefined).map(x => x.bld!)); } // the plan changes slowly: once a second is plenty
@@ -94,10 +96,13 @@ export class Renderer {
     drawTownBadges(ctx, g, this.plan, cam.z, tm);
     if (!this.tools?.view) drawAlerts(ctx, g, this.alerts, cam.z, tm);
     this.drawOverlay(ctx, tm);
+    drawStorm(ctx, g, tm);
     drawFog(ctx, g, x0, y0, x1, y1, cam.z, tm);
     this.drawIslandNames(ctx, cam.z);
     ctx.restore();
     if (seasonOf(g.s.t) === 3) this.drawSnow(ctx, view, tm);
+    const st = g.s.storm, fl = st && Math.hypot(st.x * TILE - cam.x, st.y * TILE - cam.y) * cam.z < Math.max(view.w, view.h) ? stormFlash(g, tm) : 0;
+    if (fl) { ctx.fillStyle = `rgba(235,240,255,${fl})`; ctx.fillRect(0, 0, view.w, view.h); } // lightning
     const v = this.tools?.view; if (v) drawView(ctx, g, v, view, this.views.get(g, v, tm), tm, this.arrows);
   }
 

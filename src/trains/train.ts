@@ -42,6 +42,8 @@ export interface Train {
   lastPay?: { pay: number; at: number; n: number; good: string; to: { kind: 'town' | 'bld'; id: number } };
   /** seconds to wait in a refuge (out of another train's way) before trying again */
   refuge?: number;
+  /** broken down: waits for the repair crew (see world/events.ts) */
+  broke?: { crewAt: number; doneAt: number };
   /** head position when saved, to find the train again if the rails were rebuilt */
   at?: { x: number; y: number; tx: number; ty: number };
 }
@@ -70,6 +72,8 @@ export class TrainSystem {
 
   /** top speed (Engine shed upgrades raise it) */
   vmax = V_MAX;
+  /** share of top speed for a train right now (storms, breakdowns); 0 stops it where it is */
+  speedOf?: (t: Train) => number;
   /** pieces trains may not enter (broken rails) */
   blocked = new Set<number>();
   /** platform and yard tracks: either lane is fine there (keep-left is for the open line) */
@@ -219,8 +223,10 @@ export class TrainSystem {
       if (this.authority(t) > brake) break;
       if (!this.tryHold(t)) break;
     }
+    const mul = this.speedOf ? this.speedOf(t) : 1;
+    if (mul <= 0 && t.v < 0.5) { t.v = 0; t.wait = 0; return; } // broken down: stand still, keep its place on the line
     const auth = this.authority(t);
-    const target = Math.min(this.vmax, Math.sqrt(2 * DECEL * Math.max(0, auth - 0.5)));
+    const target = Math.min(this.vmax * mul, Math.sqrt(2 * DECEL * Math.max(0, auth - 0.5)));
     t.v = t.v < target ? Math.min(target, t.v + ACCEL * dt) : Math.max(target, t.v - DECEL * dt);
     let go = Math.min(t.v * dt, auth);
     if (go <= 0.001) {
