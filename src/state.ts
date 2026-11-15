@@ -7,7 +7,7 @@ import type { Shed } from './buildings/shed.ts';
 import type { Break } from './track/breaks.ts';
 import type { Building } from './buildings/industries.ts';
 
-export type Resource = 'wood' | 'farm' | 'stone' | 'coal' | 'iron' | 'oil';
+export type Resource = 'wood' | 'farm' | 'stone' | 'coal' | 'iron' | 'oil' | 'gold' | 'gems' | 'cocoa' | 'rubber';
 
 /** A place on the map. Towns and settlement sites are preset; deposits wait for the player to build a mine. */
 export interface Site {
@@ -94,6 +94,8 @@ export interface GameState {
   shipU?: Partial<Record<'spd' | 'hold', number>>;
   /** cargo ships */
   ships?: import('./ships/ships.ts').CargoShip[];
+  /** 🗺 expedition rings sent: the map has grown by this many rings of sea */
+  rings?: number;
   /** town parks and town projects, one square each */
   parks?: import('./buildings/parks.ts').Park[];
   /** money earned and spent, for the report */

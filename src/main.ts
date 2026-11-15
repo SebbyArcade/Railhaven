@@ -14,7 +14,7 @@ import { homeHtml, isHomePage } from './ui/home.ts';
 import { mapThumb } from './render/thumb.ts';
 import { canInstall, installApp, isInstalled, servedOnline, setupPwa } from './ui/pwa.ts';
 import { checkMedals, loadProfile, saveProfile } from './progress/achievements.ts';
-import { PAINTS, setLooks, THEMES } from './render/looks.ts';
+import { lookOpen, PAINTS, setLooks, THEMES } from './render/looks.ts';
 import { xpOf } from './progress/achievements.ts';
 import { isRevealed } from './world/fog.ts';
 import { TERRAIN_NAMES } from './world/terrain.ts';
@@ -27,6 +27,7 @@ import { tickProduction } from './economy/production.ts';
 import type { Game } from './state.ts';
 import { footprint } from './buildings/industries.ts';
 import { type Card, cardHtml } from './ui/cards.ts';
+import { sendExpedition } from './world/expedition.ts';
 import { buyPark, buyProject, type ParkKind, parksOf, projectOf } from './buildings/parks.ts';
 import { type MapView, VIEWS } from './ui/mapviews.ts';
 import { gameReport } from './ui/report.ts';
@@ -157,7 +158,7 @@ cardEl.onclick = e => {
   if (b.dataset.act === 'mgroup') { openCard({ kind: 'game', id: +b.dataset.id!, page: 'mgroup' }); return; }
   if (b.dataset.act === 'look') {
     const paint = b.dataset.kind === 'paint', l = (paint ? PAINTS : THEMES).find(x => x.k === b.dataset.k); if (!l) return;
-    if (xpOf(profile) < l.xp) { toast(`🔒 ${l.name} unlocks at ${l.xp} XP: earn medals to get there`); return; }
+    if (!lookOpen(l, xpOf(profile), profile.medals)) { toast('medal' in l && l.medal ? `🔒 ${l.name}: build the Royal Exhibition Hall in Ashford to win it` : `🔒 ${l.name} unlocks at ${l.xp} XP: earn medals to get there`); return; }
     if (paint) profile.paint = l.k; else profile.theme = l.k;
     setLooks(profile.paint, profile.theme); keepProfile(); toast(`🎨 ${l.name}`); renderCard(); return;
   }
@@ -216,6 +217,18 @@ cardEl.onclick = e => {
   if (b.dataset.act === 'swap') { const why = swapMission(game, +b.dataset.m!); toast(why || `🎯 New mission: ${msOf(game).main?.title}`); renderCard(); return; }
   const bld = game.s.buildings?.find(x => x.id === +(b.dataset.id ?? -1));
   if (b.dataset.act === 'page' && tools.card) { openCard({ ...tools.card, page: b.dataset.page || undefined } as Card); return; }
+  if (b.dataset.act === 'expedition' && bld) {
+    // a big spend that grows the map for good: ask with a second tap (the artifact frame blocks confirm())
+    if (!expArmed || performance.now() - expArmed > 4000) { expArmed = performance.now(); b.textContent = '⚠ Tap again to send it: the map grows for good'; b.classList.add('sure'); return; }
+    expArmed = 0;
+    const r = sendExpedition(game, bld); if (typeof r === 'string') { toast(r); return; }
+    startGame(r.g, false);
+    const near = r.fresh.filter(t => t.kind === 'town').sort((p, q) => Math.hypot(p.x - bld.x, p.y - bld.y) - Math.hypot(q.x - bld.x, q.y - bld.y))[0]; // the nearest new town
+    if (near) Object.assign(game.s.camera, { x: near.x * 32 + 16, y: near.y * 32 + 16, z: 0.6 });
+    const msg = `🗺 The expedition is back! ${r.islands.length} new islands charted: ${r.islands.join(', ')}. ${r.towns} towns wait to be linked.`;
+    setTimeout(() => toast(msg, 7000), 800); // after the new map's own notes
+    return;
+  }
   if (b.dataset.act === 'fish' && bld) { const why = buyFishing(game, bld); toast(why || `🎣 ${FISHING[(bld.fish ?? 1) - 1]!.name} at the dock`); renderCard(); return; }
   if (b.dataset.act === 'ship' && bld) { const s = buyShip(game, bld); toast(typeof s === 'string' ? s : '🚢 A cargo ship is ready at the dock: it sails where goods wait'); renderCard(); return; }
   if (b.dataset.act === 'shipover' && bld) { const t = shipTrainTo(game, bld); toast(typeof t === 'string' ? t : `⛴ Train ${t.id} came over by boat and is looking for a load`); renderCard(); return; }
@@ -248,7 +261,7 @@ cardEl.onclick = e => {
     if (why) { toast(why); return; }
     const p = game.s.parks!.at(-1)!, P = projectOf(p.k);
     game.taken = undefined; game.terrainDirty?.([p.y * game.world.n + p.x]);
-    toast(P ? `${P.icon} ${P.name} opened in ${t.name}: ${P.text.toLowerCase()}` : `🌳 Park opened in ${t.name}: its orders are now ${parksOf(game, t).length * 5}% smaller`, 3500);
+    toast(P ? `${P.icon} ${P.name} opened in ${t.name}: ${P.text[0]!.toLowerCase() + P.text.slice(1)}` : `🌳 Park opened in ${t.name}: its orders are now ${parksOf(game, t).length * 5}% smaller`, 3500);
     renderCard(); return;
   }
   if (b.dataset.act === 'upgrade') {
@@ -399,10 +412,12 @@ function updateLesson() {
 const menu = $('buildMenu');
 let menuOpen = false;
 function renderMenu() {
-  const kinds = (Object.keys(INDUSTRIES) as IndustryKind[]).filter(k => k !== 'iron' && k !== 'oil' || game.s.sites.some(s => s.kind === 'dep' && s.res === k && !s.hidden));
+  // deposits found far out (iron, oil, the far-sea chains) show once one is uncovered; far-sea factories once their expedition went
+  const far = (k: IndustryKind) => !!info(k).ring && !isFactory(k) || k === 'iron' || k === 'oil';
+  const kinds = (Object.keys(INDUSTRIES) as IndustryKind[]).filter(k => far(k) ? game.s.sites.some(s => s.kind === 'dep' && s.res === k && !s.hidden) : (info(k).ring ?? 0) <= (game.s.rings ?? 0));
   const tile = (k: IndustryKind) => {
     const d = info(k), p = priceOf(game, k), lock = lockedText(game, k);
-    return `<button data-k="${k}" class="${tools.buildKind === k ? 'on' : ''}${lock ? ' locked' : ''}"><b>${d.icon}</b>${d.name}<small>${lock ? '🔒 Level ' + d.unlock : fmtMoney(p)}</small></button>`;
+    return `<button data-k="${k}" class="${tools.buildKind === k ? 'on' : ''}${lock ? ' locked' : ''}"><b>${d.icon}</b>${d.name}<small>${lock ? (d.ring && d.ring > (game.s.rings ?? 0) ? '🔒 🗺 Expedition' : '🔒 Level ' + d.unlock) : fmtMoney(p)}</small></button>`;
   };
   const r = recommendedBuild(game);
   menu.innerHTML = (r ? `<button data-k="${r.k}" class="rec"><b>${info(r.k).icon}</b><span style="font-size:11px;font-weight:800;color:#ffd24a;letter-spacing:.05em">⭐ RECOMMENDED NEXT BUILD${r.mission ? ' · YOUR MISSION' : ''}</span><br>${info(r.k).name} · ${fmtMoney(priceOf(game, r.k))}<small>${r.why}</small></button>` : '')
@@ -427,6 +442,7 @@ const oldSave = () => { try { return localStorage.getItem(OLD_KEY); } catch { re
 const openHome = () => { menuOpen = false; tools.mode = 'pan'; tools.cancel(); myCode = null; saveTo(localStorage, game); snapPic(); openCard({ kind: 'game', id: 0 }); };
 $('newGame').onclick = () => { if (tools.card?.kind === 'game') { closeCard(); return; } openHome(); };
 /** Play another game: a new one goes into a new slot (refused when all are taken); one opened from a slot is already in place. */
+let expArmed = 0;
 function startGame(g: Game, newSlot = true) {
   if (newSlot && slotsOk) { saveTo(localStorage, game); snapPic(); const why = addSlot(localStorage, saveJson(g), g); if (why) { toast('⚠ ' + why, 5000); return false; } }
   game = g; lastSeason = -1; tools.cancel(); closeCard(); renderer = new Renderer(game, tools); saveTo(localStorage, game); return true;

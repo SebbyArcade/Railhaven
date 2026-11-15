@@ -6,8 +6,25 @@
 
 export type Ctx = CanvasRenderingContext2D;
 
+/**
+ * Draw something that has a front, people or rising smoke the right way up on screen, whichever way the building
+ * around it is turned. (u, v) is its anchor in the current (maybe rotated or mirrored) frame; draw() runs in an
+ * unrotated frame centred there, at the same scale. sw tells it the frame is turned a quarter, so a long building can
+ * swap its width and depth and keep its footprint; yard is the screen direction of the frame's -v side (the yard).
+ */
+export function upright(ctx: Ctx, u: number, v: number, draw: (sw: boolean, yard: [number, number]) => void) {
+  const m = ctx.getTransform(), s = Math.hypot(m.a, m.b) || 1;
+  const x = m.a * u + m.c * v + m.e, y = m.b * u + m.d * v + m.f;
+  ctx.save(); ctx.setTransform(s, 0, 0, s, x, y);
+  draw(Math.abs(m.b) > Math.abs(m.a), [Math.sign(-m.c) * +(Math.abs(m.c) > Math.abs(m.d)), Math.sign(-m.d) * +(Math.abs(m.d) >= Math.abs(m.c))]);
+  ctx.restore();
+}
+
 /** soft chimney smoke rising and fading */
 export function puff(ctx: Ctx, u: number, v: number, tm: number, dark = false, big = 1) {
+  upright(ctx, u, v, () => puff0(ctx, 0, 0, tm, dark, big));
+}
+function puff0(ctx: Ctx, u: number, v: number, tm: number, dark: boolean, big: number) {
   for (let k = 0; k < 3; k++) {
     const p = (tm * 0.45 + k / 3) % 1, a = (dark ? 0.5 : 0.42) * (1 - p);
     ctx.fillStyle = dark ? `rgba(58,55,52,${a})` : `rgba(232,228,220,${a})`;
@@ -28,6 +45,9 @@ export interface CottageOpts {
 
 /** A little house w wide and d deep centred on (u, v): the roof seen from above, the front wall below it. */
 export function cottage(ctx: Ctx, u: number, v: number, w: number, d: number, o: CottageOpts) {
+  upright(ctx, u, v, sw => cottage0(ctx, 0, 0, sw ? d : w, sw ? w : d, o));
+}
+function cottage0(ctx: Ctx, u: number, v: number, w: number, d: number, o: CottageOpts) {
   const st = o.storeys ?? 1, wh = d * (st === 3 ? 0.58 : st === 2 ? 0.46 : 0.34), rh = d - wh;
   const x0 = u - w / 2, y0 = v - d / 2, wy = y0 + rh;
   // shadow on the ground
@@ -88,6 +108,9 @@ export function cottage(ctx: Ctx, u: number, v: number, w: number, d: number, o:
 
 /** a tiny person seen from above: hat or hair, shoulders, a shadow */
 export function person(ctx: Ctx, u: number, v: number, coat: string, hat = '#3a2a1e') {
+  upright(ctx, u, v, () => person0(ctx, 0, 0, coat, hat));
+}
+function person0(ctx: Ctx, u: number, v: number, coat: string, hat: string) {
   ctx.fillStyle = 'rgba(0,0,0,.25)'; ctx.beginPath(); ctx.ellipse(u + 0.8, v + 1.2, 1.4, 0.8, 0, 0, 7); ctx.fill();
   ctx.fillStyle = coat; ctx.fillRect(u - 1, v - 0.6, 2, 2);
   ctx.fillStyle = '#e8c4a0'; ctx.beginPath(); ctx.arc(u, v - 1.3, 0.85, 0, 7); ctx.fill();

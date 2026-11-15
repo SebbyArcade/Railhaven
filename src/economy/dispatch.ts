@@ -13,11 +13,16 @@ import { reachedIslands, tickMissions } from '../progress/missions.ts';
 import { expressMul, fleetMulOf, minLoad, rushDelivered, trainCap } from './upgrades.ts';
 import { V_MAX } from '../trains/train.ts';
 import { isRev } from '../track/route.ts';
-import { payMul } from '../buildings/parks.ts';
+import { GRAND_LOAD, hasGrandStation, payMul, rewardMul } from '../buildings/parks.ts';
 import { BRIDGE_UPKEEP, bridgeSquares } from '../track/rules.ts';
 import { deliverToTown, orderDone, reward, sizeName, stepOf } from './towns.ts';
 
 export const LOAD_TIME = 4;
+/** Loading or unloading time for this train: 🚉 the Grand Station makes it 25% shorter on Ashford Isle. */
+export function loadTime(g: Game, t: Train): number {
+  if (!hasGrandStation(g)) return LOAD_TIME;
+  const a = g.s.sites[0]; return a && islandOfTrain(g, t) === g.world.islandOf[a.y * g.world.n + a.x] ? LOAD_TIME * GRAND_LOAD : LOAD_TIME;
+}
 /** upkeep per second while a train moves (parked trains cost nothing), +3% per train beyond six */
 export const UPKEEP = 0.6;
 export const fleetMul = (n: number) => 1 + 0.03 * Math.max(0, n - 6);
@@ -212,7 +217,7 @@ function unload(g: Game, t: Train) {
   t.lastPay = { pay: Math.round(v), at: g.s.t, n: c.n, good: k, to: j.to };
   if (!town.filled && orderDone(g, town)) {
     town.filled = true;
-    const r = Math.round(reward(stepOf(town)) * fallsMul(g, town.x, town.y)); pay(g, r);
+    const r = Math.round(reward(stepOf(town)) * fallsMul(g, town.x, town.y) * rewardMul(g)); pay(g, r); // ⛪ Cathedral +5%
     g.s.orders = (g.s.orders ?? 0) + 1;
     news(g, `✅ ${town.name}'s order is filled! +$${r.toLocaleString('en-US')} · tap ⬆ to grow it into a ${sizeName(stepOf(town) + 1)}`);
     checkLevel(g);
@@ -264,7 +269,7 @@ export function tickTrains(g: Game, dt: number) {
       if (src.closed) { endJob(t); divert(g, t, P()); continue; } // ⛔ closed while the train was on its way: it finds other work
       if (!parked(t)) continue;
       if (!yardSquares(g.world.n, src).includes(headSquare(g, t))) { if (!g.sys.sendToArea(t, yardSquares(g.world.n, src))) endJob(t); continue; }
-      j.phase = 'loading'; j.timer = LOAD_TIME;
+      j.phase = 'loading'; j.timer = loadTime(g, t);
     } else if (j.phase === 'loading') {
       if (!src) { endJob(t); continue; }
       const n = Math.min(trainCap(g), Math.floor(readyOf(src, j.good)));
@@ -276,7 +281,7 @@ export function tickTrains(g: Game, dt: number) {
     } else if (j.phase === 'toDrop') {
       if (j.to.kind === 'bld' && bldOf(g, j.to.id)?.closed && t.dest !== undefined) { sendLoaded(g, t); continue; } // ⛔ the factory closed: on to a town
       if (!parked(t)) continue;
-      if (destSquares(g, j.to).includes(headSquare(g, t)) && !(j.to.kind === 'bld' && bldOf(g, j.to.id)?.closed)) { j.phase = 'unloading'; j.timer = LOAD_TIME; }
+      if (destSquares(g, j.to).includes(headSquare(g, t)) && !(j.to.kind === 'bld' && bldOf(g, j.to.id)?.closed)) { j.phase = 'unloading'; j.timer = loadTime(g, t); }
       else sendLoaded(g, t);
     } else if (j.phase === 'unloading') {
       if (j.to.kind === 'bld' ? bldOf(g, j.to.id) : siteOf(g, j.to.id)) unload(g, t); else { j.phase = 'toDrop'; sendLoaded(g, t); }

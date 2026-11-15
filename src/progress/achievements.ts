@@ -41,7 +41,7 @@ const linkedTowns = (g: Game) => towns(g).filter(t => t !== ashford(g) && townLi
 const biggest = (g: Game) => Math.max(0, ...towns(g).filter(t => (t.pop ?? 0) > 0).map(t => stepOf(t)));
 const blds = (g: Game) => g.s.buildings ?? [];
 const has = (b: boolean): [number, number] => [b ? 1 : 0, 1];
-const PRODUCTS = ['planks', 'bricks', 'flour', 'steel', 'fuel', 'cloth', 'cans'];
+const PRODUCTS = ['planks', 'bricks', 'flour', 'steel', 'fuel', 'cloth', 'cans', 'glass', 'tools', 'furniture', 'jewellery', 'chocolate', 'tyres'];
 const islandAt = (g: Game, s: { x: number; y: number }) => g.world.islandOf[s.y * g.world.n + s.x]!;
 const newIslands = (g: Game) => reachedIslands(g).size - 1;
 const islandsWithTowns = (g: Game) => new Set(linkedTowns(g).map(t => islandAt(g, t)).filter(k => k !== g.world.home)).size;
@@ -141,6 +141,7 @@ export const MEDALS: Medal[] = [
   { id: 'railisl6', g: 'track', icon: '🌉', name: 'Rails Across the Sea', how: 'Have rails on 6 islands in one game', xp: 75, prog: g => [railIslands(g), 6] },
   { id: 'double500', g: 'track', icon: '═', name: 'Double the Line', how: 'Double 500 squares of track in one game', xp: 25, prog: g => [doubled(g), 500] },
   { id: 'double1500', g: 'track', icon: '🚄', name: 'Four-Track Mainline', how: 'Double 1,500 squares of track in one game', xp: 50, prog: g => [doubled(g), 1500] },
+  { id: 'exhibition', g: 'railway', icon: '🏛', name: 'Royal Exhibition', how: 'Build the Royal Exhibition Hall in Ashford', xp: 75, prog: g => has((g.s.parks ?? []).some(p => p.k === 'exhibition')) },
   { id: 'games3', g: 'railway', icon: '🗂', name: 'Fresh Start', how: `Play three different maps to Railway level ${FRESH_LVL}`, xp: 25, prog: (_g, p) => [p.seeds.length, 3] },
 ];
 

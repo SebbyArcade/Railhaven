@@ -2,7 +2,7 @@ import { MAX_SLOTS, type SlotIndex, type SlotMeta, sortedSlots } from '../save/s
 import { fmtMoney } from './hud.ts';
 import { GROUPS, MEDALS, type Profile, TOTAL_XP, xpOf } from '../progress/achievements.ts';
 import type { Game } from '../state.ts';
-import { PAINTS, THEMES } from '../render/looks.ts';
+import { lookOpen, PAINTS, THEMES } from '../render/looks.ts';
 
 /** The pages of the home screen (the rest of the 🗺 Game card's pages are in gamecard.ts, under ⚙ Settings). */
 export const HOME_PAGES = ['', 'games', 'slot', 'new', 'learn', 'medals', 'mgroup', 'looks'];
@@ -68,7 +68,7 @@ export function homeHtml(page: string | undefined, ix: SlotIndex, slotId = 0, de
       + `<div class="note">One finger moves the map, two fingers zoom. Tap anything to see what it needs.</div>` + back();
   }
   if (page === 'medals' && p) {
-    const xp = xpOf(p), next = [...PAINTS, ...THEMES].filter(l => l.xp > xp).sort((a, b) => a.xp - b.xp)[0];
+    const xp = xpOf(p), next = [...PAINTS, ...THEMES].filter(l => !('medal' in l && l.medal) && l.xp > xp).sort((a, b) => a.xp - b.xp)[0];
     const n = MEDALS.filter(m => p.medals[m.id]).length;
     return `<div class="head"><b class="big">🏅</b><div><h2>Achievements</h2><span class="chip2">${n} of ${MEDALS.length} medals</span><span class="chip2">✨ ${xp} XP</span></div></div>`
       + `<div class="row"><span class="ico">✨</span><div class="grow"><div class="line"><span>${xp} XP</span><span>${TOTAL_XP}</span></div><div class="bar"><i style="width:${Math.round(100 * xp / TOTAL_XP)}%;background:#ffd27a"></i></div>`
@@ -89,9 +89,9 @@ export function homeHtml(page: string | undefined, ix: SlotIndex, slotId = 0, de
   if (page === 'looks' && p) {
     const xp = xpOf(p);
     const sw = (cols: string[]) => cols.map(c => `<i class="sw" style="background:${c}"></i>`).join('');
-    const pick = (kind: string, l: { k: string; name: string; xp: number }, on: boolean, cols: string[]) => {
-      const open = xp >= l.xp;
-      return `<button class="slot look${on ? ' on' : ''}${open ? '' : ' locked'}" data-act="look" data-kind="${kind}" data-k="${l.k}"><span class="sws">${sw(cols)}</span><span class="grow"><span class="sname">${open ? '' : '🔒 '}${l.name}</span><small>${on ? '✓ In use' : open ? 'Tap to use' : `Unlocks at ${l.xp} XP (you have ${xp})`}</small></span></button>`;
+    const pick = (kind: string, l: { k: string; name: string; xp: number; medal?: string }, on: boolean, cols: string[]) => {
+      const open = lookOpen(l, xp, p.medals);
+      return `<button class="slot look${on ? ' on' : ''}${open ? '' : ' locked'}" data-act="look" data-kind="${kind}" data-k="${l.k}"><span class="sws">${sw(cols)}</span><span class="grow"><span class="sname">${open ? '' : '🔒 '}${l.name}</span><small>${on ? '✓ In use' : open ? 'Tap to use' : l.medal ? '🏛 Build the Royal Exhibition Hall in Ashford' : `Unlocks at ${l.xp} XP (you have ${xp})`}</small></span></button>`;
     };
     return `<div class="head"><b class="big">🎨</b><div><h2>Looks</h2><span class="chip2">✨ ${xp} XP</span></div></div>`
       + `<h3>🚂 Train paint</h3>` + PAINTS.map(l => pick('paint', l, (p.paint ?? 'green') === l.k, [l.body, l.roof, l.band])).join('')

@@ -26,6 +26,18 @@ export function stationDoor(seed: number, h: Hall): { x: number; y: number } {
 }
 
 /**
+ * Where a town's name board goes, in world pixels: below the town square, or among the houses round a station
+ * beside it. tw = board width, Hb = board height. Shared with park placement so big landmarks keep clear of it.
+ */
+export function labelAt(seed: number, s: { x: number; y: number }, hall: Hall | undefined, n: number, tw: number, Hb: number): { LX: number; BT: number } {
+  const X = (s.x + 0.5) * TILE, Y = (s.y + 0.5) * TILE;
+  const door = hall && !hall.squares.includes(s.y * n + s.x) ? stationDoor(seed, hall) : null;
+  if (!door || !hall) return { LX: X, BT: Y + 22 };
+  const hx = (hall.cx + 0.5) * TILE, hy = (hall.cy + 0.5) * TILE, ax = Math.sign(Math.round(door.x - hx)), ay = Math.sign(Math.round(door.y - hy));
+  return { LX: door.x + ax * (tw / 2 + 26), BT: ay < 0 ? door.y - 24 - Hb : ay > 0 ? door.y + 24 : door.y - Hb / 2 };
+}
+
+/**
  * Platforms on both sides of the two hall tracks, canopies from Town size up, and the station building on one side.
  * Drawn in the hall's own frame: u runs along the line, v across it.
  */

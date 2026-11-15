@@ -3,13 +3,13 @@ import { looks } from './looks.ts';
 import { hash } from '../core/rng.ts';
 import type { Game, Site } from '../state.ts';
 import type { Hall } from '../buildings/stations.ts';
-import { buildingSide, stationDoor } from './stations.ts';
+import { buildingSide, labelAt, stationDoor } from './stations.ts';
 import { isRevealed } from '../world/fog.ts';
 import { footprint } from '../buildings/industries.ts';
 import { TILE } from '../world/terrain.ts';
 import { bush, cottage, fence, person } from './art.ts';
 
-const RES_ICON: Record<string, string> = { coal: '⚫', stone: '🪨', iron: '🧲', oil: '🛢', wood: '🪵', farm: '🌾' };
+const RES_ICON: Record<string, string> = { coal: '⚫', stone: '🪨', iron: '🧲', oil: '🛢', wood: '🪵', farm: '🌾', gold: '🪙', gems: '💎', cocoa: '🫘', rubber: '🌿' };
 
 /** Town size name: its step on the order ladder. */
 export function townSize(s: Site): string {
@@ -87,11 +87,7 @@ function drawTown(ctx: CanvasRenderingContext2D, g: Game, s: Site, tm: number, z
   const label = s.name ?? '', tw = ctx.measureText(label).width + 12;
   // the board sits in the middle of the town: below the town square, or among the houses round a station beside it
   const Hb = fs * 1.75 + 14;
-  let LX = X, BT = Y + 22;
-  if (door && hall) {
-    const hx = (hall.cx + 0.5) * TILE, hy = (hall.cy + 0.5) * TILE, ax = Math.sign(Math.round(door.x - hx)), ay = Math.sign(Math.round(door.y - hy));
-    LX = door.x + ax * (tw / 2 + 26); BT = ay < 0 ? door.y - 24 - Hb : ay > 0 ? door.y + 24 : door.y - Hb / 2;
-  }
+  const { LX, BT } = labelAt(g.s.seed, s, hall, g.world.n, tw, Hb);
   ctx.fillStyle = 'rgba(58,40,24,.92)'; ctx.fillRect(LX - tw / 2, BT, tw, fs + 6);
   ctx.strokeStyle = '#c99a5b'; ctx.lineWidth = 1; ctx.strokeRect(LX - tw / 2, BT, tw, fs + 6);
   ctx.fillStyle = '#ffe9c4'; ctx.fillText(label, LX, BT + (fs + 6) / 2 + 1);

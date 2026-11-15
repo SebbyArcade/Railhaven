@@ -3,13 +3,15 @@ import type { Game, Site } from '../state.ts';
 import { fallsMul, POI, POI_RARITY, poisOf, RARITY } from '../world/explore.ts';
 import { buildingSquares, yardSquares, bufOf, growsTracks, stripError, tracksOf, type Building, capOf, GOODS, type Good, INDUSTRIES, type IndustryKind, inputsOf, isFactory, isLinked, lockedText, outputOf, shareAt, forestOf, stumpsOf } from '../buildings/industries.ts';
 import { factoryState } from '../economy/production.ts';
-import { hasProject, nextParkPrice, orderMul, PARK_PRICE, parkSpot, parksOf, payMul, projectsFor, projectsOf } from '../buildings/parks.ts';
+import { hasProject, nextParkPrice, orderMul, PARK_PRICE, parkSpot, parksOf, payMul, projectsFor, projectsOf, rewardMul } from '../buildings/parks.ts';
 import { FOUND_PRICE, orderDone, orderOf, reward, sizeName, steadyGoods, stepOf, townLinked, upgradePrice } from '../economy/towns.ts';
 import { type Dest, destinationsOf, destName, type Ship, shipPlan, siteOf } from '../economy/shipping.ts';
 import { FERRY_FEE, islandOfTrain, spareTrains, trainPrice, trainStatus } from '../economy/dispatch.ts';
 import { JAM_AFTER } from '../economy/jams.ts';
 import { BRIDGE_UPKEEP, bridgeSquares } from '../track/rules.ts';
 import { dockRange, isDock, islandName, islandOfB, seaDist } from '../ships/docks.ts';
+import { EXPEDITION_DOCK, expeditionError, expeditionPrice } from '../world/expedition.ts';
+import { RING_ISLANDS } from '../world/terrain.ts';
 import { lanesFrom, SHIP_HOLD, SHIP_PRICE, SHIP_UP, type ShipUpKey, shipCap, shipSpeed, shipUpLvl, waitingAt } from '../ships/ships.ts';
 import { catchOf, FISHING } from '../economy/upgrades.ts';
 import { islandSpec, SPEC_TEXT, specMul } from '../world/specialty.ts';
@@ -76,7 +78,7 @@ function townCard(g: Game, t: Site, page?: string): string {
     const p = upgradePrice(L), can = p <= g.s.money;
     h += `<button class="act" data-act="upgrade" data-id="${t.id}" ${can ? '' : 'disabled'}>⬆ Grow into a ${sizeName(L + 1)} · ${fmtMoney(p)}</button>`;
     if (!can) h += `<small class="why">Need ${fmtMoney(p - g.s.money)} more: deliveries keep paying</small>`;
-  } else { const fm = fallsMul(g, t.x, t.y); h += `<div class="gift">🎁 ${fmtMoney(Math.round(reward(L) * fm))} when the order is filled${fm > 1 ? ' (💧 Silver Falls +10%)' : ''}</div>`; }
+  } else { const fm = fallsMul(g, t.x, t.y), cm = rewardMul(g); h += `<div class="gift">🎁 ${fmtMoney(Math.round(reward(L) * fm * cm))} when the order is filled${fm > 1 ? ' (💧 Silver Falls +10%)' : ''}${cm > 1 ? ' (⛪ Cathedral +5%)' : ''}</div>`; }
   const st = steadyGoods(t, g);
   if (st.length) h += `<h3>🛒 Keeps buying</h3><div class="chips">${st.map(k => `<span class="chip2">${GOODS[k].icon} ${GOODS[k].name}</span>`).join('')}</div>`;
   const coming = g.s.trains.filter(x => x.job && sameDest(x.job.to, { kind: 'town', id: t.id })).length;
@@ -106,7 +108,10 @@ function townPage(g: Game, t: Site, page: string): string {
   }
   h += `<h3>🏛 Town projects</h3><div class="note">Big projects for a growing town. Each adds a building to ${name}'s streets and a lasting bonus here.</div>`;
   const room = !!parkSpot(g, t);
+  let grand = false;
   for (const P of projectsFor(g, t)) {
+    if (P.size >= 3 && P.ashford && !grand) { grand = true; h += `<h3>👑 Grand Ashford</h3><div class="note">Landmarks for a rich railway: they help the whole network.</div>`; }
+    if (!P.ashford && grand) { grand = false; h += `<h3>🏘 For Ashford's streets</h3>`; }
     const has = hasProject(g, t, P.k), rl = !!P.rlv && (g.s.rlv ?? 0) < P.rlv, lock = stepOf(t) < P.size || rl;
     h += `<div class="row${has ? ' done' : ''}"><b class="ico">${P.icon}</b><div class="grow"><div class="line"><span>${P.name}</span><span>${has ? '✅ Built' : rl ? `🔒 Railway level ${P.rlv}` : lock ? `🔒 ${sizeName(P.size)}` : fmtMoney(P.price)}</span></div><small>${P.text}</small>`;
     if (!has && !lock) h += room ? `<button class="mini" data-act="project" data-id="${t.id}" data-k="${P.k}" ${g.s.money >= P.price ? '' : 'disabled'}>🏗 Build · ${fmtMoney(P.price)}</button>` : `<small class="why">No free grass near ${name} for it</small>`;
@@ -196,7 +201,21 @@ function dockCard(g: Game, b: Building, page?: string): string {
     }
     if (!list.length) h += `<div class="note">🌊 No other island within reach yet: a bigger dock sails farther</div>`;
     if (b.lvl < MAX_LVL) { const p = levelPrice(b); h += `<button class="act" data-act="lvl" data-id="${b.id}" ${g.s.money >= p ? '' : 'disabled'}>⬆ Level ${b.lvl + 1}: ${levelGain(b)} · ${fmtMoney(p)}</button>`; }
+    if (b.lvl >= EXPEDITION_DOCK) h += `<button class="act alt" data-act="page" data-page="exp">🗺 Expedition to the far seas ›</button>`;
+    else h += `<small class="why">🗺 A level ${EXPEDITION_DOCK} dock can send expeditions to new islands past the edge of the sea</small>`;
     return h + back;
+  }
+  if (page === 'exp') {
+    // 🗺 expeditions: past the edge of the known sea
+    const ep = expeditionPrice(g), er = expeditionError(g, b), done = g.s.rings ?? 0;
+    h += `<h3>🗺 Expedition to the far seas</h3>`;
+    h += `<div class="row"><b class="ico">🧭</b><div class="grow"><b>A new ring of islands</b><small>About ${RING_ISLANDS} new islands all round the map, past the edge of your sea</small></div></div>`;
+    h += `<div class="row"><b class="ico">🏘</b><div class="grow"><b>A town on each</b><small>Lay track to it and it starts its own orders</small></div></div>`;
+    h += `<div class="row"><b class="ico">⛏</b><div class="grow"><b>Rich deposits</b><small>Coal, stone, iron and oil, richer than at home</small></div></div>`;
+    h += `<div class="chips"><span class="chip2">💰 ${fmtMoney(ep)}</span><span class="chip2">🗺 sent so far: ${done}</span><span class="chip2">next one ${fmtMoney(ep * 2)}</span></div>`;
+    h += `<button class="act" data-act="expedition" data-id="${b.id}" ${er ? 'disabled' : ''}>🗺 Send an expedition · ${fmtMoney(ep)}</button>`;
+    if (er) h += `<small class="why">${er}</small>`;
+    return h + `<button class="act back" data-act="page" data-page="isl">‹ Back</button>`;
   }
   if (page === 'trains') {
     const p = trainPrice(g) + FERRY_FEE, mine = g.s.trains.filter(t => islandOfTrain(g, t) === islandOfB(g, b));
@@ -220,7 +239,7 @@ function dockCard(g: Game, b: Building, page?: string): string {
   h += `<div class="tiles">`
     + tile('sea', '⛴', 'Sea routes', routes.length ? `${routes.length} route${routes.length === 1 ? '' : 's'} · 🚢 ${ships}${waiting ? ` · 📦 ${waiting}` : ''}` : 'none yet', waiting > 0 && !ships)
     + tile('fish', '🎣', 'Fishing', l ? `🐟 ${Math.round(c.fish * 60)}/min${c.shellfish ? ` · 🦞 ${Math.round(c.shellfish * 60)}` : ''}` : 'no boats yet')
-    + tile('isl', '🏝', 'Islands', `${nIsl} in reach${b.lvl < MAX_LVL ? ' · ⬆ reach' : ''}`)
+    + tile('isl', '🏝', 'Islands', `${nIsl} in reach${b.lvl < MAX_LVL ? ' · ⬆ reach' : ' · 🗺 expedition'}`)
     + tile('trains', '🚂', 'Trains', `${nTr} on ${esc(isl)}`, !home && nTr === 0)
     + `</div>`;
   if (linked) { const m = buildingSquares(g.world.n, b)[1]!; h += mapBtn(g, m % g.world.n, (m / g.world.n) | 0, MAP_R_SEA); }
