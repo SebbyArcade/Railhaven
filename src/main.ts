@@ -31,7 +31,7 @@ import { SEASONS, seasonOf } from './world/season.ts';
 import { buyFleet, FLEET, type FleetKey, fleetLvl, refundOf, removeBuilding, rushOf, sellOffer, sellStock, toggleRush, upgradeBuilding } from './economy/upgrades.ts';
 import { foundTown, sizeName, tickTowns, upgradeTown } from './economy/towns.ts';
 import { buyTrainAt, tickTrains } from './economy/dispatch.ts';
-import { buyShip, shipPlace } from './ships/ships.ts';
+import { buyShip, buyShipUp, SHIP_UP, type ShipUpKey, shipPlace, shipUpLvl } from './ships/ships.ts';
 import { POI, poisOf } from './world/explore.ts';
 import { buyFishing, FISHING } from './economy/upgrades.ts';
 import { checkStuck } from './economy/nofail.ts';
@@ -222,6 +222,7 @@ cardEl.onclick = e => {
     const to = { kind: b.dataset.kind as 'town' | 'bld', id: +b.dataset.id! }, k = b.dataset.good as Good, on = !!rushOf(game, to, k);
     const why = toggleRush(game, to, k); toast(why || (on ? '⭐ Rush stopped' : `⭐ Rushing ${GOODS[k].name.toLowerCase()}: its makers send here first`)); renderCard(); return;
   }
+  if (b.dataset.act === 'shipup') { const k = b.dataset.k as ShipUpKey, why = buyShipUp(game, k); toast(why || `${SHIP_UP[k].icon} ${SHIP_UP[k].name}: ${SHIP_UP[k].text(shipUpLvl(game, k))}`); renderCard(); return; }
   if (b.dataset.act === 'fleet') { const k = b.dataset.k as FleetKey, why = buyFleet(game, k); toast(why || `${FLEET[k].icon} ${FLEET[k].name}: ${FLEET[k].text(fleetLvl(game, k))}`); renderCard(); return; }
   if (b.dataset.act === 'found') {
     const p = game.s.sites.find(s => s.id === +b.dataset.id!)!, name = p.name;

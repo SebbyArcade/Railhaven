@@ -6,7 +6,7 @@ import { FOUND_PRICE, orderDone, orderOf, reward, sizeName, steadyGoods, stepOf,
 import { type Dest, destinationsOf, destName, type Ship, shipPlan, siteOf } from '../economy/shipping.ts';
 import { FERRY_FEE, trainPrice, trainStatus } from '../economy/dispatch.ts';
 import { dockRange, islandName, islandOfB, seaDist } from '../ships/docks.ts';
-import { lanesFrom, SHIP_CAP, SHIP_HOLD, SHIP_PRICE, SHIP_SPEED, waitingAt } from '../ships/ships.ts';
+import { lanesFrom, SHIP_HOLD, SHIP_PRICE, SHIP_UP, type ShipUpKey, shipCap, shipSpeed, shipUpLvl, waitingAt } from '../ships/ships.ts';
 import { catchOf, FISHING } from '../economy/upgrades.ts';
 import { islandSpec, SPEC_TEXT, specMul } from '../world/specialty.ts';
 import { FLEET, type FleetKey, fleetLvl, levelGain, levelPrice, MAX_LVL, MAX_RUSH, refundOf, RUSH_FEE, rushOf, sellOffer, trainCap } from '../economy/upgrades.ts';
@@ -95,14 +95,14 @@ function shipCard(g: Game, id: number): string | null {
   const dock = (i: number | undefined) => g.s.buildings?.find(b => b.id === i);
   const where = (b: Building | undefined) => { if (!b) return 'a dock'; const k = islandOfB(g, b); return k === g.world.home ? `the dock near ${esc(placeName(g, b).replace(/^Dock near /, ''))}` : `${esc(islandName(g, k))} landing`; };
   const load = s.hold.reduce((a, q) => a + q.n, 0), n = (g.s.ships ?? []).indexOf(s) + 1;
-  let h = `<div class="head"><b class="big">🚢</b><div><h2>Cargo ship ${n}</h2><span class="chip2">📦 ${load} / ${SHIP_CAP}</span></div></div>`;
+  let h = `<div class="head"><b class="big">🚢</b><div><h2>Cargo ship ${n}</h2><span class="chip2">📦 ${load} / ${shipCap(g)}</span></div></div>`;
   if (s.to !== undefined && s.path) {
     const left = Math.max(0, Math.ceil(s.path.length - 1 - s.pos)), f = s.pos / Math.max(1, s.path.length - 1);
     h += `<div class="gift">⛴ Sailing from ${where(dock(s.at))} to ${where(dock(s.to))}</div>`;
-    h += `<div class="row"><b class="ico">🌊</b><div class="grow"><div class="line"><span>On the way</span><span>${left} squares · ${Math.round(left / SHIP_SPEED)} s</span></div>${bar(f, '#6bb8e8')}</div></div>`;
+    h += `<div class="row"><b class="ico">🌊</b><div class="grow"><div class="line"><span>On the way</span><span>${left} squares · ${Math.round(left / shipSpeed(g))} s</span></div>${bar(f, '#6bb8e8')}</div></div>`;
   } else {
     const wait = waitingAt(dock(s.at) ?? ({} as Building)), most = Math.max(0, ...wait.values());
-    const doing = s.wait > 0 ? (load ? 'Loading and unloading' : 'Unloading') : most > 0 ? `Waiting a little for a fuller load (📦 ${most} ready, it leaves at ${SHIP_CAP / 2} or after ${SHIP_HOLD} s)` : 'No goods wait on its routes: it sails where goods are waiting';
+    const doing = s.wait > 0 ? (load ? 'Loading and unloading' : 'Unloading') : most > 0 ? `Waiting a little for a fuller load (📦 ${most} ready, it leaves at ${shipCap(g) / 2} or after ${SHIP_HOLD} s)` : 'No goods wait on its routes: it sails where goods are waiting';
     h += `<div class="${most > 0 || s.wait > 0 ? 'gift' : 'note'}">⚓ At ${where(dock(s.at))}</div><div class="note">${doing}</div>`;
   }
   h += `<h3>📦 In the hold</h3>`;
@@ -110,6 +110,7 @@ function shipCard(g: Game, id: number): string | null {
   for (const q of s.hold) h += `<div class="row"><b class="ico">${GOODS[q.good].icon}</b><div class="grow"><div class="line"><span>${q.n} ${GOODS[q.good].name.toLowerCase()}</span><span>→ ${where(dock(q.to))}</span></div></div></div>`;
   const d = dock(s.to ?? s.at);
   if (d) h += `<button class="act alt" data-act="open" data-kind="bld" data-id="${d.id}">⚓ Open ${s.to !== undefined ? 'the dock it sails to' : 'this dock'}</button>`;
+  h += shipUpRows(g);
   return h + `<div class="note">Ships sail between your docks by themselves and carry goods to other islands.</div>`;
 }
 
@@ -132,13 +133,14 @@ function dockCard(g: Game, b: Building, page?: string): string {
   const back = `<button class="act back" data-act="page" data-page="">‹ Back</button>`;
   if (page === 'sea') {
     h += `<h3>⛴ Sea routes</h3>`;
-    for (const r of routes) h += `<div class="row"><b class="ico">⛴</b><div class="grow"><div class="line"><span>${esc(name(r.id))}</span><span>${r.d} squares · ${Math.round(r.d / SHIP_SPEED)} s</span></div><small>${wait.get(r.id) ? `📦 ${wait.get(r.id)} waiting for a ship` : 'Nothing waiting'}</small></div></div>`;
+    for (const r of routes) h += `<div class="row"><b class="ico">⛴</b><div class="grow"><div class="line"><span>${esc(name(r.id))}</span><span>${r.d} squares · ${Math.round(r.d / shipSpeed(g))} s</span></div><small>${wait.get(r.id) ? `📦 ${wait.get(r.id)} waiting for a ship` : 'Nothing waiting'}</small></div></div>`;
     if (!routes.length) h += `<div class="note">⛴ ${home ? "Build a Dock on another island's shore within reach: that makes a sea route" : 'No sea route from here yet'}</div>`;
     if (ships) h += `<div class="note">🚢 ${ships} ship${ships === 1 ? '' : 's'} sail${ships === 1 ? 's' : ''} every route: they go where goods wait</div>` + (g.s.ships ?? []).map((x, i) => `<div class="row"><b class="ico">🚢</b><div class="grow"><small>Ship ${i + 1}: ${x.to !== undefined ? `sailing to ${esc(name(x.to))}` : `at ${esc(name(x.at))}`} · 📦 ${x.hold.reduce((a, q) => a + q.n, 0)}</small></div><button class="mini" data-act="open" data-kind="ship" data-id="${x.id}">Open ›</button></div>`).join('');
     else h += routes.length ? `<div class="warn">🚢 No cargo ship yet: goods for other islands wait here until you buy one</div>` : '';
     const landed = Object.entries(b.landed ?? {}).filter(([, v]) => (v ?? 0) >= 1);
     if (landed.length) h += `<div class="gift">📦 Ready here for this island's trains: ${landed.map(([k, v]) => `${GOODS[k as Good].icon} ${Math.floor(v!)}`).join(' · ')}</div>`;
     if (routes.length) h += `<button class="act" data-act="ship" data-id="${b.id}" ${g.s.money >= SHIP_PRICE ? '' : 'disabled'}>🚢 Buy a cargo ship · ${fmtMoney(SHIP_PRICE)}</button>`;
+    if (ships) h += shipUpRows(g);
     return h + back;
   }
   if (page === 'fish') {
@@ -250,6 +252,18 @@ function rushBtn(g: Game, to: Dest, k: Good): string {
   const on = !!rushOf(g, to, k), full = (g.s.rush ?? []).length >= MAX_RUSH;
   if (!on && full) return '';
   return `<button class="mini${on ? ' on' : ''}" data-act="rush" data-kind="${to.kind}" data-id="${to.id}" data-good="${k}">${on ? '⭐ Rushing · stop' : `⭐ Rush (−${Math.round(RUSH_FEE * 100)}% pay)`}</button>`;
+}
+
+/** ⚡ Faster ships and 📦 Bigger holds, for every ship at once. */
+function shipUpRows(g: Game): string {
+  let h = `<h3>🔧 Ship upgrades (every ship)</h3>`;
+  for (const k of Object.keys(SHIP_UP) as ShipUpKey[]) {
+    const f = SHIP_UP[k], l = shipUpLvl(g, k), p = f.price[l], top = p === undefined;
+    h += `<div class="row"><b class="ico">${f.icon}</b><div class="grow"><div class="line"><span>${f.name}</span><span>${top ? 'Top level' : `Level ${l} → ${l + 1}`}</span></div>${bar(l / f.price.length, '#6bb8e8')}<small>Now: ${f.text(l)}${top ? '' : ` · next: ${f.text(l + 1)}`}</small>`;
+    if (!top) h += `<button class="mini" data-act="shipup" data-k="${k}" ${g.s.money >= p ? '' : 'disabled'}>⬆ ${fmtMoney(p)}</button>`;
+    h += `</div></div>`;
+  }
+  return h;
 }
 
 function shedCard(g: Game): string {

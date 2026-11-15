@@ -86,6 +86,8 @@ export interface GameState {
   tut?: number; lesAt?: number; lesMin?: boolean;
   /** missions with Mira, and the act shown */
   ms?: import('./progress/missions.ts').MissionState;
+  /** ship upgrade levels: faster ships, bigger holds */
+  shipU?: Partial<Record<'spd' | 'hold', number>>;
   /** cargo ships */
   ships?: import('./ships/ships.ts').CargoShip[];
   /** money earned and spent, for the report */

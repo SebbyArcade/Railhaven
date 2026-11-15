@@ -117,6 +117,8 @@ export function importLegacy(o: any): ImportResult {
   // fleet upgrades: the best level the old game reached on any island
   const up: any[] = Object.values(o.upI ?? {});
   for (const k of ['wag', 'eng', 'rep'] as const) { const l = Math.min(FLEET[k].lv.length - 1, Math.max(0, ...up.map(u => u?.[k] ?? 0))); if (l) (s.fleet ??= {})[k] = l; }
+  // ship upgrades carry over as they were (old prices and levels match)
+  for (const k of ['spd', 'hold'] as const) { const l = Math.min(3, Math.max(0, Math.floor(+(o.shU?.[k] ?? 0)) || 0)); if (l) (s.shipU ??= {})[k] = l; }
   const g = loadGame(s);
 
   // buildings: as close as each fits to where it stood, yard on the old track if it can be

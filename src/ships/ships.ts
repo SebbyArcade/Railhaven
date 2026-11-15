@@ -14,6 +14,26 @@ export const SHIP_PRICE = 3000;
 /** squares sailed per second, and units one ship carries */
 export const SHIP_SPEED = 0.9;
 export const SHIP_CAP = 80;
+
+/** 🚢 Ship upgrades for the whole fleet, with the old game's prices: faster ships and bigger holds. */
+export type ShipUpKey = 'spd' | 'hold';
+export const SHIP_UP: Record<ShipUpKey, { icon: string; name: string; lv: number[]; price: number[]; text: (l: number) => string }> = {
+  spd: { icon: '⚡', name: 'Faster ships', lv: [1, 1.35, 1.7, 2.05], price: [6000, 12000, 24000], text: l => `×${[1, 1.35, 1.7, 2.05][l]} speed` },
+  hold: { icon: '📦', name: 'Bigger holds', lv: [80, 120, 170, 240], price: [6000, 12000, 24000], text: l => `${[80, 120, 170, 240][l]} per ship` },
+};
+export const shipUpLvl = (g: Game, k: ShipUpKey) => g.s.shipU?.[k] ?? 0;
+/** units one ship carries, and squares it sails per second (before storms and lighthouses) */
+export const shipCap = (g: Game) => SHIP_UP.hold.lv[shipUpLvl(g, 'hold')] ?? SHIP_CAP;
+export const shipSpeed = (g: Game) => SHIP_SPEED * (SHIP_UP.spd.lv[shipUpLvl(g, 'spd')] ?? 1);
+/** Buy the next level of a ship upgrade. Returns why not, or '' when bought. */
+export function buyShipUp(g: Game, k: ShipUpKey): string {
+  const l = shipUpLvl(g, k), p = SHIP_UP[k].price[l];
+  if (p === undefined) return 'Already at the top level';
+  if (!g.s.ships?.length) return 'Buy a cargo ship first';
+  if (g.s.money < p) return `Need $${(p - Math.floor(g.s.money)).toLocaleString('en-US')} more`;
+  g.s.money -= p; (g.s.shipU ??= {})[k] = l + 1;
+  return '';
+}
 /** seconds to load or unload at a dock, and how long an empty ship waits before it looks elsewhere */
 export const SHIP_LOAD = 4;
 export const SHIP_IDLE = 6;
@@ -125,7 +145,7 @@ export function tickShips(g: Game, dt: number) {
     if (s.to !== undefined) { // at sea
       const to = dockOf(g, s.to);
       if (!to || !s.path) { s.to = undefined; s.path = undefined; continue; }
-      { const p = shipPlace(g, s); s.pos += SHIP_SPEED * lightMul(g, p.x, p.y) * (inStorm(g, p.x, p.y) ? STORM_SLOW : 1) * dt; salvageAt(g, Math.round(p.x), Math.round(p.y)); }
+      { const p = shipPlace(g, s); s.pos += shipSpeed(g) * lightMul(g, p.x, p.y) * (inStorm(g, p.x, p.y) ? STORM_SLOW : 1) * dt; salvageAt(g, Math.round(p.x), Math.round(p.y)); }
       if (s.pos >= s.path.length - 1) { s.at = s.to; s.to = undefined; s.path = undefined; s.pos = 0; s.wait = SHIP_LOAD; }
       continue;
     }
@@ -141,10 +161,10 @@ export function tickShips(g: Game, dt: number) {
     // load for the route with the most goods waiting
     const wait = waitingAt(at); let best = -1, bn = 0;
     for (const r of routes) { const n = wait.get(r.id) ?? 0; if (n > bn) { bn = n; best = r.id; } }
-    if (best >= 0 && bn < SHIP_CAP / 2 && (s.held = (s.held ?? 0) + dt) < SHIP_HOLD) continue; // wait a little for a fuller load
+    if (best >= 0 && bn < shipCap(g) / 2 && (s.held = (s.held ?? 0) + dt) < SHIP_HOLD) continue; // wait a little for a fuller load
     if (best >= 0) {
       s.held = 0;
-      let room = SHIP_CAP - s.hold.reduce((a, q) => a + q.n, 0);
+      let room = shipCap(g) - s.hold.reduce((a, q) => a + q.n, 0);
       for (const q of at.outq ?? []) {
         if (q.to !== best || room <= 0) continue;
         const n = Math.min(q.n, room); q.n -= n; room -= n;
