@@ -6,6 +6,7 @@ import { trainCap } from './upgrades.ts';
 import { isDock, islandOfB } from '../ships/docks.ts';
 import { tradeRoom } from './trade.ts';
 import { lanesFrom, seaBound, seaLanes } from '../ships/ships.ts';
+import { isCrossing } from '../track/state.ts';
 
 /** Train load, and the least a train waits for before it sets off to collect (it leaves mostly full). */
 /** a train's load before any wagon upgrade (the real one is trainCap(g)) */
@@ -20,14 +21,18 @@ export const DF = (d: number) => Math.pow(Math.max(8, d) / 8, 0.85);
 /** Rail distance in squares from a set of squares to every track square (-1 = not joined). Cached until the track changes. */
 export function railDist(g: Game, key: string, from: number[]): Int32Array {
   const c = (g.dist ??= new Map()).get(key); if (c) return c;
-  const n = g.world.n, out = new Int32Array(n * n).fill(-1), q: number[] = [];
-  for (const i of from) if (g.track.has(i)) { out[i] = 0; q.push(i); }
+  const n = g.world.n, out = new Int32Array(n * n).fill(-1), q: [number, number, number][] = [];
+  // a flat crossing is passed straight over, once along each line: it is visited per line, each with its own distance
+  const seen = new Set<number>();
+  for (const i of from) if (g.track.has(i)) { out[i] = 0; q.push([i, -1, 0]); }
   for (let h = 0; h < q.length; h++) {
-    const i = q[h]!, sq = g.track.get(i)!;
+    const [i, came, at] = q[h]!, sq = g.track.get(i)!, flat = came >= 0 && isCrossing(g.track, i);
     for (const [d, j] of [[0, i + 1], [1, i + n], [2, i - 1], [3, i - n]] as const) {
-      if (!(sq.links & (1 << d)) || out[j] !== -1) continue;
+      if (!(sq.links & (1 << d)) || (flat && d !== came)) continue;
       const o = g.track.get(j); if (!o || !(o.links & (1 << ((d + 2) % 4)))) continue;
-      out[j] = out[i]! + 1; q.push(j);
+      if (isCrossing(g.track, j)) { if (seen.has(j * 2 + (d & 1))) continue; seen.add(j * 2 + (d & 1)); if (out[j] === -1) out[j] = at + 1; q.push([j, d, at + 1]); continue; }
+      if (out[j] !== -1) continue;
+      out[j] = at + 1; q.push([j, d, at + 1]);
     }
   }
   g.dist.set(key, out);

@@ -3,6 +3,8 @@ export interface TrackSquare {
   links: number;
   /** double track */
   dbl?: boolean;
+  /** a four-way square where the two lines cross flat (a diamond): trains go straight over, never turn */
+  cross?: boolean;
 }
 
 /** Saved track: square index -> square. */

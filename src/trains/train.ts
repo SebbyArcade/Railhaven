@@ -130,7 +130,8 @@ export class TrainSystem {
     for (let j = k; j < t.plan.length; j++) {
       const m = t.plan[j]!; if (isRev(m)) break;
       steps.push(m);
-      room = this.net.passing[m.piece] ? room + this.net.pieces[m.piece]!.len : 0;
+      // on the wrong lane (after turning back) the train can't wait where oncoming trains run: it clears the whole way back to its own lane
+      room = this.net.passing[m.piece] && !this.laneCost(m) ? room + this.net.pieces[m.piece]!.len : 0;
       if (room >= need) break;
     }
     if (!steps.length || !steps.every(s => this.free(t, s.piece))) return false;
@@ -359,7 +360,10 @@ export class TrainSystem {
    * step aside into a siding or passing track that no waiting train needs, and try again a little later.
    */
   private unstick(t: Train) {
-    if (t.wait < UNSTICK_AFTER || t.dest === undefined) return;
+    if (t.wait < UNSTICK_AFTER) return;
+    // moving aside with no trip of its own, and that way is blocked too: give it up and stand, so a waiting train can
+    // ask it to move somewhere else (otherwise both wait for each other for ever)
+    if (t.dest === undefined) { if (t.plan.length) { t.plan = []; t.held = 0; t.wait = 0; this.rebuildHolds(); } return; }
     t.wait = 0;
     // waiting for a broken rail to be fixed: nothing else to do
     const nextFree = t.plan.filter(m => !isRev(m))[t.held] as Step | undefined;
@@ -402,13 +406,18 @@ export class TrainSystem {
 
   /** Drive a train to a siding or passing track clear of the given pieces (and of other trains). */
   private stepAside(t: Train, inWay: Set<number>): boolean {
+    return this.aside(t, inWay, false) || this.aside(t, inWay, true);
+  }
+
+  /** `anywhere`: no siding or passing track is free, so any stretch of line clear of the others' way will do. */
+  private aside(t: Train, inWay: Set<number>, anywhere: boolean): boolean {
     const L = trainLength(t);
     const bodies = new Set<number>();
     for (const o of this.trains) if (o !== t) for (const s of o.trail) { bodies.add(s.piece); for (const c of this.net.conflicts[s.piece]!) bodies.add(c); }
     const refuge = this.route({
       head: t.trail.at(-1)!, tail: t.trail[0]!, trail: t.trail, trainLen: L, canReverseNow: true,
       extra: s => bodies.has(s.piece) ? Infinity : this.laneCost(s) + (() => { const h = this.holder.get(s.piece); return h !== undefined && h !== t.id ? 4000 : 0; })(),
-      goal: s => !inWay.has(s.piece) && (this.net.passing[s.piece]! || (s.dir === 1 && !!this.net.pieces[s.piece]!.endB)),
+      goal: s => !inWay.has(s.piece) && (anywhere || this.net.passing[s.piece]! || (s.dir === 1 && !!this.net.pieces[s.piece]!.endB)),
       accept: moves => { // the whole train must stand clear of the others' way, its tail included
         let got = 0;
         const revs = moves.filter(isRev).length;

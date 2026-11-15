@@ -109,7 +109,9 @@ export function buildPlan(g: Game, p: PaintPlan): BuiltStroke | string {
   const before: BuiltStroke['before'] = [...new Set(p.path)].map(i => { const o = g.track.get(i); return [i, o && { ...o }]; });
   const shed = g.s.shed ? { ...g.s.shed } : null;
   g.s.money -= cost;
+  const over = crossedSquares(g, p.path);
   layPath(g.track, n, p.path);
+  for (const i of over) g.track.get(i)!.cross = true;
   // a yard whose end touches the new track joins it there, as if the track were laid into it
   const on = new Set(p.path);
   for (const b of g.s.buildings ?? []) {
@@ -121,6 +123,18 @@ export function buildPlan(g: Game, p: PaintPlan): BuiltStroke | string {
   let revealed = 0;
   for (const i of fresh) revealed += reveal(g, i % n, (i / n) | 0, TRACK_REVEAL);
   return { before, cost, revealed, shed };
+}
+
+/** Squares where a stroke runs straight over a plain straight line at right angles: these become flat crossings. */
+export function crossedSquares(g: Game, path: number[]): number[] {
+  const out: number[] = [];
+  for (let k = 1; k + 1 < path.length; k++) {
+    const i = path[k]!, a = path[k - 1]!, b = path[k + 1]!, sq = g.track.get(i);
+    if (!sq || b - i !== i - a) continue; // the stroke must go straight through
+    const across = Math.abs(i - a) === 1 ? 0b1010 : 0b0101; // the old line runs at right angles: down-up for a stroke going sideways
+    if (sq.links === across) out.push(i);
+  }
+  return out;
 }
 
 /** Put the track back as it was before a stroke and refund it. */

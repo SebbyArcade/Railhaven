@@ -229,6 +229,15 @@ export class Tools {
     if (this.mode === 'scout' && this.scout && this.scout.path.at(-1) !== i) this.scoutTo(i);
   }
 
+  /** Switch a four-way square between a flat crossing (lines go straight over) and a junction (trains may turn). Free. */
+  private flipCrossing(i: number) {
+    const g = this.g(), sq = g.track.get(i)!;
+    if (g.s.trains.some(t => t.trail.some(s => g.net.pieces[s.piece]!.squares.includes(i)))) { toast('A train is on this square: try again when it has passed'); return; }
+    if (sq.cross) delete sq.cross; else sq.cross = true;
+    trackChanged(g); g.terrainDirty?.([i]);
+    toast(sq.cross ? '✚ Crossing: trains go straight over here, no turning · tap again to make it a junction' : '🔀 Junction: trains can turn here · tap again to make it a crossing', 3500);
+  }
+
   tapSquare(i: number): boolean {
     const g = this.g(), n = g.world.n;
     if (this.mode === 'rail') {
@@ -236,6 +245,7 @@ export class Tools {
       if (last !== undefined && !g.track.has(i)) { this.extendTo(i); return true; } // tap anywhere: the line runs there
       if (isAnchor(g, i)) {
         if (this.plan && this.plan.path.length > 1 && last !== i) { this.extendTo(i); return true; } // joining back onto the track
+        if (g.track.get(i)?.links === 15 && (!this.plan || this.plan.path.length <= 1)) { this.plan = null; this.flipCrossing(i); return true; } // a four-way square: crossing ⇄ junction
         this.plan = { path: [i] }; toast('Now tap where the line should go (or drag)'); return true;
       }
       toast('New track must join your network: start from your track or from Ashford'); return true;
