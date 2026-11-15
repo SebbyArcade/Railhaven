@@ -388,13 +388,14 @@ function updateUi() {
   $('turn').style.display = bar?.turn ? 'block' : 'none';
   $('near').style.display = bar?.near ? 'block' : 'none';
   cb.classList.toggle('two', !!bar?.near);
+  if (bar) { const h = $('hint'), r = h.style.display !== 'none' && h.offsetHeight ? h.getBoundingClientRect() : null; cb.style.bottom = r ? `${Math.round(innerHeight - r.top + 8)}px` : ''; } // sit just above the hint, however many lines it has
   if (bar) { $('ctext').textContent = bar.text; ($('ok') as HTMLButtonElement).disabled = !bar.can; $('ok').textContent = bar.ok; }
 }
 
 let lastSeason = -1;
 let last0 = 0, last = performance.now(), saveT = 0, lastMenu = 0, lastCard = 0, newsAt = 0;
 function frame(now: number) {
-  const dt = Math.min(0.1, (now - last) / 1000); last = now;
+  const dt = Math.max(0, Math.min(0.1, (now - last) / 1000)); last = now; // the first frame time can be a little before load time
   if (idle() && pausedEl.style.display !== 'flex') { pausedEl.style.display = 'flex'; saveTo(localStorage, game); }
   if (!document.hidden && !idle()) { game.s.t += dt; game.sys.tick(dt); tickProduction(game, dt); tickTowns(game, dt); tickTrains(game, dt); if (Math.floor(game.s.t / 5) !== Math.floor((game.s.t - dt) / 5)) checkStuck(game); if (tickBreaks(game)) breaksChanged(game); }
   { const se = seasonOf(game.s.t); if (se !== lastSeason) { if (lastSeason >= 0) (game.news ??= []).push(`${SEASONS[se]} has come`); lastSeason = se; } }

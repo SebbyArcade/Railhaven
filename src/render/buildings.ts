@@ -42,7 +42,7 @@ export function drawBuilding(ctx: CanvasRenderingContext2D, g: Game, b: Building
     ctx.fillStyle = 'rgba(30,24,16,.8)'; ctx.fillRect(lx - w / 2, ly - 6, w, 12);
     ctx.fillStyle = '#f6e7c6'; ctx.fillText(label, lx, ly + 0.5);
   }
-  if (!isLinked(g, b)) { // not on the railway yet: a small red sign on the yard end
+  if (b.id >= 0 && !isLinked(g, b)) { // not on the railway yet: a small red sign on the yard end (not on the placement preview)
     const ys = b.horizontal ? [(b.x + 0.5) * T, (b.y + 0.5) * T] : [(b.x + 0.5) * T, (b.y + 0.5) * T];
     const p = 0.6 + 0.4 * Math.sin(tm * 4);
     ctx.fillStyle = `rgba(220,60,40,${p})`; ctx.beginPath(); ctx.arc(ys[0]!, ys[1]!, 6, 0, 7); ctx.fill();

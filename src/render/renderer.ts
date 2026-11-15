@@ -12,7 +12,8 @@ import { drawFields } from './fields.ts';
 import { shedSquare } from '../buildings/shed.ts';
 import { hallsOf } from '../buildings/stations.ts';
 import { landDistance } from '../track/rules.ts';
-import { buildingSquares, footprint, yardSquares } from '../buildings/industries.ts';
+import { buildingSquares, footprint, isLinked, yardSquares } from '../buildings/industries.ts';
+import { townLinked } from '../economy/towns.ts';
 import { TerrainCache } from './terrainCache.ts';
 import { drawWaterLive } from './terrainArt.ts';
 import { drawTrack } from './track.ts';
@@ -121,16 +122,39 @@ export class Renderer {
         const bad0 = !!t.previewErr, red = (i: number) => bad0 && (t.previewBad.size === 0 || t.previewBad.has(i));
         for (const i of yardSquares(n, t.preview)) { const bad = red(i); box(i, bad ? 'rgba(255,90,70,.4)' : 'rgba(150,210,255,.3)', bad ? 'rgba(255,120,100,.95)' : 'rgba(170,220,255,.95)'); }
         for (const i of buildingSquares(n, t.preview)) { const bad = red(i); box(i, bad ? 'rgba(255,90,70,.45)' : 'rgba(120,230,140,.32)', bad ? 'rgba(255,120,100,.95)' : 'rgba(150,255,170,.95)'); }
+        // a faint picture of what will stand there: the loading track's rails and the building itself
+        const P = t.preview, ys = yardSquares(n, P);
+        ctx.save(); ctx.globalAlpha = 0.55; ctx.strokeStyle = '#4a3a2a'; ctx.lineWidth = 2;
+        const a0 = ys[0]!, a1 = ys.at(-1)!, ax = (a0 % n + 0.5) * TILE, ay = (((a0 / n) | 0) + 0.5) * TILE, bx = (a1 % n + 0.5) * TILE, by = (((a1 / n) | 0) + 0.5) * TILE;
+        const ex = P.horizontal ? TILE / 2 : 0, ey = P.horizontal ? 0 : TILE / 2, ox = P.horizontal ? 0 : 4, oy = P.horizontal ? 4 : 0;
+        for (const o of [-1, 1]) { ctx.beginPath(); ctx.moveTo(ax - ex + ox * o, ay - ey + oy * o); ctx.lineTo(bx + ex + ox * o, by + ey + oy * o); ctx.stroke(); }
+        ctx.lineWidth = 1.2; for (let k = 0; k <= 16; k++) { const f = k / 16, x = ax - ex + (bx + ex - ax + ex) * f, y = ay - ey + (by + ey - ay + ey) * f; ctx.beginPath(); ctx.moveTo(x - ox * 1.6, y - oy * 1.6); ctx.lineTo(x + ox * 1.6, y + oy * 1.6); ctx.stroke(); }
+        ctx.globalAlpha = 0.5; drawBuilding(ctx, this.g, { id: -1, kind: this.tools!.buildKind ?? 'wood', x: P.x, y: P.y, horizontal: P.horizontal, side: P.side, lvl: 1, stock: 0 }, tm, this.g.s.camera.z);
+        ctx.restore();
+        // where the railway joins: in line with the loading track, at either end
+        const pulse = 0.55 + 0.45 * Math.sin(tm * 4), z = this.g.s.camera.z, f = 1.6 / z;
+        const ends = [[a0, -1], [a1, 1]] as const;
+        for (const [e, d] of ends) {
+          const X = (e % n + 0.5) * TILE + (P.horizontal ? d * TILE * 0.95 : 0), Y = (((e / n) | 0) + 0.5) * TILE + (P.horizontal ? 0 : d * TILE * 0.95);
+          ctx.save(); ctx.translate(X, Y); ctx.rotate((P.horizontal ? 0 : Math.PI / 2) + (d < 0 ? 0 : Math.PI));
+          ctx.globalAlpha = pulse; ctx.fillStyle = '#ffd27a'; ctx.beginPath(); ctx.moveTo(-9 * f, -6 * f); ctx.lineTo(3 * f, 0); ctx.lineTo(-9 * f, 6 * f); ctx.closePath(); ctx.fill(); ctx.restore();
+        }
+        if (!bad0) { // a label beside the loading track, on the side away from the building
+          const m1 = ys[1]!, m2 = ys[2]!, k = 1 / z, off = -P.side * (TILE / 2 + 10 * k);
+          let X = ((m1 % n) + (m2 % n)) / 2 * TILE + TILE / 2 + (P.horizontal ? 0 : off); const Y = (((m1 / n) | 0) + ((m2 / n) | 0)) / 2 * TILE + TILE / 2 + (P.horizontal ? off : 0);
+          const text = '🛤 loading track · your rails join it at either end ▸';
+          ctx.font = `700 ${11 * k}px system-ui`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+          const w = ctx.measureText(text).width + 12 * k, h = 17 * k;
+          if (!P.horizontal) X += -P.side * (w / 2 - 10 * k);
+          ctx.fillStyle = 'rgba(20,16,12,.85)'; ctx.beginPath(); ctx.roundRect(X - w / 2, Y - h / 2, w, h, 7 * k); ctx.fill(); ctx.fillStyle = '#bfe4ff'; ctx.fillText(text, X, Y + 0.5 * k);
+        }
         // a drag handle in the middle of the building row
         const bs = buildingSquares(n, t.preview), m = bs[1]!, m2 = bs[2]!, hx = ((m % n) + (m2 % n)) / 2 * TILE + TILE / 2, hy = (((m / n) | 0) + ((m2 / n) | 0)) / 2 * TILE + TILE / 2;
         ctx.fillStyle = 'rgba(28,22,16,.75)'; ctx.beginPath(); ctx.arc(hx, hy, 9, 0, 7); ctx.fill();
         ctx.fillStyle = '#fff'; ctx.font = '700 11px system-ui'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('✥', hx, hy + 0.5);
       }
     }
-    if (t.mode === 'rail' && !t.plan) { // show where track may start
-      const a = this.g.s.sites[0]!, p = 0.5 + 0.5 * Math.sin(tm * 4);
-      if (!this.g.track.size) box(a.y * n + a.x, `rgba(255,214,120,${0.15 + 0.2 * p})`, 'rgba(255,214,120,.9)');
-    }
+    if (t.mode === 'rail' && !t.plan) this.drawRailGuide(ctx, tm, box);
     if (t.card?.kind === 'ship') { // the open ship: a gold ring
       const sh = this.g.s.ships?.find(x => x.id === t.card!.id);
       if (sh) { const p = shipPlace(this.g, sh); ctx.strokeStyle = '#ffd27a'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc((p.x + 0.5) * TILE, (p.y + 0.5) * TILE, 16 + Math.sin(tm * 5), 0, 7); ctx.stroke(); }
@@ -138,6 +162,35 @@ export class Renderer {
     if (t.selected !== null) {
       const tr = this.g.s.trains.find(x => x.id === t.selected);
       if (tr) { const p = bodyPoint(this.g.net, tr, 8); ctx.strokeStyle = '#ffd27a'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(p.x, p.y, 14 + Math.sin(tm * 5), 0, 7); ctx.stroke(); }
+    }
+  }
+
+  /** Rails mode: where track can start (Ashford at first), where it joins each town not on the railway, and the ends of loose yards. */
+  private drawRailGuide(ctx: CanvasRenderingContext2D, tm: number, box: (i: number, fill: string, stroke: string) => void) {
+    const g = this.g, n = g.world.n, p = 0.5 + 0.5 * Math.sin(tm * 4), k = 1 / g.s.camera.z;
+    const pill = (X: number, Y: number, text: string, col: string) => {
+      ctx.font = `700 ${11 * k}px system-ui`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      const w = ctx.measureText(text).width + 12 * k, h = 17 * k;
+      ctx.fillStyle = 'rgba(20,16,12,.85)'; ctx.beginPath(); ctx.roundRect(X - w / 2, Y - h / 2, w, h, 7 * k); ctx.fill(); ctx.fillStyle = col; ctx.fillText(text, X, Y + 0.5 * k);
+    };
+    const glow = (i: number) => box(i, `rgba(255,214,120,${0.12 + 0.2 * p})`, `rgba(255,214,120,${0.6 + 0.4 * p})`);
+    if (!g.track.size) { // the first track starts on Ashford
+      const a = g.s.sites[0]!; glow(a.y * n + a.x);
+      pill((a.x + 0.5) * TILE, (a.y - 0.6) * TILE, '🛤 Start here: drag from Ashford outward', '#ffd27a');
+      return;
+    }
+    for (const s of g.s.sites) { // towns found but not on the railway: lay track across their square
+      if (s.kind !== 'town' || !isRevealed(g, s.y * n + s.x) || townLinked(g, s)) continue;
+      glow(s.y * n + s.x);
+      ctx.setLineDash([5 * k, 4 * k]); ctx.strokeStyle = `rgba(255,214,120,${0.5 + 0.4 * p})`; ctx.lineWidth = 2 * k;
+      ctx.beginPath(); ctx.arc((s.x + 0.5) * TILE, (s.y + 0.5) * TILE, TILE * 1.6, 0, 7); ctx.stroke(); ctx.setLineDash([]);
+      pill((s.x + 0.5) * TILE, (s.y - 1.4) * TILE, `🛤 Join ${s.name ?? 'the town'}: track across its square, or straight past beside it`, '#ffd27a');
+    }
+    for (const b of g.s.buildings ?? []) { // loose buildings: the two squares just past their loading track
+      if (b.kind === 'dock' || isLinked(g, b)) continue;
+      const ys = yardSquares(n, b), st = b.horizontal ? 1 : n;
+      for (const e of [ys[0]! - st, ys.at(-1)! + st]) if (!g.track.has(e)) glow(e);
+      const m = ys[1]!; pill((m % n + 1) * TILE, ((m / n) | 0) * TILE - 6 * k, '🛤 join at either end of the loading track', '#bfe4ff');
     }
   }
 
