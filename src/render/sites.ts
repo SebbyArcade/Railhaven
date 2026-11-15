@@ -6,7 +6,7 @@ import type { Hall } from '../buildings/stations.ts';
 import { buildingSide, stationDoor } from './stations.ts';
 import { isRevealed } from '../world/fog.ts';
 import { TILE } from '../world/terrain.ts';
-import { bush, cottage, fence, lamp, person } from './art.ts';
+import { bush, cottage, fence, person } from './art.ts';
 
 const RES_ICON: Record<string, string> = { coal: '⚫', stone: '🪨', iron: '🧲', oil: '🛢', wood: '🪵', farm: '🌾' };
 
@@ -22,20 +22,11 @@ function drawTown(ctx: CanvasRenderingContext2D, g: Game, s: Site, tm: number, z
   const L = s.lvl ?? 0, ruin = pop <= 0;
   type Spot = { hx: number; hy: number; w: number; d: number; k: number };
   const spots: Spot[] = [];
-  // a station beside the town: a lane from its door, along the station and across to the town square; the houses
-  // gather toward the station
+  // a station beside the town: the town gathers round the station's forecourt, like a real railway town
   const door = hall && !hall.squares.includes(s.y * g.world.n + s.x) ? stationDoor(g.s.seed, hall) : null;
-  const path = door ? (hall!.horizontal ? [door, { x: X, y: door.y }, { x: X, y: Y }] : [door, { x: door.x, y: Y }, { x: X, y: Y }]) : [];
-  const CX = door ? X + (door.x - X) * 0.4 : X, CY = door ? Y + (door.y - Y) * 0.4 : Y;
-  const onLane = (hx: number, hy: number, w: number) => {
-    for (let i = 0; i + 1 < path.length; i++) {
-      const a = path[i]!, b = path[i + 1]!, vx = b.x - a.x, vy = b.y - a.y, l2 = vx * vx + vy * vy || 1;
-      const t = Math.max(0, Math.min(1, ((hx - a.x) * vx + (hy - a.y) * vy) / l2));
-      if (Math.abs(a.x + vx * t - hx) < w / 2 + 7 && Math.abs(a.y + vy * t - hy) < 13) return true;
-    }
-    return false;
-  };
-  if (door) lane(ctx, path, ruin, tm, g.s.seed);
+  const CX = door ? door.x : X, CY = door ? door.y : Y;
+  const onLane = (hx: number, hy: number, w: number) => !!door && Math.abs(hx - door.x) < w / 2 + 12 && Math.abs(hy - door.y) < 14; // the forecourt stays clear
+  if (door) forecourt(ctx, hall!, door, ruin);
   for (let k = 0; k < houses; k++) {
     const a = H(s.x, s.y, k) * 6.283, r = 12 + H(s.y, s.x, k) * (14 + houses * 1.3);
     const big = !ruin && H(k, s.y, 5) < 0.15 + L * 0.12; // more two-storey houses as the town grows
@@ -77,49 +68,32 @@ function drawTown(ctx: CanvasRenderingContext2D, g: Game, s: Site, tm: number, z
   const fs = Math.max(11, 12 / Math.min(1, zoom));
   ctx.font = `700 ${fs}px Georgia,serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   const label = s.name ?? '', tw = ctx.measureText(label).width + 12;
-  ctx.fillStyle = 'rgba(58,40,24,.92)'; ctx.fillRect(X - tw / 2, Y + 22, tw, fs + 6);
-  ctx.strokeStyle = '#c99a5b'; ctx.lineWidth = 1; ctx.strokeRect(X - tw / 2, Y + 22, tw, fs + 6);
-  ctx.fillStyle = '#ffe9c4'; ctx.fillText(label, X, Y + 22 + (fs + 6) / 2 + 1);
+  // the board sits in the middle of the town: below the town square, or among the houses round a station beside it
+  const Hb = fs * 1.75 + 14;
+  let LX = X, BT = Y + 22;
+  if (door && hall) {
+    const hx = (hall.cx + 0.5) * TILE, hy = (hall.cy + 0.5) * TILE, ax = Math.sign(Math.round(door.x - hx)), ay = Math.sign(Math.round(door.y - hy));
+    LX = door.x + ax * (tw / 2 + 26); BT = ay < 0 ? door.y - 24 - Hb : ay > 0 ? door.y + 24 : door.y - Hb / 2;
+  }
+  ctx.fillStyle = 'rgba(58,40,24,.92)'; ctx.fillRect(LX - tw / 2, BT, tw, fs + 6);
+  ctx.strokeStyle = '#c99a5b'; ctx.lineWidth = 1; ctx.strokeRect(LX - tw / 2, BT, tw, fs + 6);
+  ctx.fillStyle = '#ffe9c4'; ctx.fillText(label, LX, BT + (fs + 6) / 2 + 1);
   if (zoom >= 1.15) {
     ctx.font = `600 ${fs * 0.75}px system-ui`; ctx.fillStyle = 'rgba(20,18,14,.75)';
     const sz = townSize(s) + (pop > 0 ? ' · 👥 ' + Math.floor(pop) : ''), sw = ctx.measureText(sz).width + 10;
-    ctx.fillRect(X - sw / 2, Y + 22 + fs + 8, sw, fs * 0.75 + 5);
-    ctx.fillStyle = '#f3e6c8'; ctx.fillText(sz, X, Y + 22 + fs + 8 + (fs * 0.75 + 5) / 2 + 1);
+    ctx.fillRect(LX - sw / 2, BT + fs + 8, sw, fs * 0.75 + 5);
+    ctx.fillStyle = '#f3e6c8'; ctx.fillText(sz, LX, BT + fs + 8 + (fs * 0.75 + 5) / 2 + 1);
   }
 }
 
-/**
- * A village road from the station door to the town square: grass verges, stone kerbs, a packed gravel surface with
- * two wheel ruts, and street lamps along it (weeds and no lamps while the town is in ruins).
- */
-function lane(ctx: CanvasRenderingContext2D, path: { x: number; y: number }[], ruin: boolean, tm: number, seed: number) {
-  const line = (w: number, col: string) => { ctx.strokeStyle = col; ctx.lineWidth = w; ctx.beginPath(); path.forEach((p, i) => i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)); ctx.stroke(); };
-  const e = path.at(-1)!;
-  const disc = (r: number, col: string) => { ctx.fillStyle = col; ctx.beginPath(); ctx.arc(e.x, e.y, r, 0, 7); ctx.fill(); };
-  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-  line(12, 'rgba(70,96,44,.45)'); disc(11, 'rgba(70,96,44,.45)');   // trodden verges
-  line(9.5, ruin ? '#8c8676' : '#9a9182'); disc(9.5, ruin ? '#8c8676' : '#9a9182'); // stone kerbs
-  const top = ruin ? '#b3a684' : '#cbbb94';
-  line(7.5, top); disc(8, top);                                     // gravel surface and the town square
-  ctx.lineCap = 'butt';
-  for (let i = 0; i + 1 < path.length; i++) {
-    const p = path[i]!, q = path[i + 1]!, L = Math.hypot(q.x - p.x, q.y - p.y); if (L < 1) continue;
-    const ux = (q.x - p.x) / L, uy = (q.y - p.y) / L, nx = -uy, ny = ux;
-    // two wheel ruts
-    ctx.strokeStyle = ruin ? 'rgba(120,108,80,.5)' : 'rgba(140,120,84,.75)'; ctx.lineWidth = 0.9;
-    for (const o of [-1.9, 1.9]) { ctx.beginPath(); ctx.moveTo(p.x + nx * o, p.y + ny * o); ctx.lineTo(q.x + nx * o, q.y + ny * o); ctx.stroke(); }
-    // pebbles, and weeds through the middle of a ruined road
-    for (let d = 2; d < L - 1; d += 2.6) {
-      const h = hash(seed, Math.round(p.x + ux * d), Math.round(p.y + uy * d), 41), o = (h - 0.5) * 6;
-      ctx.fillStyle = ruin && h < 0.35 ? 'rgba(90,122,58,.8)' : h < 0.5 ? 'rgba(255,250,235,.45)' : 'rgba(110,98,76,.4)';
-      ctx.fillRect(p.x + ux * d + nx * o - 0.4, p.y + uy * d + ny * o - 0.4, 0.8, 0.8);
-    }
-    if (!ruin) for (let d = 10; d < L - 4; d += 22) { const sd = (Math.floor(d / 22) % 2 ? 1 : -1) * 6.2; lamp(ctx, p.x + ux * d + nx * sd, p.y + uy * d + ny * sd, tm); }
-  }
-  // the square: a ring of setts round a little well
-  ctx.strokeStyle = ruin ? 'rgba(120,108,80,.5)' : 'rgba(140,120,84,.7)'; ctx.lineWidth = 0.8; ctx.beginPath(); ctx.arc(e.x, e.y, 5.6, 0, 7); ctx.stroke();
-  if (!ruin) { ctx.fillStyle = '#8a8478'; ctx.beginPath(); ctx.arc(e.x, e.y, 2.2, 0, 7); ctx.fill(); ctx.fillStyle = '#3e5a6a'; ctx.beginPath(); ctx.arc(e.x, e.y, 1.3, 0, 7); ctx.fill(); }
-  ctx.lineJoin = 'miter';
+/** A small paved forecourt in front of the station door, in the platform's colours (weedy while the town is in ruins). */
+function forecourt(ctx: CanvasRenderingContext2D, hall: Hall, door: { x: number; y: number }, ruin: boolean) {
+  const w = hall.horizontal ? 22 : 9, h = hall.horizontal ? 9 : 22;
+  const x = door.x - w / 2 + (hall.horizontal ? 0 : door.x < (hall.cx + 0.5) * TILE ? -w / 2 : w / 2), y = door.y - h / 2 + (hall.horizontal ? (door.y < (hall.cy + 0.5) * TILE ? -h / 2 : h / 2) : 0);
+  ctx.fillStyle = 'rgba(0,0,0,.18)'; ctx.fillRect(x + 1, y + 1, w, h);
+  ctx.fillStyle = ruin ? '#b8ad94' : '#d7ccb4'; ctx.fillRect(x, y, w, h);
+  ctx.fillStyle = ruin ? 'rgba(90,122,58,.6)' : 'rgba(120,108,88,.35)';
+  for (let i = 2; i < w - 1; i += 3) for (let j = 2; j < h - 1; j += 3) if ((i + j) % 2 === 0) ctx.fillRect(x + i, y + j, ruin ? 1 : 0.6, ruin ? 1 : 0.6);
 }
 
 /** true when a house here would sit on track or on the station (hall, platforms, building) */
