@@ -1,0 +1,28 @@
+// Bring an old save over through the 🗺 Game card, as a player would. Usage: node tools/import-shot.mjs [save file]
+import { chromium } from 'playwright';
+import { existsSync, mkdirSync } from 'node:fs';
+import { resolve } from 'node:path';
+mkdirSync('shots', { recursive: true });
+const file = resolve(process.argv[2] || 'tests/saves/save-seb-2026-11-14.json');
+const browser = await chromium.launch({ executablePath: existsSync('/opt/pw-browsers/chromium') ? '/opt/pw-browsers/chromium' : undefined });
+const page = await browser.newPage({ viewport: { width: 412, height: 860 }, deviceScaleFactor: 2, hasTouch: true });
+const errors = []; page.on('pageerror', e => errors.push(String(e)));
+await page.goto('file://' + resolve('dist/index.html') + '?new&seed=4242');
+await page.waitForTimeout(800);
+await page.click('#newGame'); await page.waitForTimeout(500);
+await page.screenshot({ path: 'shots/import-card.png' });
+const [chooser] = await Promise.all([page.waitForEvent('filechooser'), page.click('#card button[data-act="loadfile"]')]);
+const t0 = Date.now();
+await chooser.setFiles(file);
+await page.waitForSelector('#card h2:text("Your game is here")', { timeout: 60000 });
+console.log('imported in', Date.now() - t0, 'ms');
+await page.waitForTimeout(600);
+await page.screenshot({ path: 'shots/import-report.png' });
+await page.click('#card button[data-act="close"]'); await page.waitForTimeout(400);
+await page.evaluate(() => window.railhaven.step(60)); await page.waitForTimeout(1500);
+await page.screenshot({ path: 'shots/import-map.png' });
+await page.evaluate(() => { const c = window.railhaven.game.s.camera; c.z = 0.35; }); await page.waitForTimeout(1200);
+await page.screenshot({ path: 'shots/import-wide.png' });
+console.log(await page.evaluate(() => { const g = window.railhaven.game; return `money $${Math.round(g.s.money)} trains ${g.s.trains.length} buildings ${g.s.buildings.length} level ${g.s.rlv}`; }));
+console.log(errors.join('\n') || 'no page errors');
+await browser.close();

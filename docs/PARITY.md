@@ -58,7 +58,7 @@ that makes sense. Details for each line: `legacy/CHANGES.md` (search the version
 - [x] Guided lessons (9 steps with Mira, Show me, gold ring and pointing hand, skip)
 
 ## Stage 5: extras, save import, art
-- [ ] Legacy save importer (localStorage `railhaven90` and RAILHAVEN2 codes/files) tested on every save in `tests/saves/`
+- [x] Legacy save importer (localStorage `railhaven90` and RAILHAVEN2 codes/files) tested on every save in `tests/saves/` (tools/import-check.ts)
 - [ ] Move my game: export/import codes and files
 - [ ] Cards: town (status + tiles), industry, factory, dock, train, ship; Orders board; Stuck list; alerts (❗) (done: town, industry and train cards, order badges over towns)
 - [ ] Map views: Problems, Demand, Resources, Fuel range, Exploration
