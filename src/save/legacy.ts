@@ -110,7 +110,7 @@ export function importLegacy(o: any): ImportResult {
   const s: GameState = {
     ...base.s, t: o.t ?? 0, money: 0, fog, sites, terrainEdits: {}, track: [...tmap].map(([i, t]) => [i, t.links, t.dbl ? 1 : 0]),
     trains: [], netKey: '', nextId: id, earned: o.earned ?? 0,
-    orders: o.stats?.orders ?? 0, camera: { x: ash.x * TILE + TILE / 2, y: ash.y * TILE + TILE / 2, z: 1.2 },
+    orders: o.stats?.orders ?? 0, maps: Array.isArray(o.maps) ? o.maps.filter((m: any) => m && Number.isFinite(m.x) && Number.isFinite(m.y)).map((m: any) => ({ x: m.x, y: m.y, r: m.r ?? 45 })) : undefined, camera: { x: ash.x * TILE + TILE / 2, y: ash.y * TILE + TILE / 2, z: 1.2 },
   };
   for (const [i, v] of Object.entries(o.terrainEdits ?? {})) s.terrainEdits[+i] = v as number;
   s.rlv = railLevel(s.orders ?? 0);

@@ -1,6 +1,6 @@
 import type { Game, Site } from '../state.ts';
 import { fallsMul } from '../world/explore.ts';
-import { bufOf, type Building, capOf, GOODS, type Good, INDUSTRIES, type IndustryKind, inputsOf, isFactory, isLinked, lockedText, outputOf, shareAt, forestOf, stumpsOf } from '../buildings/industries.ts';
+import { buildingSquares, bufOf, type Building, capOf, GOODS, type Good, INDUSTRIES, type IndustryKind, inputsOf, isFactory, isLinked, lockedText, outputOf, shareAt, forestOf, stumpsOf } from '../buildings/industries.ts';
 import { factoryState } from '../economy/production.ts';
 import { FOUND_PRICE, orderDone, orderOf, reward, sizeName, steadyGoods, stepOf, townLinked, upgradePrice } from '../economy/towns.ts';
 import { type Dest, destinationsOf, destName, type Ship, shipPlan, siteOf } from '../economy/shipping.ts';
@@ -15,6 +15,7 @@ import { fmtMoney } from './hud.ts';
 import { storyHtml } from './story.ts';
 import { ordersHtml, placeName } from './orders.ts';
 import { mapHtml, type MapView } from './mapviews.ts';
+import { mapCost, MAP_R, MAP_R_SEA } from '../world/maps.ts';
 
 export type Card = { kind: 'shed'; id: 0 } | { kind: 'plot'; id: number } | { kind: 'town'; id: number } | { kind: 'bld'; id: number; page?: string } | { kind: 'train'; id: number } | { kind: 'story'; id: 0; page?: string } | { kind: 'game'; id: number; page?: string } | { kind: 'orders'; id: 0 } | { kind: 'map'; id: 0 } | { kind: 'ship'; id: number };
 
@@ -74,6 +75,7 @@ function townCard(g: Game, t: Site): string {
   if (st.length) h += `<h3>🛒 Keeps buying</h3><div class="chips">${st.map(k => `<span class="chip2">${GOODS[k].icon} ${GOODS[k].name}</span>`).join('')}</div>`;
   const coming = g.s.trains.filter(x => x.job && sameDest(x.job.to, { kind: 'town', id: t.id })).length;
   if (coming) h += `<div class="note">🚂 ${coming} train${coming > 1 ? 's' : ''} bringing goods here</div>`;
+  if (linked) h += mapBtn(g, t.x, t.y, MAP_R);
   return h;
 }
 
@@ -175,6 +177,7 @@ function dockCard(g: Game, b: Building, page?: string): string {
     + tile('isl', '🏝', 'Islands', `${nIsl} in reach${b.lvl < MAX_LVL ? ' · ⬆ reach' : ''}`)
     + (home ? '' : tile('trains', '🚂', 'Trains', `${nTr} on ${esc(isl)}`, nTr === 0))
     + `</div>`;
+  if (linked) { const m = buildingSquares(g.world.n, b)[1]!; h += mapBtn(g, m % g.world.n, (m / g.world.n) | 0, MAP_R_SEA); }
   h += `<button class="act warnb" data-act="remove" data-id="${b.id}">🗑 Remove · get ${fmtMoney(refundOf(b))}</button>`;
   return h;
 }
@@ -267,4 +270,10 @@ function trainCard(g: Game, t: Train): string {
   if (t.lastPay) { h += `<div class="row"><b class="ico">💰</b><div class="grow">Last delivery: ${t.lastPay.n} ${GOODS[t.lastPay.good as Good]?.icon ?? ''} to ${esc(destName(g, t.lastPay.to))} paid <b>${fmtMoney(t.lastPay.pay)}</b></div></div>`; }
   h += `<small class="why">Trains run themselves: each one takes the best waiting load to the place that needs it.</small>`;
   return h;
+}
+
+/** 🗺 Area map button: opens Map mode with the circle here (the player can move it before buying). */
+function mapBtn(g: Game, x: number, y: number, r: number): string {
+  const c = mapCost(g);
+  return `<button class="act alt" data-act="areamap" data-x="${x}" data-y="${y}" ${g.s.money >= c ? '' : 'disabled'}>🗺 Map of the area · ${fmtMoney(c)}<br><small>marks hidden towns and landmarks in the fog within ${r} squares</small></button>`;
 }

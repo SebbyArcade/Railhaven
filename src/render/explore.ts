@@ -4,6 +4,7 @@ import { isRevealed } from '../world/fog.ts';
 import type { Tools } from '../ui/tools.ts';
 import { poisOf, POI, type Poi, scoutPlace, scoutStarts } from '../world/explore.ts';
 import { drawLandmark } from './landmarks.ts';
+import { rumours } from '../world/maps.ts';
 
 /** Landmarks and wrecks that are out of the fog, scouts on their way, and in Scout mode the start rings and the route. */
 export function drawExplore(ctx: CanvasRenderingContext2D, g: Game, t: Tools | undefined, tm: number, vis: (x: number, y: number) => boolean, z: number) {
@@ -51,4 +52,22 @@ function drawPoi(ctx: CanvasRenderingContext2D, p: Poi, tm: number, z: number) {
   if (!p.got && p.kind !== 'wreck' && z >= 0.7) { // not yet taken over: a small question flag
     ctx.font = '700 11px system-ui'; ctx.textAlign = 'center'; ctx.fillStyle = 'rgba(28,22,16,.75)'; ctx.beginPath(); ctx.arc(X + 18, Y - 22, 7, 0, 7); ctx.fill(); ctx.fillStyle = '#ffd27a'; ctx.textBaseline = 'middle'; ctx.fillText(POI[p.kind].icon, X + 18, Y - 21.5);
   }
+}
+
+/** 🗺 Over the fog: the ? of every find a bought map marked, and in Map mode the circle a map would cover. */
+export function drawMaps(ctx: CanvasRenderingContext2D, g: Game, t: Tools | undefined, tm: number, z: number) {
+  const s = 1 / Math.max(0.1, Math.min(1.4, z)), pulse = 0.5 + 0.5 * Math.sin(tm * 3);
+  for (const f of rumours(g)) {
+    const X = (f.x + 0.5) * TILE, Y = (f.y + 0.5) * TILE, r = 11 * s;
+    ctx.fillStyle = `rgba(255,214,110,${0.18 + 0.16 * pulse})`; ctx.beginPath(); ctx.arc(X, Y, r * 1.9, 0, 7); ctx.fill();
+    ctx.fillStyle = 'rgba(40,30,18,.85)'; ctx.beginPath(); ctx.arc(X, Y, r, 0, 7); ctx.fill();
+    ctx.strokeStyle = '#ffd27a'; ctx.lineWidth = 1.6 * s; ctx.stroke();
+    ctx.fillStyle = '#ffd27a'; ctx.font = `800 ${Math.round(12 * s)}px system-ui`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('?', X, Y + 0.5 * s);
+  }
+  const m = t?.mode === 'map' ? t.mapPv : null; if (!m) return;
+  const X = (m.x + 0.5) * TILE, Y = (m.y + 0.5) * TILE, R = m.r * TILE;
+  ctx.fillStyle = 'rgba(255,231,168,.10)'; ctx.beginPath(); ctx.arc(X, Y, R, 0, 7); ctx.fill();
+  ctx.strokeStyle = `rgba(255,214,120,${0.7 + 0.3 * pulse})`; ctx.lineWidth = 3 * s; ctx.setLineDash([10 * s, 8 * s]); ctx.lineDashOffset = -tm * 20 * s;
+  ctx.beginPath(); ctx.arc(X, Y, R, 0, 7); ctx.stroke(); ctx.setLineDash([]);
+  ctx.font = `${Math.round(26 * s)}px system-ui`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('🗺', X, Y);
 }
