@@ -35,7 +35,7 @@ import { buyShip, shipPlace } from './ships/ships.ts';
 import { POI, poisOf } from './world/explore.ts';
 import { buyFishing, FISHING } from './economy/upgrades.ts';
 import { checkStuck } from './economy/nofail.ts';
-import { ashford, missionsOf, msOf, swapMission } from './progress/missions.ts';
+import { ashford, missionsOf, msOf, recommendedBuild, swapMission } from './progress/missions.ts';
 import { missionPill } from './ui/story.ts';
 import { gameHtml } from './ui/gamecard.ts';
 import { decodeLegacy, importLegacy, isLegacy } from './save/legacy.ts';
@@ -186,6 +186,7 @@ cardEl.onclick = e => {
     if (at) { c.x = (at.x + 0.5) * 32; c.y = (at.y + 0.5) * 32; }
     openCard({ kind, id } as Card); return;
   }
+  if (b.dataset.act === 'lookpoi') { const p = poisOf(game).find(x => x.id === +b.dataset.id!); closeCard(); if (p) { lookAt(p.x, p.y); tools.flash = { square: p.y * game.world.n + p.x, until: performance.now() + 2500 }; } return; }
   if (b.dataset.act === 'areamap') { const why = tools.openMap(+b.dataset.x!, +b.dataset.y!); if (why) { toast(why); return; } closeCard(); const c = game.s.camera; c.x = (+b.dataset.x! + 0.5) * 32; c.y = (+b.dataset.y! + 0.5) * 32; c.z = Math.max(0.1, Math.min(c.z, 0.9 * Math.min(view.w, view.h) / (2 * (tools.mapPv?.r ?? 45) * 32))); return; }
   if (b.dataset.act === 'view') { setView((b.dataset.v || null) as MapView | null); closeCard(); return; }
   if (b.dataset.act === 'pin') { // 📌 choose where a building sends its goods ('' = automatic)
@@ -381,7 +382,9 @@ function renderMenu() {
     const d = info(k), p = priceOf(game, k), lock = lockedText(game, k);
     return `<button data-k="${k}" class="${tools.buildKind === k ? 'on' : ''}${lock ? ' locked' : ''}"><b>${d.icon}</b>${d.name}<small>${lock ? '🔒 Level ' + d.unlock : fmtMoney(p)}</small></button>`;
   };
-  menu.innerHTML = kinds.filter(k => !isFactory(k) && k !== 'dock').map(tile).join('') + `<div class="mhead">🏭 Factories: turn raw goods into products</div>` + kinds.filter(isFactory).map(tile).join('')
+  const r = recommendedBuild(game);
+  menu.innerHTML = (r ? `<button data-k="${r.k}" class="rec"><b>${info(r.k).icon}</b><span style="font-size:11px;font-weight:800;color:#ffd24a;letter-spacing:.05em">⭐ RECOMMENDED NEXT BUILD${r.mission ? ' · YOUR MISSION' : ''}</span><br>${info(r.k).name} · ${fmtMoney(priceOf(game, r.k))}<small>${r.why}</small></button>` : '')
+    + kinds.filter(k => !isFactory(k) && k !== 'dock').map(tile).join('') + `<div class="mhead">🏭 Factories: turn raw goods into products</div>` + kinds.filter(isFactory).map(tile).join('')
     + `<div class="mhead">⚓ Sea: docks reach other islands</div>` + tile('dock');
 }
 menu.onclick = e => {
@@ -474,6 +477,13 @@ function frame(now: number) {
     lastCard = Math.floor(now / 1000);
     const M = msOf(game); // a new act opens its card once nothing else is open
     if (M.actNew && !tools.card && tools.mode === 'pan' && !menuOpen) { M.actNew = false; openCard({ kind: 'story', id: 0, page: 'act' }); }
+    else if (game.found?.length && (lessonOn(game) || onHome())) game.found = []; // no discovery cards during the lessons
+    else if (game.found?.length && !tools.card && tools.mode === 'pan' && !menuOpen) { // a landmark just spotted: its discovery card
+      const [id, ...rest] = game.found; game.found = [];
+      const names = new Set([id, ...rest].map(i => poisOf(game).find(p => p.id === i)).filter(p => p && p.kind !== 'wreck').map(p => `${POI[p!.kind].name} found`));
+      game.news = (game.news ?? []).filter(m => ![...names].some(nm => m.includes(nm))); // the card says it: no toast too
+      openCard({ kind: 'find', id: id!, more: rest.length });
+    }
     renderCard();
     if (!lessonOn(game)) { const ph = missionPill(game); if (pill.innerHTML !== ph) pill.innerHTML = ph; pill.style.display = ph ? 'flex' : 'none'; }
   }

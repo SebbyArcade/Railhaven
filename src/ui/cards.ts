@@ -1,5 +1,5 @@
 import type { Game, Site } from '../state.ts';
-import { fallsMul } from '../world/explore.ts';
+import { fallsMul, POI, POI_RARITY, poisOf, RARITY } from '../world/explore.ts';
 import { buildingSquares, bufOf, type Building, capOf, GOODS, type Good, INDUSTRIES, type IndustryKind, inputsOf, isFactory, isLinked, lockedText, outputOf, shareAt, forestOf, stumpsOf } from '../buildings/industries.ts';
 import { factoryState } from '../economy/production.ts';
 import { FOUND_PRICE, orderDone, orderOf, reward, sizeName, steadyGoods, stepOf, townLinked, upgradePrice } from '../economy/towns.ts';
@@ -17,7 +17,7 @@ import { ordersHtml, placeName } from './orders.ts';
 import { mapHtml, type MapView } from './mapviews.ts';
 import { mapCost, MAP_R, MAP_R_SEA } from '../world/maps.ts';
 
-export type Card = { kind: 'shed'; id: 0 } | { kind: 'plot'; id: number } | { kind: 'town'; id: number } | { kind: 'bld'; id: number; page?: string } | { kind: 'train'; id: number } | { kind: 'story'; id: 0; page?: string } | { kind: 'game'; id: number; page?: string } | { kind: 'orders'; id: 0 } | { kind: 'map'; id: 0 } | { kind: 'ship'; id: number };
+export type Card = { kind: 'shed'; id: 0 } | { kind: 'plot'; id: number } | { kind: 'town'; id: number } | { kind: 'bld'; id: number; page?: string } | { kind: 'train'; id: number } | { kind: 'story'; id: 0; page?: string } | { kind: 'game'; id: number; page?: string } | { kind: 'orders'; id: 0 } | { kind: 'map'; id: 0 } | { kind: 'ship'; id: number } | { kind: 'find'; id: number; more?: number };
 
 /** the kind that makes each good */
 const makerOf = (k: Good) => (Object.keys(INDUSTRIES) as IndustryKind[]).find(m => INDUSTRIES[m].makes === k);
@@ -49,6 +49,7 @@ export function cardHtml(g: Game, c: Card, view?: MapView | null): string | null
   if (c.kind === 'map') return mapHtml(g, view ?? null);
   if (c.kind === 'ship') return shipCard(g, c.id);
   if (c.kind === 'plot') { const p = siteOf(g, c.id); return p?.kind === 'plot' ? plotCard(g, p) : null; }
+  if (c.kind === 'find') return findCard(g, c.id, c.more ?? 0);
   if (c.kind === 'town') { const t = siteOf(g, c.id); return t?.kind === 'town' ? townCard(g, t) : null; }
   if (c.kind === 'bld') { const b = g.s.buildings?.find(x => x.id === c.id); return b ? buildingCard(g, b, c.page) : null; }
   const t = g.s.trains.find(x => x.id === c.id); return t ? trainCard(g, t) : null;
@@ -276,4 +277,16 @@ function trainCard(g: Game, t: Train): string {
 function mapBtn(g: Game, x: number, y: number, r: number): string {
   const c = mapCost(g);
   return `<button class="act alt" data-act="areamap" data-x="${x}" data-y="${y}" ${g.s.money >= c ? '' : 'disabled'}>🗺 Map of the area · ${fmtMoney(c)}<br><small>marks hidden towns and landmarks in the fog within ${r} squares</small></button>`;
+}
+
+/** A landmark just spotted in the fog: how rare it is, what it gives, and a button to see it. */
+function findCard(g: Game, id: number, more: number): string | null {
+  const p = poisOf(g).find(x => x.id === id); if (!p) return null;
+  const P = POI[p.kind], R = RARITY[POI_RARITY[p.kind]], isl = g.world.islandOf[p.y * g.world.n + p.x];
+  let h = `<div class="find"><span class="rar" style="border-color:${R.col};color:${R.col}">${R.icon} ${R.name.toUpperCase()}</span><small>Spotted in the fog</small>`;
+  h += `<b class="fbig">${P.icon}</b><h2>${esc(P.name)}</h2>${isl !== undefined && isl >= 0 ? `<small>on ${esc(islandName(g, isl))}</small>` : ''}</div>`;
+  h += `<div class="gift">🎁 ${p.kind === 'wreck' ? 'A ship or scout boat passing by salvages it' : `When your track reaches it: ${P.perk}`}</div>`;
+  if (more) h += `<div class="note">✨ ${more} more landmark${more > 1 ? 's' : ''} spotted too: look for them on the map</div>`;
+  h += `<button class="act" data-act="lookpoi" data-id="${p.id}">📍 Show me on the map</button>`;
+  return h;
 }
