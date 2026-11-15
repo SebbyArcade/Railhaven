@@ -42,7 +42,10 @@ export class Sound {
       const AC = window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
       if (!AC) return;
       const ac = this.ac = new AC();
-      this.master = ac.createGain(); this.master.gain.value = 0.9; this.master.connect(ac.destination);
+      // phone speakers buzz on deep bass and crackle when sounds pile up: cut the lowest notes and keep the level safe
+      const hp = ac.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 160;
+      const lim = ac.createDynamicsCompressor(); lim.threshold.value = -18; lim.knee.value = 12; lim.ratio.value = 8; lim.attack.value = 0.005; lim.release.value = 0.25;
+      this.master = ac.createGain(); this.master.gain.value = 0.7; this.master.connect(hp); hp.connect(lim); lim.connect(ac.destination);
       this.musicBus = ac.createGain(); this.musicBus.connect(this.master);
       this.sfxBus = ac.createGain(); this.sfxBus.connect(this.master);
       // a soft echo on the music for warmth
@@ -93,7 +96,7 @@ export class Sound {
       const M = SEASON_MUSIC[this.season]!, beat = 60 / M.bpm, t0 = this.barAt, [off, minor] = M.bars[this.bar % 4]!;
       const root = M.key + off, third = minor ? 3 : 4;
       for (const iv of [0, third, 7, 12]) this.pad(midi(root - 12 + iv), t0, beat * 4);
-      this.tone(midi(root - 24), t0, beat * 1.8, 0.22, 'sine'); this.tone(midi(root - 24 + 7), t0 + beat * 2, beat * 1.8, 0.14, 'sine');
+      this.tone(midi(root - 12), t0, beat * 1.8, 0.12, 'triangle'); this.tone(midi(root - 12 + 7), t0 + beat * 2, beat * 1.8, 0.08, 'triangle');
       const scale = this.season >= 2 ? PENTA_MIN : PENTA_MAJ; void minor;
       for (let b = 0; b < 8; b++) { // a wandering little tune on the half beats
         if (Math.random() > (b % 2 ? 0.28 : 0.6)) continue;
@@ -168,7 +171,7 @@ export class Sound {
   private horn(t: number, vol: number, pan: number) {
     const ac = this.ac!, g = ac.createGain(), lp = ac.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 600;
     g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vol, t + 0.15); g.gain.setValueAtTime(vol, t + 1.3); g.gain.linearRampToValueAtTime(0, t + 1.8);
-    for (const fr of [98, 147]) { const o = ac.createOscillator(); o.type = 'sawtooth'; o.frequency.value = fr; o.connect(lp); o.start(t); o.stop(t + 1.9); }
+    for (const fr of [196, 294]) { const o = ac.createOscillator(); o.type = 'sawtooth'; o.frequency.value = fr; o.connect(lp); o.start(t); o.stop(t + 1.9); }
     lp.connect(g); g.connect(this.out(pan));
   }
   private bird(pan: number, vol: number, t: number) {
@@ -180,7 +183,7 @@ export class Sound {
   }
   private thunder(vol: number, t: number) {
     this.burst(t, 0.25, 0.5 * vol, rnd(-0.5, 0.5), 'lowpass', 1500);
-    this.burst(t + 0.1, 2.8, 0.7 * vol, rnd(-0.3, 0.3), 'lowpass', 160);
+    this.burst(t + 0.1, 2.8, 0.45 * vol, rnd(-0.3, 0.3), 'lowpass', 420);
   }
   private baa(t: number, vol: number, pan: number) {
     const ac = this.ac!, o = ac.createOscillator(), g = ac.createGain(), f = ac.createBiquadFilter(), lfo = ac.createOscillator(), lg = ac.createGain();
@@ -211,11 +214,10 @@ export class Sound {
         if (!h.rate) { if (Math.random() < 0.15) this.burst(now, 1.2, 0.05 * v, p, 'highpass', 3500); gap = rnd(1, 2); break; } // standing: a soft breath of steam now and then
         this.burst(now, 0.12, 0.22 * v, p, 'bandpass', 900, 0.8); // chuff
         gap = 0.62 - 0.46 * h.rate;
-        if (Math.random() < 0.08) this.ping(now + 0.03, 3200, 0.03, 0.04 * v, p, 'square'); // rail joint click
         break;
       }
-      case 'load': this.burst(now, 0.18, 0.3 * v, p, 'lowpass', 300); this.ping(now, 120, 0.15, 0.1 * v, p); gap = rnd(0.6, 1.4); break;
-      case 'repair': this.ping(now, 1900, 0.12, 0.09 * v, p, 'square'); this.ping(now + 0.01, 2850, 0.18, 0.05 * v, p); this.burst(now, 0.05, 0.12 * v, p, 'highpass', 3000); gap = Math.random() < 0.3 ? 1.4 : rnd(0.32, 0.5); break;
+      case 'load': this.burst(now, 0.18, 0.2 * v, p, 'lowpass', 700); this.ping(now, 220, 0.12, 0.06 * v, p); gap = rnd(0.6, 1.4); break;
+      case 'repair': this.ping(now, 1900, 0.12, 0.09 * v, p, 'triangle'); this.ping(now + 0.01, 2850, 0.18, 0.05 * v, p); this.burst(now, 0.05, 0.12 * v, p, 'highpass', 3000); gap = Math.random() < 0.3 ? 1.4 : rnd(0.32, 0.5); break;
       case 'ship':
         if (h.moving && Math.random() < 0.25) this.horn(now, 0.14 * v, p); else this.gull(now, v, p);
         gap = rnd(8, 16); break;
@@ -225,14 +227,14 @@ export class Sound {
       case 'sawmill': this.saw(now, v, p); gap = rnd(3.5, 6); break;
       case 'stone': case 'coal': case 'iron':
         this.ping(now, rnd(2200, 2900), 0.09, 0.07 * v, p, 'triangle'); this.burst(now, 0.06, 0.12 * v, p, 'highpass', 2500);
-        if (Math.random() < 0.12) this.burst(now + 0.1, 0.6, 0.2 * v, p, 'lowpass', 400); // rocks tumbling into a cart
+        if (Math.random() < 0.12) this.burst(now + 0.1, 0.6, 0.15 * v, p, 'lowpass', 800); // rocks tumbling into a cart
         gap = rnd(0.7, 1.6); break;
-      case 'oil': this.ping(now, 70, 0.3, 0.16 * v, p); this.burst(now + 0.8, 0.25, 0.08 * v, p, 'bandpass', 500); gap = 1.6; break;
+      case 'oil': this.ping(now, 200, 0.25, 0.07 * v, p); this.burst(now + 0.8, 0.25, 0.08 * v, p, 'bandpass', 500); gap = 1.6; break;
       case 'farm': this.burst(now, 0.5, 0.08 * v, p, 'bandpass', 3000, 0.7); gap = rnd(2.5, 5); break; // scythe swish
       case 'wool': this.baa(now, v, p); gap = rnd(6, 14); break;
-      case 'gristmill': this.ping(now, 95, 0.5, 0.08 * v, p, 'triangle', 0.8); gap = rnd(2.4, 3.2); break; // creaking wheel
+      case 'gristmill': this.ping(now, 240, 0.5, 0.05 * v, p, 'triangle', 0.8); gap = rnd(2.4, 3.2); break; // creaking wheel
       default: // works: a clank and a breath of steam
-        this.ping(now, rnd(160, 260), 0.14, 0.1 * v, p, 'square'); this.burst(now + 0.15, 0.5, 0.1 * v, p, 'highpass', 4000);
+        this.ping(now, rnd(320, 480), 0.12, 0.06 * v, p, 'triangle'); this.burst(now + 0.15, 0.5, 0.1 * v, p, 'highpass', 4000);
         gap = rnd(1.8, 3.4);
     }
     this.next.set(h.id, now + gap);
