@@ -1,11 +1,12 @@
-import type { Game, Site } from '../state.ts';
-import { type Building, capOf, GOODS, type Good, INDUSTRIES, inputsOf, isFactory, isLinked, outputOf } from '../buildings/industries.ts';
+import type { Game } from '../state.ts';
+import { capOf, GOODS, type Good, INDUSTRIES, inputsOf, isFactory, isLinked, outputOf } from '../buildings/industries.ts';
 import { factoryState } from '../economy/production.ts';
 import { orderDone, orderOf, sizeName, stepOf, townLinked } from '../economy/towns.ts';
 import { isRevealed } from '../world/fog.ts';
 import { poisOf, POI } from '../world/explore.ts';
 import { reachedIslands, rumourOf } from '../progress/missions.ts';
-import { stuckList } from './orders.ts';
+import { placeName, stuckList } from './orders.ts';
+export { placeName };
 
 /** The map views: each dims the map and labels what matters. */
 export type MapView = 'prob' | 'dem' | 'res' | 'exp';
@@ -22,13 +23,6 @@ export interface Mark { x: number; y: number; icon: string; text: string; col: s
 const lc = (k: Good) => GOODS[k].name.toLowerCase();
 const seen = (g: Game, x: number, y: number) => !!isRevealed(g, y * g.world.n + x);
 const C = { bad: '#ff8a70', warn: '#ffc08a', ok: '#a8f0a0', gold: '#ffd27a', pale: '#ffe9b8', dep: '#c9b6ff', sea: '#8fd0ff' };
-
-/** The nearest town, for names like "Lumber Camp near Brinemoor". */
-export function placeName(g: Game, b: Building): string {
-  let best: Site | undefined, bd = Infinity;
-  for (const t of g.s.sites) if (t.kind === 'town' && (t.pop ?? 0) > 0) { const d = Math.hypot(t.x - b.x, t.y - b.y); if (d < bd) { bd = d; best = t; } }
-  return `${INDUSTRIES[b.kind].name}${best?.name ? ' near ' + best.name : ''}`;
-}
 
 export function viewMarks(g: Game, v: MapView): Mark[] {
   const out: Mark[] = [], n = g.world.n;

@@ -15,6 +15,7 @@ import type { Game } from './state.ts';
 import { footprint } from './buildings/industries.ts';
 import { type Card, cardHtml } from './ui/cards.ts';
 import { type MapView, VIEWS } from './ui/mapviews.ts';
+import { gameReport } from './ui/report.ts';
 import { buyFleet, FLEET, type FleetKey, fleetLvl, refundOf, removeBuilding, rushOf, sellOffer, sellStock, toggleRush, upgradeBuilding } from './economy/upgrades.ts';
 import { foundTown, sizeName, tickTowns, upgradeTown } from './economy/towns.ts';
 import { buyTrainAt, tickTrains } from './economy/dispatch.ts';
@@ -95,9 +96,10 @@ function openCard(c: Card | null) { tools.card = c; tools.selected = c?.kind ===
 function closeCard() { tools.card = null; tools.selected = null; renderCard(); }
 function renderCard() {
   if (tools.card?.kind === 'game' && tools.card.page === 'paste' && cardEl.querySelector('#pasteCode')) return; // keep what is being typed
+  if (tools.card?.kind === 'game' && tools.card.page === 'stats' && cardEl.querySelector('#stats')) return; // keep the report selectable
   if (tools.card?.kind === 'map' && cardEl.style.display === 'block' && cardEl.querySelector('#mapQ')) return; // nothing on it changes: keep the search being typed
   if (tools.card?.kind === 'game' && tools.card.page === 'move' && myCode && (cardEl.querySelector('#myCode') as HTMLTextAreaElement | null)?.value === myCode) return; // keep the code selectable
-  const html = tools.card && (tools.card.kind === 'game' ? gameHtml(tools.card.page, !!oldSave(), importReport, myCode) : cardHtml(game, tools.card, tools.view));
+  const html = tools.card && (tools.card.kind === 'game' ? gameHtml(tools.card.page, !!oldSave(), importReport, myCode, tools.card.page === 'stats' ? gameReport(game) : null) : cardHtml(game, tools.card, tools.view));
   if (!html) { tools.card = null; cardEl.style.display = 'none'; return; }
   cardEl.innerHTML = `<button class="x" data-act="close">✕</button>${html}`; cardEl.style.display = 'block';
   if (performance.now() - newArmed < 3000) { const nb = cardEl.querySelector<HTMLButtonElement>('button[data-act="newmap"]'); if (nb) { nb.classList.add('sure'); nb.textContent = '⚠ Tap again to start a new map'; } }
@@ -125,6 +127,7 @@ cardEl.onclick = e => {
   if (b.dataset.act === 'view') { setView((b.dataset.v || null) as MapView | null); closeCard(); return; }
   if (b.dataset.act === 'full') { const d = document.documentElement; if (document.fullscreenElement) void document.exitFullscreen?.(); else d.requestFullscreen?.().catch(() => toast('Full screen works when the game is opened in Chrome')); return; }
   if (b.dataset.act === 'copycode') { void saveCode(game).then(async c => { myCode = c; renderCard(); try { await navigator.clipboard.writeText(c); toast('📋 Code copied: paste it in 🗺 Game on the other side'); } catch { toast('Press on the code below, Select all, then Copy'); } }); return; }
+  if (b.dataset.act === 'copystats') { const t = cardEl.querySelector<HTMLTextAreaElement>('#stats'); if (t) { t.value = gameReport(game); void navigator.clipboard.writeText(t.value).then(() => toast('📋 Report copied: paste it in the chat'), () => { t.select(); toast('Press on the report, Select all, then Copy'); }); } return; }
   if (b.dataset.act === 'savefile') { void saveCode(game).then(saveFile); return; }
   if (b.dataset.act === 'loadold') { const t = oldSave(); if (t) void bringOver(t); return; }
   if (b.dataset.act === 'loadpaste') { const t = (cardEl.querySelector('#pasteCode') as HTMLTextAreaElement | null)?.value ?? ''; if (t.trim()) void bringOver(t); else toast('Paste the code first'); return; }
