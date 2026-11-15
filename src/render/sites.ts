@@ -1,4 +1,5 @@
 import { sizeName, stepOf } from '../economy/towns.ts';
+import { looks } from './looks.ts';
 import { hash } from '../core/rng.ts';
 import type { Game, Site } from '../state.ts';
 import type { Hall } from '../buildings/stations.ts';
@@ -17,8 +18,7 @@ export function townSize(s: Site): string {
 function drawTown(ctx: CanvasRenderingContext2D, g: Game, s: Site, tm: number, zoom: number, hall?: Hall) {
   const X = (s.x + 0.5) * TILE, Y = (s.y + 0.5) * TILE, pop = s.pop ?? 0, H = (a: number, b: number, k: number) => hash(g.s.seed, a, b, k);
   const houses = pop <= 0 ? 4 : Math.min(18, 4 + Math.floor(Math.sqrt(pop)));
-  const roofs = ['#a8462f', '#8a3e2c', '#b8603a', '#6e4a36', '#5a5e66', '#9a5440'];
-  const walls = ['#efe4cc', '#f4efe2', '#e8d6a8', '#dcc8a8', '#c98a68', '#e4dccf'];
+  const { roofs, walls } = looks.theme; // the town theme picked in Looks (red roofs by default)
   const L = s.lvl ?? 0, ruin = pop <= 0;
   type Spot = { hx: number; hy: number; w: number; d: number; k: number };
   const spots: Spot[] = [];

@@ -12,6 +12,9 @@ import { loadFrom, onSave, readSave, saveCode, saveJson, saveTo } from './save/s
 import { addSlot, copySlot, deleteSlot, openSlot, readIndex, renameSlot, touchActive } from './save/slots.ts';
 import { homeHtml, isHomePage } from './ui/home.ts';
 import { mapThumb } from './render/thumb.ts';
+import { checkMedals, loadProfile, saveProfile } from './progress/achievements.ts';
+import { PAINTS, setLooks, THEMES } from './render/looks.ts';
+import { xpOf } from './progress/achievements.ts';
 import { isRevealed } from './world/fog.ts';
 import { TERRAIN_NAMES } from './world/terrain.ts';
 import { attachInput } from './ui/input.ts';
@@ -55,7 +58,18 @@ const freshGame = (seed?: number) => { const g = newGame(seed); g.s.tut = 0; ret
 const slotsOk = (() => { try { readIndex(localStorage); return true; } catch { return false; } })();
 let game: Game = (!params.has('new') && !params.has('seed') && loadFrom(localStorage)) || freshGame(params.has('seed') ? +params.get('seed')! : undefined);
 if (slotsOk && (params.has('new') || params.has('seed') || !readIndex(localStorage).list.length)) { const why = addSlot(localStorage, saveJson(game), game); if (why) { game = loadFrom(localStorage) ?? game; } }
-onSave((st, g) => { if (slotsOk && st === localStorage) try { touchActive(localStorage, g); } catch { /* storage full: the game itself is saved */ } });
+// achievements: kept in the player's profile across all games, checked with every save (every 5 seconds)
+const profile = (() => { try { return loadProfile(localStorage); } catch { return loadProfile({ getItem: () => null }); } })();
+setLooks(profile.paint, profile.theme);
+const keepProfile = () => { try { saveProfile(localStorage, profile); } catch { /* the medals stay for this visit */ } };
+onSave((st, g) => {
+  if (st !== localStorage) return;
+  if (slotsOk) try { touchActive(localStorage, g); } catch { /* storage full: the game itself is saved */ }
+  const o = profile.orders, got = checkMedals(g, profile);
+  if (got.length > 2) (g.news ??= []).push(`🏅 ${got.length} medals earned · +${got.reduce((a, m) => a + m.xp, 0)} XP: see 🏠 Home → Achievements`);
+  else for (const m of got) (g.news ??= []).push(`🏅 Medal: ${m.icon} ${m.name} · +${m.xp} XP`);
+  if (got.length || profile.orders !== o || !profile.seeds.includes(g.s.seed)) keepProfile();
+});
 /** the playing game's small map picture, made when the home screen opens or the game is put aside */
 const snapPic = () => { if (slotsOk) try { touchActive(localStorage, game, mapThumb(game)); } catch { /* no picture */ } };
 const tools = new Tools(() => game);
@@ -117,7 +131,7 @@ function renderCard() {
   if (tools.card?.kind === 'game' && cardEl.contains(document.activeElement) && document.activeElement?.tagName === 'INPUT') return; // keep a name or map number being typed
   const home = tools.card?.kind === 'game' && isHomePage(tools.card.page);
   cardEl.classList.toggle('home', home);
-  const html = tools.card && (tools.card.kind === 'game' ? (home ? homeHtml(tools.card.page, readIndex(localStorage), tools.card.id, delArmed?.id === tools.card.id && performance.now() < delArmed.until) : gameHtml(tools.card.page === 'settings' ? '' : tools.card.page, !!oldSave(), importReport, myCode, tools.card.page === 'stats' ? gameReport(game) : null, sound.settings)) : cardHtml(game, tools.card, tools.view));
+  const html = tools.card && (tools.card.kind === 'game' ? (home ? homeHtml(tools.card.page, readIndex(localStorage), tools.card.id, delArmed?.id === tools.card.id && performance.now() < delArmed.until, profile, game) : gameHtml(tools.card.page === 'settings' ? '' : tools.card.page, !!oldSave(), importReport, myCode, tools.card.page === 'stats' ? gameReport(game) : null, sound.settings)) : cardHtml(game, tools.card, tools.view));
   if (!html) { tools.card = null; cardEl.style.display = 'none'; return; }
   cardEl.innerHTML = `<button class="x" data-act="close">✕</button>${html}`; cardEl.style.display = 'block';
   if (performance.now() - newArmed < 3000) { const nb = cardEl.querySelector<HTMLButtonElement>('button[data-act="newmap"]'); if (nb) { nb.classList.add('sure'); nb.textContent = '⚠ Tap again to start a new map'; } }
@@ -136,6 +150,13 @@ cardEl.onclick = e => {
     newArmed = 0; startGame(freshGame()); return; // (no longer offered: new games start from Your games)
   }
   if (b.dataset.act === 'loadfile') { filePick.click(); return; }
+  if (b.dataset.act === 'mgroup') { openCard({ kind: 'game', id: +b.dataset.id!, page: 'mgroup' }); return; }
+  if (b.dataset.act === 'look') {
+    const paint = b.dataset.kind === 'paint', l = (paint ? PAINTS : THEMES).find(x => x.k === b.dataset.k); if (!l) return;
+    if (xpOf(profile) < l.xp) { toast(`🔒 ${l.name} unlocks at ${l.xp} XP: earn medals to get there`); return; }
+    if (paint) profile.paint = l.k; else profile.theme = l.k;
+    setLooks(profile.paint, profile.theme); keepProfile(); toast(`🎨 ${l.name}`); renderCard(); return;
+  }
   if (b.dataset.act === 'slotpage') { delArmed = null; openCard({ kind: 'game', id: +b.dataset.id!, page: 'slot' }); return; }
   if (b.dataset.act === 'play') { const id = +b.dataset.id!; if (id === readIndex(localStorage).active) { closeCard(); return; } saveTo(localStorage, game); snapPic(); const g = openSlot(localStorage, id); if (typeof g === 'string') { toast(g); return; } startGame(g, false); toast('▶ ' + (readIndex(localStorage).list.find(m => m.id === id)?.name ?? 'Your game'), 2500); return; }
   if (b.dataset.act === 'rename') { const why = renameSlot(localStorage, +b.dataset.id!, cardEl.querySelector<HTMLInputElement>('#slotName')?.value ?? ''); (document.activeElement as HTMLElement | null)?.blur(); toast(why || '✏ Name saved'); renderCard(); return; }

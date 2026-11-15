@@ -129,6 +129,6 @@ export function toggleRush(g: Game, to: Dest, k: Good): string {
 export function rushDelivered(g: Game, to: Dest, k: Good, n: number, pay: number): number {
   const r = rushOf(g, to, k); if (!r) return 0;
   r.left -= n;
-  if (r.left <= 0 || rushNeed(g, to, k) <= 0) g.s.rush = g.s.rush!.filter(x => x !== r);
+  if (r.left <= 0 || rushNeed(g, to, k) <= 0) { g.s.rush = g.s.rush!.filter(x => x !== r); g.s.rushDone = (g.s.rushDone ?? 0) + 1; }
   return Math.round(pay * RUSH_FEE);
 }
