@@ -14,6 +14,7 @@ import { expressMul, fleetMulOf, minLoad, rushDelivered, trainCap } from './upgr
 import { V_MAX } from '../trains/train.ts';
 import { isRev } from '../track/route.ts';
 import { GRAND_LOAD, hasGrandStation, payMul, rewardMul } from '../buildings/parks.ts';
+import { BRIDGE_UPKEEP, bridgeSquares } from '../track/rules.ts';
 import { deliverToTown, orderDone, reward, sizeName, stepOf } from './towns.ts';
 
 export const LOAD_TIME = 4;
@@ -243,6 +244,9 @@ export function tickTrains(g: Game, dt: number) {
   const P = () => (plan ??= shipPlan(g));
   const fm = fleetMul(g.s.trains.length) * fleetMulOf(g, 'rep');
   g.sys.vmax = V_MAX * fleetMulOf(g, 'eng') * expressMul(g);
+  // bridges cost a little to keep up, every minute, like trains on the move (counted with running costs)
+  const br = bridgeSquares(g) * BRIDGE_UPKEEP / 60 * dt;
+  if (br > 0) { g.s.money -= br; g.s.upkeep = (g.s.upkeep ?? 0) + br; }
   for (const t of g.s.trains) {
     if (t.v > 0) { const c = UPKEEP * fm * dt; g.s.money -= c; g.s.upkeep = (g.s.upkeep ?? 0) + c; }
     const j = t.job;

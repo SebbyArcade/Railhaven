@@ -8,6 +8,7 @@ import { FOUND_PRICE, orderDone, orderOf, reward, sizeName, steadyGoods, stepOf,
 import { type Dest, destinationsOf, destName, type Ship, shipPlan, siteOf } from '../economy/shipping.ts';
 import { FERRY_FEE, islandOfTrain, spareTrains, trainPrice, trainStatus } from '../economy/dispatch.ts';
 import { JAM_AFTER } from '../economy/jams.ts';
+import { BRIDGE_UPKEEP, bridgeSquares } from '../track/rules.ts';
 import { dockRange, isDock, islandName, islandOfB, seaDist } from '../ships/docks.ts';
 import { EXPEDITION_DOCK, expeditionError, expeditionPrice } from '../world/expedition.ts';
 import { RING_ISLANDS } from '../world/terrain.ts';
@@ -352,6 +353,7 @@ function shedCard(g: Game): string {
         + (dock ? `<button class="mini" data-act="open" data-kind="bld" data-id="${dock.id}" data-page="trains">⛴ Ship ›</button>` : '') + `</div>`;
     }
   }
+  { const nb = bridgeSquares(g); if (nb) h += `<div class="note">🌉 ${nb} bridge square${nb === 1 ? "" : "s"} on your railway: ${fmtMoney(nb * BRIDGE_UPKEEP)} a minute to keep up</div>`; }
   h += `<h3>🔧 Fleet upgrades (every train)</h3>`;
   for (const k of Object.keys(FLEET) as FleetKey[]) {
     const f = FLEET[k], l = fleetLvl(g, k), p = f.price[l], top = p === undefined;
