@@ -1,6 +1,8 @@
 import type { Network } from '../track/network.ts';
+import type { Step } from '../track/types.ts';
 import { looks } from './looks.ts';
-import { bodyPoint, CAR_LEN, COUPLING, ENGINE_LEN, type Train, trainLength } from '../trains/train.ts';
+import { bodyPoint, CAR_LEN, COUPLING, ENGINE_LEN, stepPoint, type Train, trainLength } from '../trains/train.ts';
+import { isRev } from '../track/route.ts';
 
 function vehicle(ctx: CanvasRenderingContext2D, net: Network, t: Train, from: number, len: number, draw: (l: number) => void) {
   // two bogies a little in from each end: the body sits between them, like the real thing
@@ -21,7 +23,8 @@ export function drawTrains(ctx: CanvasRenderingContext2D, net: Network, trains: 
     const order = t.engineAhead ? ['E', ...Array(t.cars).fill('W')] : [...Array(t.cars).fill('W'), 'E'];
     order.forEach((kind, k) => { const len = kind === 'E' ? ENGINE_LEN : CAR_LEN; parts.push({ at, len, engine: kind === 'E', k }); at += len + COUPLING; });
     void L;
-    for (const p of parts) vehicle(ctx, net, t, p.at, p.len, l => {
+    const rr = t.rr ? runRoundEngine(net, t) : null; // the engine is off running round its wagons
+    for (const p of parts) if (!(rr && p.engine)) vehicle(ctx, net, t, p.at, p.len, l => {
       // the body's +x points toward the train's head
       ctx.fillStyle = 'rgba(0,0,0,.28)'; ctx.fillRect(-l / 2 + 1, -3.2, l, 7.4);
       if (p.engine) {
@@ -42,8 +45,25 @@ export function drawTrains(ctx: CanvasRenderingContext2D, net: Network, trains: 
         }
       }
     });
+    if (rr) {
+      ctx.save(); ctx.translate(rr.x, rr.y); ctx.rotate(rr.a);
+      const l = ENGINE_LEN, fwd = rr.fwd;
+      ctx.fillStyle = 'rgba(0,0,0,.28)'; ctx.fillRect(-l / 2 + 1, -3.2, l, 7.4);
+      ctx.fillStyle = looks.paint.body; ctx.fillRect(-l / 2, -3.4, l, 6.8);
+      ctx.fillStyle = '#1d1d1d'; ctx.fillRect(fwd > 0 ? l / 2 - 4 : -l / 2, -2.8, 4, 5.6);
+      ctx.fillStyle = looks.paint.beam; ctx.fillRect(fwd > 0 ? l / 2 - 0.8 : -l / 2, -3.4, 0.8, 6.8);
+      ctx.fillStyle = looks.paint.roof; ctx.fillRect(fwd > 0 ? -l / 2 : l / 2 - 5, -3.6, 5, 7.2);
+      ctx.fillStyle = looks.paint.band; ctx.fillRect(-1, -3.5, 1.2, 7);
+      ctx.fillStyle = '#111'; ctx.beginPath(); ctx.arc(fwd > 0 ? l / 2 - 5.5 : -l / 2 + 5.5, 0, 1.6, 0, 7); ctx.fill();
+      ctx.restore();
+      if (rr.moving) for (let k = 0; k < 3; k++) {
+        const ph = (tm * 1.6 + k / 3 + t.id * 0.37) % 1;
+        ctx.fillStyle = `rgba(235,232,225,${0.45 * (1 - ph)})`;
+        ctx.beginPath(); ctx.arc(rr.cx, rr.cy - ph * 6, 1.6 + ph * 3, 0, 7); ctx.fill();
+      }
+    }
     // smoke from the chimney while moving
-    if (t.v > 2) {
+    if (t.v > 2 && !rr) {
       const e = parts.find(p => p.engine)!, c = bodyPoint(net, t, e.at + (t.engineAhead ? 4 : e.len - 4));
       for (let k = 0; k < 3; k++) {
         const ph = (tm * 1.6 + k / 3 + t.id * 0.37) % 1;
@@ -52,4 +72,28 @@ export function drawTrains(ctx: CanvasRenderingContext2D, net: Network, trains: 
       }
     }
   }
+}
+
+/**
+ * Where the engine is while it runs round its wagons: along its way (off the front, along the other track, onto the
+ * back), front at distance s, body trailing behind it. After each reversal it runs the other way round (tender first).
+ */
+function runRoundEngine(net: Network, t: Train) {
+  const r = t.rr!, head = t.trail.at(-1)!;
+  // the way as a list of steps, starting with the head step, and the number of reversals before each
+  const steps: { s: Step; revs: number }[] = [{ s: head, revs: 0 }]; let revs = 0;
+  for (const m of r.moves) { if (isRev(m)) { revs++; continue; } steps.push({ s: m, revs }); }
+  const lens = steps.map(x => net.pieces[x.s.piece]!.len);
+  const startS = t.headS; // the engine's chimney end starts where the train's head stands
+  const at = (d: number) => { // point at distance d along the way (from the start of the head step)
+    let k = 0, dd = Math.max(0, d);
+    while (k < steps.length - 1 && dd > lens[k]!) { dd -= lens[k]!; k++; }
+    return { p: stepPoint(net, steps[k]!.s, Math.min(dd, lens[k]!)), revs: steps[k]!.revs };
+  };
+  // `front` follows the chimney end; after an odd number of reversals the engine runs tender first, so its body lies
+  // further along the way instead of behind
+  const front = startS + Math.min(r.s, r.len), a = at(front), odd = a.revs % 2 === 1, b = at(front + (odd ? ENGINE_LEN : -ENGINE_LEN));
+  const cx = (a.p.x + b.p.x) / 2, cy = (a.p.y + b.p.y) / 2;
+  const ang = Math.atan2(a.p.y - b.p.y, a.p.x - b.p.x) || Math.atan2(a.p.ty, a.p.tx);
+  return { x: cx, y: cy, a: ang, fwd: 1, cx: a.p.x, cy: a.p.y, moving: r.wait <= 0 && r.s < r.len };
 }

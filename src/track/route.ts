@@ -9,12 +9,12 @@ export interface Rev { rev: true; clear: NodeKey | 'end' | null }
 export type Move = Step | Rev;
 export const isRev = (m: Move | undefined): m is Rev => !!m && 'rev' in m;
 
-const key = (s: Step) => s.piece * 2 + (s.dir === 1 ? 0 : 1);
+const keyOf = (s: Step) => s.piece * 2 + (s.dir === 1 ? 0 : 1);
 const rev = (s: Step): Step => ({ piece: s.piece, dir: s.dir === 1 ? -1 : 1 });
 export const sameStep = (a: Move | undefined, b: Step) => !!a && !isRev(a) && a.piece === b.piece && a.dir === b.dir;
 
 /** Reversing costs this much extra, so trains only do it when it really is the way. */
-export const REVERSE_COST = 6 * 32;
+export const REVERSE_COST = 12 * 32;
 
 /**
  * Steps a train runs onto past the end of `s` before it can reverse there: straight on, until the whole train
@@ -49,6 +49,16 @@ export interface RouteRequest {
   canReverseNow?: boolean;
   /** last check on a whole route that reached a goal; false keeps searching */
   accept?: (moves: Move[]) => boolean;
+  /**
+   * At goal steps where `when` holds, the route must have reversed an even (0) or odd (1) number of times. Used to
+   * back a train into a dead-end yard or station, so its engine ends up at the open end and it leaves pulling.
+   */
+  revParity?: { want: 0 | 1; when: (s: Step) => boolean };
+  /**
+   * Running with the engine at the back (pushing) costs this much extra per px, so routes turn the train early
+   * (where the track allows) rather than push it a long way. `engineAhead` is how the train stands now.
+   */
+  push?: { engineAhead: boolean; perPx: number };
 }
 
 /**
@@ -56,13 +66,18 @@ export interface RouteRequest {
  * last junction (or at buffer stops), at a cost. Returns the moves after the current head step, or null.
  */
 export function findRoute(net: Network, q: RouteRequest): Move[] | null {
+  // with revParity, a state is a step plus how many reversals so far (even or odd)
+  const P = q.revParity || q.push ? 2 : 1;
+  const pushing = (par: number) => !!q.push && q.push.engineAhead === (par === 1); // engine behind after this many reversals
+  const w = (l: number, par: number) => l * (pushing(par) ? 1 + q.push!.perPx : 1);
+  const key = (s: Step, par = 0) => keyOf(s) * P + par, parOf = (k: number) => P === 2 ? k & 1 : 0;
   const dist = new Map<number, number>(), prev = new Map<number, { from: number; moves: Move[] }>();
   const heap: [number, number, Step][] = [];
-  const pushH = (d: number, s: Step) => { heap.push([d, key(s), s]); let i = heap.length - 1; while (i > 0) { const p = (i - 1) >> 1; if (heap[p]![0] <= heap[i]![0]) break; [heap[p], heap[i]] = [heap[i]!, heap[p]!]; i = p; } };
+  const pushH = (d: number, s: Step, k: number) => { heap.push([d, k, s]); let i = heap.length - 1; while (i > 0) { const p = (i - 1) >> 1; if (heap[p]![0] <= heap[i]![0]) break; [heap[p], heap[i]] = [heap[i]!, heap[p]!]; i = p; } };
   const popH = () => { const top = heap[0]!, last = heap.pop()!; if (heap.length) { heap[0] = last; let i = 0; for (;;) { const l = i * 2 + 1, r = l + 1; let m = i; if (l < heap.length && heap[l]![0] < heap[m]![0]) m = l; if (r < heap.length && heap[r]![0] < heap[m]![0]) m = r; if (m === i) break; [heap[m], heap[i]] = [heap[i]!, heap[m]!]; i = m; } } return top; };
-  const relax = (d: number, s: Step, from: number, moves: Move[]) => {
-    const k = key(s); if ((dist.get(k) ?? Infinity) <= d) return;
-    dist.set(k, d); prev.set(k, { from, moves }); pushH(d, s);
+  const relax = (d: number, s: Step, from: number, moves: Move[], par = 0) => {
+    const k = key(s, par); if ((dist.get(k) ?? Infinity) <= d) return;
+    dist.set(k, d); prev.set(k, { from, moves }); pushH(d, s, k);
   };
   const START = -1;
   const len = (x: Step) => net.pieces[x.piece]!.len;
@@ -83,13 +98,14 @@ export function findRoute(net: Network, q: RouteRequest): Move[] | null {
     }
     return last;
   };
-  const stepOf = (k: number): Step => ({ piece: k >> 1, dir: k & 1 ? -1 : 1 });
+  const stepOf = (k0: number): Step => { const k = P === 2 ? k0 >> 1 : k0; return { piece: k >> 1, dir: k & 1 ? -1 : 1 }; };
   relax(0, q.head, START, []);
-  if (q.canReverseNow) relax(REVERSE_COST, rev(q.tail), START, [{ rev: true, clear: null }]);
+  if (q.canReverseNow) relax(REVERSE_COST, rev(q.tail), START, [{ rev: true, clear: null }], P === 2 ? 1 : 0);
   while (heap.length) {
     const [d, k, s] = popH();
     if (d > (dist.get(k) ?? Infinity)) continue;
-    if (q.goal(s)) {
+    const par = parOf(k), flip = P === 2 ? 1 - par : 0;
+    if (q.goal(s) && (!q.revParity || !q.revParity.when(s) || par === q.revParity.want)) {
       // rebuild the moves
       const out: Move[] = []; let cur = k;
       for (;;) { const p = prev.get(cur)!; out.unshift(...p.moves); if (p.from === START) break; cur = p.from; }
@@ -97,17 +113,17 @@ export function findRoute(net: Network, q: RouteRequest): Move[] | null {
     }
     for (const nx of nextSteps(net, s)) {
       const e = q.extra?.(nx) ?? 0; if (e === Infinity) continue;
-      relax(d + net.pieces[nx.piece]!.len + e, nx, k, [nx]);
+      relax(d + w(net.pieces[nx.piece]!.len, par) + e, nx, k, [nx], par);
     }
     const run = reverseRunOn(net, s, q.trainLen);
     if (run && !run.length) {
       // at a buffer stop: after reversing, the front of the train is where its back was, a train length back
       const back = bodyBack(k, s);
-      if (back) relax(d + REVERSE_COST, rev(back), k, [{ rev: true, clear: 'end' }]);
+      if (back) relax(d + REVERSE_COST, rev(back), k, [{ rev: true, clear: 'end' }], flip);
     } else if (run) {
       // drive on past the end, reverse, and come back over the same pieces onto s the other way
       let e = 0; for (const r of run) e += (q.extra?.(r) ?? 0) + net.pieces[r.piece]!.len * 2;
-      if (e !== Infinity) relax(d + REVERSE_COST + e, rev(s), k, [...run, { rev: true, clear: run.length ? exitNode(net, s) : 'end' }, ...run.slice().reverse().map(rev), rev(s)]);
+      if (e !== Infinity) relax(d + REVERSE_COST + e, rev(s), k, [...run, { rev: true, clear: run.length ? exitNode(net, s) : 'end' }, ...run.slice().reverse().map(rev), rev(s)], flip);
     }
   }
   return null;
