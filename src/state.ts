@@ -89,6 +89,8 @@ export interface GameState {
   upkeep?: number;
   /** rushes finished (for achievements) */
   rushDone?: number;
+  /** train loads and ship loads delivered (for achievements) */
+  loads?: number; shipLoads?: number;
   /** orders already counted toward the all-games orders achievement */
   achOrd?: number;
 }

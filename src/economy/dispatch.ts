@@ -120,6 +120,7 @@ const pay = (g: Game, v: number) => { g.s.money += v; g.s.earned = (g.s.earned ?
  */
 function unload(g: Game, t: Train) {
   const j = t.job!, c = t.cargo!, k = c.good as Good;
+  g.s.loads = (g.s.loads ?? 0) + 1; // train loads delivered (for achievements)
   if (j.to.kind === 'bld' && isDock(bldOf(g, j.to.id)!)) { // a dock: the goods wait for a ship (or stay landed for this island)
     const d = bldOf(g, j.to.id)!;
     if (j.sea !== undefined) { const q = (d.outq ??= []).find(x => x.to === j.sea && x.good === k); if (q) q.n += c.n; else d.outq.push({ good: k, n: c.n, to: j.sea }); }

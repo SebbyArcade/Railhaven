@@ -134,7 +134,7 @@ export function tickShips(g: Game, dt: number) {
     }
     // unload what is for this dock
     const here = s.hold.filter(q => q.to === at.id);
-    if (here.length) { for (const q of here) (at.landed ??= {})[q.good] = (at.landed[q.good] ?? 0) + q.n; s.hold = s.hold.filter(q => q.to !== at.id); }
+    if (here.length) { for (const q of here) (at.landed ??= {})[q.good] = (at.landed[q.good] ?? 0) + q.n; s.hold = s.hold.filter(q => q.to !== at.id); g.s.shipLoads = (g.s.shipLoads ?? 0) + 1; }
     if ((s.wait -= dt) > 0) continue;
     const routes = lanesFrom(g, at.id, L());
     // load for the route with the most goods waiting
