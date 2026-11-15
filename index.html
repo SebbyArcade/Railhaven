@@ -113,6 +113,10 @@
   #mission .lbtn { display: flex; gap: 10px; align-items: center; margin-top: 6px; } #mission .lbtn button { background: #ffd27a; color: #2a1c08; }
   #mission .lbtn button.skip { background: none; color: #e8d8b8; text-decoration: underline; font-weight: 500; font-size: 12px; padding: 4px; }
   #mission .nice { color: #7fd36b; font-weight: 800; }
+  #tip { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(max(8px, env(safe-area-inset-bottom)) + 74px); width: min(calc(100vw - 16px), 460px); display: none; align-items: center; gap: 8px; background: rgba(28,40,22,.95); border: 2px solid #9bd36b; border-radius: 14px; padding: 7px 8px 7px 10px; font-size: 13px; line-height: 1.35; color: #eef7dc; box-sizing: border-box; z-index: 6; }
+  #tip .tic { font-size: 22px; line-height: 1; } #tip .tt { flex: 1; min-width: 0; }
+  #tip button { border: 0; border-radius: 10px; padding: 6px 10px; font-size: 13px; font-weight: 700; flex: none; background: #2f8f8a; color: #fff; }
+  #tip button.x { background: none; color: #cfe3b8; font-size: 16px; padding: 4px 6px; } #tip button.off { background: #6b4a2a; }
   .tutHi { outline: 4px solid #ffd27a !important; box-shadow: 0 0 16px 4px #ffd27acc !important; }
   #tutPtr { position: fixed; z-index: 25; pointer-events: none; text-align: center; transform: translateX(-50%); font-weight: 800; color: #ffd27a; text-shadow: 0 1px 3px #000, 0 0 8px #000; font-size: 13px; display: none; white-space: nowrap; }
   #tutPtr span { display: block; font-size: 34px; line-height: 1; animation: tutB .8s ease-in-out infinite; }
@@ -133,6 +137,7 @@
 <div id="mission"></div>
 <div id="tutPtr"></div>
 <div id="toast"></div>
+<div id="tip"></div>
 <div id="hint"></div>
 <div id="viewTag"><span></span><button data-v="">✕</button></div>
 <button id="undo">↶ Undo</button>

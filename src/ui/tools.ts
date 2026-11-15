@@ -248,6 +248,7 @@ export class Tools {
         if (g.track.get(i)?.links === 15 && (!this.plan || this.plan.path.length <= 1)) { this.plan = null; this.flipCrossing(i); return true; } // a four-way square: crossing ⇄ junction
         this.plan = { path: [i] }; toast('Now tap where the line should go (or drag)'); return true;
       }
+      if (!this.plan && g.s.sites.some(s => s.kind === 'plot' && s.y * n + s.x === i)) return false; // the flag: its card opens
       toast('New track must join your network: start from your track or from Ashford'); return true;
     }
     if (this.mode === 'double') { if (g.track.has(i)) { if (this.dbl.has(i)) this.dbl.delete(i); else this.dbl.add(i); } return true; }

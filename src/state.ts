@@ -68,6 +68,11 @@ export interface GameState {
   orders?: number;
   /** game time of the last no-fail top-up */
   rescueAt?: number;
+  /** when the railway board last paid for a needed building, and which kind (no-fail for a slow start) */
+  grantAt?: number;
+  grantFor?: import('./buildings/industries.ts').IndustryKind;
+  /** 💡 money tips switched off in Settings */
+  tipsOff?: boolean;
   /** forests: wood cut so far from a forest square (each holds TREE_WOOD), and when a cut-down square grows back (game time) */
   cut?: Record<number, number>;
   stumps?: Record<number, number>;
@@ -140,6 +145,12 @@ export interface Game {
   taken?: { key: string; net: Network; set: Set<number> };
   /** things to tell the player (the UI shows and clears them) */
   news?: string[];
+  /** [time, earned minus running costs] every few seconds, for the last few minutes (not saved) */
+  netLog?: [number, number][];
+  /** when the 💡 money tip last came up (not saved) */
+  tipAt?: number;
+  /** mines that have an uncovered deposit to stand on, checked now and then (not saved) */
+  mineOk?: Map<string, { at: number; ok: boolean }>;
   /** landmarks just spotted, waiting for their discovery card (not saved) */
   found?: number[];
   /** set by the renderer: squares whose baked terrain must be redrawn (track hides trees) */

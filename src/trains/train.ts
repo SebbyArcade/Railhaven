@@ -58,6 +58,10 @@ export interface Train {
    * `s` how far along it is, `wait` the uncoupling or coupling time left.
    */
   rr?: { moves: Move[]; s: number; len: number; wait: number };
+  /** 💰 sold: it goes as soon as its load is delivered */
+  sellAfter?: boolean;
+  /** seconds since it last had a job (no paying load anywhere) */
+  noWork?: number;
 }
 
 export const trainLength = (t: Train) => ENGINE_LEN + t.cars * (CAR_LEN + COUPLING);

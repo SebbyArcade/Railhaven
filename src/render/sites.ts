@@ -1,3 +1,4 @@
+import { FOUND_PRICE } from '../economy/towns.ts';
 import { sizeName, stepOf } from '../economy/towns.ts';
 import { isCapital, tradeOf } from '../economy/trade.ts';
 import { GOODS } from '../buildings/industries.ts';
@@ -169,6 +170,8 @@ function drawPlot(ctx: CanvasRenderingContext2D, s: Site) {
   ctx.strokeStyle = '#5a3e24'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(X, Y + 8); ctx.lineTo(X, Y - 12); ctx.stroke();
   ctx.fillStyle = '#e8603c'; ctx.beginPath(); ctx.moveTo(X, Y - 12); ctx.lineTo(X + 11, Y - 8); ctx.lineTo(X, Y - 4); ctx.fill();
   ctx.font = 'italic 10px Georgia,serif'; ctx.textAlign = 'center'; ctx.fillStyle = 'rgba(255,240,210,.85)'; ctx.fillText('settlement site', X, Y + 18);
+  // what to do with it, in plain words (it is a card behind a tap)
+  ctx.font = 'bold 8px system-ui'; ctx.fillStyle = 'rgba(255,226,168,.95)'; ctx.fillText(`tap to found a town · $${FOUND_PRICE.toLocaleString('en-US')}`, X, Y + 28);
 }
 
 function drawDeposit(ctx: CanvasRenderingContext2D, s: Site) {

@@ -7,7 +7,7 @@ import { hasProject, nextParkPrice, orderMul, PARK_PRICE, parkSpot, parksOf, pay
 import { isCapital, islandOfSite, regions, tradeOf, tradeReward, tradeWhy } from '../economy/trade.ts';
 import { FOUND_PRICE, orderDone, orderOf, reward, sizeName, steadyGoods, stepOf, townLinked, upgradePrice } from '../economy/towns.ts';
 import { type Dest, destinationsOf, destName, type Ship, shipPlan, siteOf } from '../economy/shipping.ts';
-import { FERRY_FEE, islandOfTrain, spareTrains, trainPrice, trainStatus } from '../economy/dispatch.ts';
+import { FERRY_FEE, islandOfTrain, spareTrains, trainPrice, trainRefund, trainStatus } from '../economy/dispatch.ts';
 import { JAM_AFTER } from '../economy/jams.ts';
 import { BRIDGE_UPKEEP, bridgeSquares } from '../track/rules.ts';
 import { dockRange, isDock, islandName, islandOfB, seaDist } from '../ships/docks.ts';
@@ -157,9 +157,11 @@ function townPage(g: Game, t: Site, page: string): string {
 function plotCard(g: Game, p: Site): string {
   const can = g.s.money >= FOUND_PRICE;
   let h = `<div class="head"><b class="big">🚩</b><div><h2>${esc(p.name ?? 'Settlement site')}</h2><span class="chip2">Settlement site</span></div></div>`;
-  h += `<div class="note">🏘 Open land waiting for settlers. Found a town here, then lay track onto it: it starts as a Hamlet with its own order.</div>`;
+  h += `<div class="row"><b class="ico">①</b><div class="grow"><b>Found the town</b> · ${fmtMoney(FOUND_PRICE)}<small>houses go up and it becomes a Hamlet with its own order</small></div></div>`;
+  h += `<div class="row"><b class="ico">②</b><div class="grow"><b>Lay track into its station</b><small>🛤 Rails: from your line to the town square, like any town</small></div></div>`;
+  h += `<div class="row"><b class="ico">③</b><div class="grow"><b>Fill its order</b><small>your trains bring what it asks for, and you earn its reward</small></div></div>`;
   h += `<button class="act" data-act="found" data-id="${p.id}" ${can ? '' : 'disabled'}>🏘 Found ${esc(p.name ?? 'a town')} · ${fmtMoney(FOUND_PRICE)}</button>`;
-  if (!can) h += `<small>Need ${fmtMoney(FOUND_PRICE - Math.floor(g.s.money))} more: deliveries pay for it</small>`;
+  if (!can) h += `<div class="row"><b class="ico">💰</b><div class="grow"><div class="line"><span>You have ${fmtMoney(g.s.money)}</span><span>need ${fmtMoney(FOUND_PRICE - Math.floor(g.s.money))} more</span></div>${bar(g.s.money / FOUND_PRICE, '#e8a33c')}<small>Deliveries pay for it. Short of money? Sell stock at a full building (💸 Sell) or a spare train (💰 on its card)</small></div></div>`;
   return h;
 }
 
@@ -403,6 +405,8 @@ function trainCard(g: Game, t: Train): string {
   h += `<div class="note big2">${trainStatus(g, t)}</div>`;
   if (t.lastPay) { h += `<div class="row"><b class="ico">💰</b><div class="grow">Last delivery: ${t.lastPay.n} ${GOODS[t.lastPay.good as Good]?.icon ?? ''} to ${esc(destName(g, t.lastPay.to))} paid <b>${fmtMoney(t.lastPay.pay)}</b></div></div>`; }
   h += `<small class="why">Trains run themselves: each one takes the best waiting load to the place that needs it.</small>`;
+  h += t.sellAfter ? `<div class="note">💰 Sold: it goes as soon as it has delivered its load (+${fmtMoney(trainRefund(g))})</div>`
+    : `<button class="act alt" data-act="selltrain" data-id="${t.id}">💰 Sell this train · +${fmtMoney(trainRefund(g))}<br><small>half its price back${t.cargo ? ' · it delivers its load first' : ''}</small></button>`;
   return h;
 }
 

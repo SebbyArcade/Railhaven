@@ -3,6 +3,7 @@ import { INDUSTRIES, isFactory, outputOf } from '../buildings/industries.ts';
 import { shipPlan } from './shipping.ts';
 import { trainPrice } from './dispatch.ts';
 import { sellOffer } from './upgrades.ts';
+import { checkGrant, sampleNet } from './advice.ts';
 
 /**
  * No-fail: the player can never be stuck or broke for good. When nothing is earning (no train carrying or heading
@@ -21,6 +22,8 @@ export function nextStepCost(g: Game): number {
 
 /** Called every few seconds: returns the amount granted (0 if the player isn't stuck). */
 export function checkStuck(g: Game): number {
+  sampleNet(g);
+  const grant = checkGrant(g); if (grant) return grant;
   if (g.s.t - (g.s.rescueAt ?? -1e9) < RESCUE_GAP) return 0;
   if (g.s.trains.some(t => t.job || t.cargo)) return 0; // something is earning
   if (g.s.trains.length) { // or will soon: a working camp, farm or mine with somewhere to send its goods

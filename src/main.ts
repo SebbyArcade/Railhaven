@@ -35,7 +35,8 @@ import { gameReport } from './ui/report.ts';
 import { SEASONS, seasonOf } from './world/season.ts';
 import { buyFleet, FLEET, type FleetKey, fleetLvl, refundOf, removeBuilding, rushOf, sellOffer, sellStock, toggleRush, upgradeBuilding } from './economy/upgrades.ts';
 import { foundTown, sizeName, tickTowns, upgradeTown } from './economy/towns.ts';
-import { buyTrainAt, shipTrainTo, tickTrains } from './economy/dispatch.ts';
+import { buyTrainAt, sellTrain, shipTrainTo, tickTrains, trainRefund } from './economy/dispatch.ts';
+import { moneyTip, type Tip } from './economy/advice.ts';
 import { buyShip, buyShipUp, SHIP_UP, type ShipUpKey, shipPlace, shipUpLvl } from './ships/ships.ts';
 import { POI, poisOf } from './world/explore.ts';
 import { buyFishing, FISHING } from './economy/upgrades.ts';
@@ -136,7 +137,7 @@ function renderCard() {
   if (tools.card?.kind === 'game' && cardEl.contains(document.activeElement) && document.activeElement?.tagName === 'INPUT') return; // keep a name or map number being typed
   const home = tools.card?.kind === 'game' && isHomePage(tools.card.page);
   cardEl.classList.toggle('home', home);
-  const html = tools.card && (tools.card.kind === 'game' ? (home ? homeHtml(tools.card.page, readIndex(localStorage), tools.card.id, delArmed?.id === tools.card.id && performance.now() < delArmed.until, profile, game, { online: servedOnline(), installed: isInstalled() }) : gameHtml(tools.card.page === 'settings' ? '' : tools.card.page, !!oldSave(), importReport, myCode, tools.card.page === 'stats' ? gameReport(game) : null, sound.settings, { online: servedOnline(), installed: isInstalled(), offer: canInstall() })) : cardHtml(game, tools.card, tools.view));
+  const html = tools.card && (tools.card.kind === 'game' ? (home ? homeHtml(tools.card.page, readIndex(localStorage), tools.card.id, delArmed?.id === tools.card.id && performance.now() < delArmed.until, profile, game, { online: servedOnline(), installed: isInstalled() }) : gameHtml(tools.card.page === 'settings' ? '' : tools.card.page, !!oldSave(), importReport, myCode, tools.card.page === 'stats' ? gameReport(game) : null, sound.settings, { online: servedOnline(), installed: isInstalled(), offer: canInstall() }, !game.s.tipsOff)) : cardHtml(game, tools.card, tools.view));
   if (!html) { tools.card = null; cardEl.style.display = 'none'; return; }
   cardEl.innerHTML = `<button class="x" data-act="close">✕</button>${html}`; cardEl.style.display = 'block';
   if (performance.now() - newArmed < 3000) { const nb = cardEl.querySelector<HTMLButtonElement>('button[data-act="newmap"]'); if (nb) { nb.classList.add('sure'); nb.textContent = '⚠ Tap again to start a new map'; } }
@@ -145,7 +146,7 @@ function renderCard() {
     if (b) { b.classList.add('sure'); b.textContent = '⚠ Tap again to remove it'; }
   }
 }
-let armed: { id: number; until: number } | null = null, delArmed: { id: number; until: number } | null = null;
+let armed: { id: number; until: number } | null = null, delArmed: { id: number; until: number } | null = null, sellArmed: { id: number; until: number } | null = null;
 cardEl.onclick = e => {
   const b = (e.target as HTMLElement).closest('button'); if (!b) return;
   if (b.dataset.act === 'close') { closeCard(); return; }
@@ -213,7 +214,24 @@ cardEl.onclick = e => {
   if (b.dataset.act === 'full') { const d = document.documentElement; if (document.fullscreenElement) void document.exitFullscreen?.(); else d.requestFullscreen?.().catch(() => toast('Full screen works when the game is opened in Chrome')); return; }
   if (b.dataset.act === 'copycode') { void saveCode(game).then(async c => { myCode = c; renderCard(); try { await navigator.clipboard.writeText(c); toast('📋 Code copied: paste it in 🏠 Home → ⚙ Settings on the other side'); } catch { toast('Press on the code below, Select all, then Copy'); } }); return; }
   if (b.dataset.act === 'copystats') { const t = cardEl.querySelector<HTMLTextAreaElement>('#stats'); if (t) { t.value = gameReport(game); void navigator.clipboard.writeText(t.value).then(() => toast('📋 Report copied: paste it in the chat'), () => { t.select(); toast('Press on the report, Select all, then Copy'); }); } return; }
-  if (b.dataset.act === 'savefile') { void saveCode(game).then(saveFile); return; }
+  if (b.dataset.act === 'savefile') { void saveCode(game).then(c => saveFile(c)); return; }
+  if (b.dataset.act === 'tips') { game.s.tipsOff = !game.s.tipsOff; toast(game.s.tipsOff ? '💡 Tips off: turn them back on here any time' : '💡 Tips on: they show up when money runs low'); renderCard(); return; }
+  if (b.dataset.act === 'bugreport') { // the game and a report in one file, to attach in the chat (and copied too)
+    void saveCode(game).then(async c => {
+      const text = `🐞 Railhaven bug report\n\nWhat went wrong: (write it in the chat)\n\n${gameReport(game)}\n\n--- save code (paste in ⚙ Settings → 📋 Paste a code) ---\n${c}\n`;
+      try { await navigator.clipboard.writeText(text); } catch { /* the file is enough */ }
+      await saveFile(text, 'railhaven-bug-report.txt', '🐞 Saved railhaven-bug-report.txt (and copied): attach it in the chat and say what went wrong');
+    });
+    return;
+  }
+  if (b.dataset.act === 'selltrain') {
+    const t = game.s.trains.find(x => x.id === +b.dataset.id!); if (!t) return;
+    if (!sellArmed || sellArmed.id !== t.id || performance.now() > sellArmed.until) { sellArmed = { id: t.id, until: performance.now() + 4000 }; b.innerHTML = `⚠ Tap again to sell Train ${t.id} for ${fmtMoney(trainRefund(game))}`; b.classList.add('sure'); return; }
+    sellArmed = null; const v = trainRefund(game), why = sellTrain(game, t);
+    if (why === 'later') { toast(`💰 Train ${t.id} is sold: it goes once it has delivered its load`); renderCard(); return; }
+    if (why) { toast(why); return; }
+    tools.selected = null; closeCard(); toast(`💰 Train ${t.id} sold · +${fmtMoney(v)}`); return;
+  }
   if (b.dataset.act === 'loadold') { const t = oldSave(); if (t) void bringOver(t); return; }
   if (b.dataset.act === 'loadpaste') { const t = (cardEl.querySelector('#pasteCode') as HTMLTextAreaElement | null)?.value ?? ''; if (t.trim()) void bringOver(t); else toast('Paste the code first'); return; }
   if (b.dataset.go !== undefined) { goMission(+b.dataset.go); return; }
@@ -290,6 +308,33 @@ pill.onclick = e => {
   if (tools.card?.kind === 'story') closeCard(); else openCard({ kind: 'story', id: 0 });
 };
 const lookAt = (x: number, y: number) => { const c = game.s.camera; c.x = (x + 0.5) * 32; c.y = (y + 0.5) * 32; };
+
+// 💡 Money tips: when money runs low, why and one thing to do (Settings switches them off)
+const tipEl = $('tip');
+let tipNow: Tip | null = null, tipAsk = false, tipHideUntil = 0;
+function updateTip() {
+  const show = !tipAsk && tools.mode === 'pan' && !tools.card && !menuOpen && game.s.t >= tipHideUntil;
+  tipNow = show ? moneyTip(game) : null;
+  const h = tipAsk ? `<b class="tic">💡</b><span class="tt">Turn tips off? You can turn them back on in 🏠 Home → ⚙ Settings.</span><button class="off" data-tipoff>Turn off</button><button data-tipone>Just this one</button>`
+    : tipNow ? `<b class="tic">💡</b><span class="tt">${tipNow.text.replace(/[&<>]/g, c => `&#${c.charCodeAt(0)};`)}</span><button data-tipgo>Go ›</button><button class="x" data-tipx aria-label="Hide tip">✕</button>` : '';
+  if (tipEl.innerHTML !== h) tipEl.innerHTML = h;
+  tipEl.style.display = h ? 'flex' : 'none';
+}
+tipEl.onclick = e => {
+  const b = (e.target as HTMLElement).closest('button'); if (!b) return;
+  if (b.dataset.tipx !== undefined) { tipAsk = true; updateTip(); return; }
+  if (b.dataset.tipoff !== undefined) { game.s.tipsOff = true; tipAsk = false; updateTip(); toast('💡 Tips off'); return; }
+  if (b.dataset.tipone !== undefined) { tipAsk = false; tipHideUntil = game.s.t + 300; updateTip(); return; } // back in five game minutes if still needed
+  if (b.dataset.tipgo !== undefined && tipNow) {
+    const go = tipNow.go;
+    if (go.kind === 'build') startBuild(go.what);
+    else if (go.kind === 'bld') { const x = game.s.buildings?.find(q => q.id === go.id); if (x) { lookAt(x.x, x.y); openCard({ kind: 'bld', id: x.id }); } }
+    else if (go.kind === 'train') { const p = (window as any).railhaven.trainAt(go.id); if (p) { game.s.camera.x = p.x; game.s.camera.y = p.y; } tools.selected = go.id; openCard({ kind: 'train', id: go.id }); }
+    else openCard({ kind: 'orders', id: 0 });
+    updateTip();
+  }
+};
+
 function startBuild(k: IndustryKind) {
   const lock = lockedText(game, k);
   if (lock) { toast(`${lock}: fill more town orders to raise your Railway level`); return; }
@@ -463,18 +508,18 @@ async function bringOver(text: string) {
   } catch (e) { toast('⚠ ' + ((e as Error).message || 'That save could not be read')); }
 }
 /** Save the code as a file: through Claude's download prompt inside the Claude app, a plain browser download elsewhere. */
-async function saveFile(code: string) {
-  const name = 'railhaven-save.txt', cl = (window as any).claude;
+async function saveFile(code: string, name = 'railhaven-save.txt', done = '💾 Saved ' + name) {
+  const cl = (window as any).claude;
   if (cl?.use) {
     const dl = await Promise.race([cl.use('downloads'), new Promise(r => setTimeout(() => r(null), 3000))]) as any;
     if (dl) {
-      try { await dl.save({ filename: name, data: code }); toast('💾 Saved ' + name); }
+      try { await dl.save({ filename: name, data: code }); toast(done, 5000); }
       catch (e: any) { if (e?.code !== 'declined') toast('This app can\'t save files here: use 📋 Copy my code instead'); }
       return;
     }
   }
   const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([code], { type: 'text/plain' })); a.download = name;
-  document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 5000); toast('💾 Saved ' + name);
+  document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 5000); toast(done, 5000);
 }
 const filePick = document.createElement('input'); filePick.type = 'file'; filePick.accept = '.json,.txt,application/json,text/plain';
 filePick.onchange = async () => { const f = filePick.files?.[0]; filePick.value = ''; if (f) await bringOver(await f.text()); };
@@ -534,6 +579,7 @@ function frame(now: number) {
     }
     renderCard();
     if (!lessonOn(game)) { const ph = missionPill(game); if (pill.innerHTML !== ph) pill.innerHTML = ph; pill.style.display = ph ? 'flex' : 'none'; }
+    updateTip();
   }
   saveT += dt; if (saveT > 5) { saveT = 0; saveTo(localStorage, game); }
   renderer.draw(ctx, view, dpr, now / 1000);
