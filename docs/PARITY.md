@@ -21,7 +21,7 @@ that makes sense. Details for each line: `legacy/CHANGES.md` (search the version
 - [x] Terrain art from the old game (grass, shores, trees, mountains, moving water), cached in chunks
 - [x] Save every 5 s and when hidden; versioned save format with migrations
 - [x] Seasons (colours per season)
-- [ ] Island name pills and info when zoomed out (v211)
+- [x] Island name pills and info when zoomed out (v211): towns on the railway / found, trains, ships
 - [ ] Endless seas: rings of new islands when most are linked (planned, never built in the old game)
 
 ## Stage 2: real rails and trains
@@ -31,7 +31,7 @@ that makes sense. Details for each line: `legacy/CHANGES.md` (search the version
 - [x] Station halls (2 platform lanes, entered only at the ends, building per town size)
 - [x] Trains on rail pieces: no spin, reverse at dead ends, queue at signals, easing (plus: parked trains move aside, trains step aside when the way is blocked)
 - [ ] Bridges: trestle/stone/steel truss by depth, $500/$1,500/$3,500 per square, upkeep, never join two islands, max 3 from land / 8 long (done except upkeep, which comes with the economy)
-- [ ] Remove track square, route-cut warning, broken rail events + repair handcar (done except the route-cut warning, which needs buildings)
+- [x] Remove track square, route-cut warning, broken rail events + repair handcar (done, route-cut warning names the towns and buildings a removal cuts off)
 - [x] Engine shed with stalls beside the line (spare trains parked inside come with buying trains in stage 3)
 
 ## Stage 3: core loop
@@ -50,7 +50,7 @@ that makes sense. Details for each line: `legacy/CHANGES.md` (search the version
 ## Stage 4: islands and sea
 - [ ] Scouting: drawn routes from towns/docks, pay per square, refunds, boats over sea (done: 🔭 Scout tool, routes drawn from linked towns on foot or docks by boat, (10n + n(n+1)) cost, boats ×1.5, caps 36/50, 90% back for unused squares, 2 out at once; landmarks: ruins, lighthouses, lookout hills, shipwrecks; to do: buy a map)
 - [ ] Docks/landings, dock upgrades (berths, storage, cranes, warehouse), fishing boats, shellfish (done: docks and landings, reach by sea, 3 levels of reach, sea charting, landings start their own railway; fishing boats, bigger fleet, shellfish traps; dock card tiles with Back pages; to do: berths/storage/cranes, seafood in coastal orders)
-- [ ] Ships: buy at docks, roaming, sea lanes only over mapped water, storms, ferrying trains (done: cargo ships $3,000 bought at a dock, roam between docks with sea routes, wait for half a hold, goods for another island go train → dock → ship → landing → island trains; ship a train over to a landing; ship card (tap a ship); to do: ship upgrades and hold types, storms, two-hop routes)
+- [ ] Ships: buy at docks, roaming, sea lanes only over mapped water, storms, ferrying trains (done: cargo ships $3,000 bought at a dock, roam between docks with sea routes, wait for half a hold, goods for another island go train → dock → ship → landing → island trains; ship a train over to a landing; ship card (tap a ship); ships sail at half speed in storms; to do: ship upgrades and hold types, two-hop routes)
 - [ ] Island specialties (+50%), resources per island, regional capitals, trade orders, long-haul imports (done: iron and oil only on outer islands, landing crews survey their island, specialties +50% with ★ labels, coastal seafood orders; to do: regional capitals, trade orders, long-haul imports)
 - [ ] Landmarks (old halt, lookout, falls, lighthouse, ranger hut, ruins) with small perks; shipwrecks; maps to buy
 - [ ] Town parks/projects, town specialties

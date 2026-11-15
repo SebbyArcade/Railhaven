@@ -9,7 +9,10 @@ import { buyTrain, trainPrice } from '../economy/dispatch.ts';
 import { bodyPoint, trainLength } from '../trains/train.ts';
 import { fmtMoney, toast } from './hud.ts';
 import type { Card } from './cards.ts';
-import { badSquares, bestPlacement, build, footprint, INDUSTRIES, type IndustryKind, isLinked, placeError, placementsAt, priceOf, shareAt, harmOf, harmText, nearestSpot, noSpotText, lockedText } from '../buildings/industries.ts';
+import { badSquares, bestPlacement, build, footprint, INDUSTRIES, type IndustryKind, isLinked, placeError, placementsAt, priceOf, shareAt, harmOf, harmText, nearestSpot, noSpotText, lockedText, linkedSquares, yardSquares } from '../buildings/industries.ts';
+import { townLinked } from '../economy/towns.ts';
+import { hallOf } from '../buildings/stations.ts';
+import { placeName } from './orders.ts';
 
 type Placement = ReturnType<typeof placementsAt>[number];
 
@@ -31,6 +34,8 @@ export class Tools {
   plan: PaintPlan | null = null;
   dbl = new Set<number>();
   removeAt: number | null = null;
+  /** what removing that square would cut off the railway ('' when nothing) */
+  removeCut = '';
   selected: number | null = null;
   /** the open card (town, building or train), shown on the map too */
   card: Card | null = null;
@@ -231,7 +236,7 @@ export class Tools {
       if (st) { this.scout = { path: [st.sq], boat: st.boat, name: st.name }; toast(st.boat ? '⛵ Now draw where the boat should sail' : `🚶 Now draw where the scout should walk from ${st.name}`); return true; }
       toast(scoutStarts(g).length ? 'Scouts leave from a glowing town or dock on your railway' : 'Join a town to your railway first: scouts leave from there'); return true;
     }
-    if (this.mode === 'remove') { this.removeAt = g.track.has(i) ? i : null; if (!g.track.has(i)) toast('No track here'); return true; }
+    if (this.mode === 'remove') { this.removeAt = g.track.has(i) ? i : null; this.removeCut = this.removeAt === null ? '' : cutText(g, i); if (!g.track.has(i)) toast('No track here'); return true; }
     if (this.mode === 'train') return true;
     return false;
   }
@@ -293,7 +298,7 @@ export class Tools {
       const add = [...this.dbl].filter(i => g.track.has(i) && !g.track.get(i)!.dbl), c = add.length * TRACK_COST.double;
       return { text: `Double ${add.length} square${add.length === 1 ? '' : 's'} · ${fmtMoney(c)}`, ok: '✓ Double', can: add.length > 0 && c <= g.s.money };
     }
-    if (this.mode === 'remove' && this.removeAt !== null) return { text: 'Remove this track square?', ok: '✂ Remove', can: true };
+    if (this.mode === 'remove' && this.removeAt !== null) return this.removeCut ? { text: `⚠ This cuts ${this.removeCut} off the railway`, ok: '✂ Remove anyway', can: true } : { text: 'Remove this track square?', ok: '✂ Remove', can: true };
     if (this.mode === 'train') {
       const p = trainPrice(g);
       return { text: g.s.shed ? `🚂 Buy train ${g.s.trains.length + 1} · ${fmtMoney(p)}` : '🏚 Lay a straight bit of line near Ashford: the engine shed goes beside it', ok: '✓ Buy', can: !!g.s.shed && p <= g.s.money };
@@ -351,6 +356,17 @@ export class Tools {
       removeSquare(g.track, g.world.n, i); trackChanged(g); g.terrainDirty?.([i]); this.removeAt = null;
     }
   }
+}
+
+/** Towns and buildings that would no longer be on the railway if square i were removed, in words ('' if none). */
+export function cutText(g: Game, i: number): string {
+  const track: typeof g.track = new Map([...g.track].map(([k, v]) => [k, { ...v }])), was = g.linked ?? new Set<number>(); // a copy: removing a square edits its neighbours
+  removeSquare(track, g.world.n, i);
+  const after = linkedSquares({ ...g, track } as Game), n = g.world.n, names: string[] = [];
+  for (const t of g.s.sites) if (t.kind === 'town' && townLinked(g, t)) { const h = hallOf(track, n, t); if (!h || !after.has(h.squares[1])) names.push(t.name ?? 'a town'); }
+  for (const b of g.s.buildings ?? []) { const y = yardSquares(n, b)[0]!; if (was.has(y) && !after.has(y)) names.push(`the ${placeName(g, b)}`); }
+  if (!names.length) return '';
+  return names.length <= 3 ? names.join(names.length === 2 ? ' and ' : ', ') : `${names.slice(0, 2).join(', ')} and ${names.length - 2} more`;
 }
 
 /** A building's footprint (two rows of four) placed so its middle is at (cx, cy), facing the given way. */
