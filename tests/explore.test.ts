@@ -22,7 +22,7 @@ describe('scouting', () => {
     if (g.world.terr[far]) expect(isRevealed(g, far)).toBeTruthy();
     // the route can't step onto water it can see, or go square-skipping
     expect(scoutStepError(g, [st.sq], st.sq + 2, false)).toMatch(/square by square/);
-    expect(scoutCost(10, true)).toBe(Math.round((100 + 110) * 1.5));
+    expect(scoutCost(10, true)).toBe(Math.round(2 * (100 + 110) * 1.5)); expect(scoutCost(25, false)).toBe(1800);
   });
 
   it('a boat that meets land under the fog turns back and pays back 90% of the unused route', () => {

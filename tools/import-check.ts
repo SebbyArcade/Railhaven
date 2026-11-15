@@ -25,7 +25,7 @@ for (const f of fs.readdirSync('tests/saves')) {
       const docks = (g.s.buildings ?? []).filter(b => b.kind === 'dock');
       console.log('  docks', docks.length, 'linked', docks.filter(b => isLinked(g, b)).length, 'old ports', o.sites.filter((x: any) => x.type === 'port').length);
       for (const b of docks) { const k = g.world.islandOf[b.y * n + b.x]; const ys = [0,1,2,3].map(j => b.horizontal ? b.y * n + b.x + j : (b.y + j) * n + b.x); console.log('   dock', b.x, b.y, b.horizontal ? 'h' : 'v', 'isl', g.world.islandOf[ys[0]!], 'linked', isLinked(g, b), 'island track', [...g.track.keys()].filter(i => g.world.islandOf[i] === g.world.islandOf[ys[0]!]).length, 'linked there', [...g.track.keys()].filter(i => g.world.islandOf[i] === g.world.islandOf[ys[0]!] && g.linked?.has(i)).length); void k; }
-      for (const t of towns.filter(t => !townLinked(g, t))) console.log('   unlinked', t.name, 'isl', g.world.islandOf[t.y * n + t.x], 'hall', !!hallOf(g.track, n, t), 'track on sq', g.track.has(t.y * n + t.x));
+      for (const t of towns.filter(t => !townLinked(g, t))) console.log('   unlinked', t.name, 'isl', g.world.islandOf[t.y * n + t.x], 'hall', !!hallOf(g.track, n, t, g.world.terr), 'track on sq', g.track.has(t.y * n + t.x));
     }
   } catch (e) { console.log(f, 'FAILED', (e as Error).stack?.split('\n').slice(0, 4).join(' | ')); }
 }
