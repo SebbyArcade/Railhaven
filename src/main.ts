@@ -151,6 +151,7 @@ $('newGame').onclick = () => {
 $('ok').onclick = () => tools.confirm();
 $('undo').onclick = () => tools.undo();
 $('turn').onclick = () => tools.turn();
+$('near').onclick = () => { if (tools.nearestFit() && tools.preview) { const c = game.s.camera, sx = (tools.preview.x + 1.5) * 32, sy = (tools.preview.y + 1.5) * 32; if (Math.abs(sx - c.x) * c.z > view.w * 0.4 || Math.abs(sy - c.y) * c.z > view.h * 0.3) { c.x = sx; c.y = sy; } } };
 $('cancel').onclick = () => { tools.cancel(); };
 
 function updateUi() {
@@ -164,6 +165,8 @@ function updateUi() {
   const bar = tools.bar(), cb = $('confirm');
   cb.style.display = bar ? 'flex' : 'none';
   $('turn').style.display = bar?.turn ? 'block' : 'none';
+  $('near').style.display = bar?.near ? 'block' : 'none';
+  cb.classList.toggle('two', !!bar?.near);
   if (bar) { $('ctext').textContent = bar.text; ($('ok') as HTMLButtonElement).disabled = !bar.can; $('ok').textContent = bar.ok; }
 }
 

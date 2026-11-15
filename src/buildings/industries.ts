@@ -2,7 +2,7 @@ import type { Game, Site } from '../state.ts';
 import { isRevealed } from '../world/fog.ts';
 import { T } from '../world/terrain.ts';
 import { isMountainFoot } from '../world/sites.ts';
-import { stationLinkError } from './stations.ts';
+import { hallAt, hallsOf, stationLinkError } from './stations.ts';
 
 /** Goods and what they are worth per unit (the old game's `rate`). */
 export const GOODS = {
@@ -153,19 +153,8 @@ export function takenSquares(g: Game, except?: Building): Set<number> {
  * Placement is permissive: any spot that works is allowed.
  */
 export function placeError(g: Game, b: Pick<Building, 'x' | 'y' | 'horizontal' | 'side' | 'kind'>): string {
-  const n = g.world.n, info = INDUSTRIES[b.kind], taken = takenSquares(g), t = g.world.terr;
-  const fp = footprint(n, b); // mines dig into the mountain: their building row may stand on it
-  for (const i of fp) {
-    const x = i % n, y = (i / n) | 0;
-    if (x < 1 || y < 1 || x >= n - 1 || y >= n - 1) return 'Too close to the edge of the map';
-    if (!isRevealed(g, i)) return 'Part of this spot is still in the fog: explore it first';
-    if (t[i] === T.Water) return 'Part of this spot is water: pick dry land';
-    if (t[i] === T.Mountain && !(MINES.has(b.kind) && buildingSquares(n, b).includes(i))) return 'The yard track can\'t go on mountain: turn it to the flat land';
-    if (taken.has(i)) return 'Something is already built here: pick an open spot';
-    const s = g.s.sites.find(o => o.x === x && o.y === y);
-    if (s && s.kind === 'plot') return 'A settlement site is here: keep it free for a town';
-    if (s && s.kind === 'dep' && !(MINES.has(b.kind) && buildingSquares(n, b).includes(i) && s.res === info.makes)) return 'A deposit is here: only a mine for it can stand on it';
-  }
+  const n = g.world.n, info = INDUSTRIES[b.kind], t = g.world.terr;
+  for (const i of footprint(n, b)) { const e = squareError(g, b, i); if (e) return e; }
   if (MINES.has(b.kind)) {
     const dep = depositUnder(g, b);
     if (!dep) return `A ${info.name} must stand on ${info.needs}`;
@@ -175,6 +164,38 @@ export function placeError(g: Game, b: Pick<Building, 'x' | 'y' | 'horizontal' |
   } else if (shareAt(g, b) < 2 / 6) {
     return `A ${info.name} needs ${info.needs}: there is too little here`;
   }
+  return '';
+}
+
+/** The outline squares that can't be used, so the outline marks only those red. */
+export const badSquares = (g: Game, b: Pick<Building, 'x' | 'y' | 'horizontal' | 'side' | 'kind'>) => footprint(g.world.n, b).filter(i => squareError(g, b, i));
+
+/** Links along a yard's line (east-west or north-south). */
+const alongMask = (horizontal: boolean) => horizontal ? 0b0101 : 0b1010;
+
+/**
+ * Why one square of the outline can't be used, in plain words with what to do instead, or ''.
+ * A loading-track square may sit on your own straight track when the rails run the same way: the yard joins that line.
+ */
+function squareError(g: Game, b: Pick<Building, 'x' | 'y' | 'horizontal' | 'side' | 'kind'>, i: number): string {
+  const n = g.world.n, info = INDUSTRIES[b.kind], t = g.world.terr, x = i % n, y = (i / n) | 0;
+  const inRow = buildingSquares(n, b).includes(i); // mines dig into the mountain: their building row may stand on it
+  if (x < 1 || y < 1 || x >= n - 1 || y >= n - 1) return 'Too close to the edge of the map';
+  if (!isRevealed(g, i)) return 'Part of this spot is still in the fog: explore it first';
+  if (t[i] === T.Water) return 'Part of this spot is water: pick dry land';
+  if (t[i] === T.Mountain && !(MINES.has(b.kind) && inRow)) return MINES.has(b.kind) ? 'The blue loading track needs flat land: turn it so the green row is on the mountain and the blue row beside it' : 'The yard track can\'t go on mountain: turn it to the flat land';
+  for (const o of g.s.buildings ?? []) if (footprint(n, o).includes(i)) return `The ${INDUSTRIES[o.kind].name} is in the way (red squares): move the outline to open land`;
+  for (const s of g.s.sites) if (s.kind === 'town' && Math.abs(s.x - x) <= 1 && Math.abs(s.y - y) <= 1) return `Too close to ${s.name}: towns keep the squares around them free`;
+  if (g.s.shed && g.s.shed.x === x && g.s.shed.y === y) return 'The engine shed is in the way: move the outline off it';
+  const tr = g.track.get(i);
+  if (tr) {
+    if (inRow) return 'Your track runs under the green building row: slide the outline so only the blue row sits on your line';
+    if (hallAt(hallsOf(g.track, n, g.s.sites), i)) return 'A station is in the way: move the outline off the platforms';
+    if (tr.links & ~alongMask(b.horizontal)) return 'Your track crosses the blue loading track: turn the outline so the blue row runs along your rails';
+  }
+  const s = g.s.sites.find(o => o.x === x && o.y === y);
+  if (s && s.kind === 'plot') return 'A settlement site is here: keep it free for a town';
+  if (s && s.kind === 'dep' && !(MINES.has(b.kind) && inRow && s.res === info.makes)) return MINES.has(b.kind) && s.res === info.makes ? 'The deposit must be under the green building row, not the blue track' : 'A deposit is here: only a mine for it can stand on it';
   return '';
 }
 

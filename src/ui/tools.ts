@@ -7,7 +7,7 @@ import { buyTrain, trainPrice } from '../economy/dispatch.ts';
 import { bodyPoint, trainLength } from '../trains/train.ts';
 import { fmtMoney, toast } from './hud.ts';
 import type { Card } from './cards.ts';
-import { bestPlacement, build, footprint, INDUSTRIES, type IndustryKind, isLinked, placeError, placementsAt, priceOf, shareAt, harmOf, harmText, nearestSpot, noSpotText, lockedText } from '../buildings/industries.ts';
+import { badSquares, bestPlacement, build, footprint, INDUSTRIES, type IndustryKind, isLinked, placeError, placementsAt, priceOf, shareAt, harmOf, harmText, nearestSpot, noSpotText, lockedText } from '../buildings/industries.ts';
 
 type Placement = ReturnType<typeof placementsAt>[number];
 
@@ -41,6 +41,8 @@ export class Tools {
   /** the building being placed: a 2×4 outline the player drags around (red when it can't go there) */
   preview: Placement | null = null;
   previewErr = '';
+  /** the outline squares that can't be used (drawn red; the rest keep their colours) */
+  previewBad = new Set<number>();
   private dragOff: [number, number] | null = null;
 
   constructor(private g: () => Game) {}
@@ -68,6 +70,16 @@ export class Tools {
     const g = this.g();
     this.preview = p;
     this.previewErr = lockedText(g, p.kind) || placeError(g, p);
+    this.previewBad = new Set(this.previewErr ? badSquares(g, p) : []);
+  }
+
+  /** Move the outline to the nearest spot that fits, from where it is now (only when the player asks). */
+  nearestFit(): boolean {
+    const g = this.g(), p = this.preview; if (!p) return false;
+    const [cx, cy] = centreOf(p), spot = nearestSpot(g, p.kind, Math.round(cx), Math.round(cy));
+    const at = spot ? bestPlacement(g, p.kind, spot.x, spot.y).place : null;
+    if (!at) { toast(noSpotText(p.kind)); return false; }
+    this.setPreview(at); return true;
   }
 
   /** Move the outline so the tapped square is in its building row (keeping the way it faces if that fits). */
@@ -226,7 +238,7 @@ export class Tools {
   }
 
   // ---- the confirm bar
-  bar(): { text: string; ok: string; can: boolean; turn?: boolean } | null {
+  bar(): { text: string; ok: string; can: boolean; turn?: boolean; near?: boolean } | null {
     const g = this.g();
     if (this.mode === 'rail' && this.plan && this.plan.path.length > 1) {
       const e = planError(g, this.plan), n = this.plan.path.filter(i => !g.track.has(i)).length;
@@ -242,7 +254,7 @@ export class Tools {
       return { text: g.s.shed ? `🚂 Buy train ${g.s.trains.length + 1} · ${fmtMoney(p)}` : '🏚 Lay a straight bit of line near Ashford: the engine shed goes beside it', ok: '✓ Buy', can: !!g.s.shed && p <= g.s.money };
     }
     if (this.mode === 'build' && this.preview && this.previewErr) {
-      return { text: `⚠ ${this.previewErr}`, ok: '✓ Build', can: false, turn: true };
+      return { text: `⚠ ${this.previewErr}`, ok: '✓ Build', can: false, turn: true, near: !lockedText(g, this.preview.kind) };
     }
     if (this.mode === 'build' && this.preview) {
       const k = this.preview.kind, price = priceOf(g, k), out = Math.round(INDUSTRIES[k].rate * shareAt(g, this.preview) * 60);
