@@ -3,8 +3,9 @@ import { looks } from './looks.ts';
 import { hash } from '../core/rng.ts';
 import type { Game, Site } from '../state.ts';
 import type { Hall } from '../buildings/stations.ts';
-import { buildingSide } from './stations.ts';
+import { buildingSide, stationDoor } from './stations.ts';
 import { isRevealed } from '../world/fog.ts';
+import { footprint } from '../buildings/industries.ts';
 import { TILE } from '../world/terrain.ts';
 import { bush, cottage, fence, person } from './art.ts';
 
@@ -22,14 +23,19 @@ function drawTown(ctx: CanvasRenderingContext2D, g: Game, s: Site, tm: number, z
   const L = s.lvl ?? 0, ruin = pop <= 0;
   type Spot = { hx: number; hy: number; w: number; d: number; k: number };
   const spots: Spot[] = [];
+  // a station beside the town: the town gathers round the station's forecourt, like a real railway town
+  const door = hall && !hall.squares.includes(s.y * g.world.n + s.x) ? stationDoor(g.s.seed, hall) : null;
+  const CX = door ? door.x : X, CY = door ? door.y : Y;
+  const onLane = (hx: number, hy: number, w: number) => !!door && Math.abs(hx - door.x) < w / 2 + 12 && Math.abs(hy - door.y) < 14; // the forecourt stays clear
+  if (door) forecourt(ctx, hall!, door, ruin);
   for (let k = 0; k < houses; k++) {
     const a = H(s.x, s.y, k) * 6.283, r = 12 + H(s.y, s.x, k) * (14 + houses * 1.3);
     const big = !ruin && H(k, s.y, 5) < 0.15 + L * 0.12; // more two-storey houses as the town grows
     const w = (big ? 11 : 9) + H(k, s.x, 3) * 3, d = big ? 12 : 9.5;
     let hx = 0, hy = 0, ok = false;
     for (let tries = 0; tries < 8 && !ok; tries++) { // houses keep off the rails, the station and each other
-      const rr = r + tries * 12; hx = X + Math.cos(a) * rr; hy = Y + Math.sin(a) * rr * 0.8;
-      ok = !blockedAt(g, hx, hy, w, hall) && !spots.some(o => Math.abs(o.hx - hx) < (o.w + w) / 2 + 2.5 && Math.abs(o.hy - hy) < (o.d + d) / 2 + 2.5);
+      const rr = r + tries * 12; hx = CX + Math.cos(a) * rr; hy = CY + Math.sin(a) * rr * 0.8;
+      ok = !blockedAt(g, hx, hy, w, hall) && !onLane(hx, hy, w) && !spots.some(o => Math.abs(o.hx - hx) < (o.w + w) / 2 + 2.5 && Math.abs(o.hy - hy) < (o.d + d) / 2 + 2.5);
     }
     if (ok) spots.push({ hx, hy, w, d, k });
   }
@@ -63,15 +69,32 @@ function drawTown(ctx: CanvasRenderingContext2D, g: Game, s: Site, tm: number, z
   const fs = Math.max(11, 12 / Math.min(1, zoom));
   ctx.font = `700 ${fs}px Georgia,serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   const label = s.name ?? '', tw = ctx.measureText(label).width + 12;
-  ctx.fillStyle = 'rgba(58,40,24,.92)'; ctx.fillRect(X - tw / 2, Y + 22, tw, fs + 6);
-  ctx.strokeStyle = '#c99a5b'; ctx.lineWidth = 1; ctx.strokeRect(X - tw / 2, Y + 22, tw, fs + 6);
-  ctx.fillStyle = '#ffe9c4'; ctx.fillText(label, X, Y + 22 + (fs + 6) / 2 + 1);
+  // the board sits in the middle of the town: below the town square, or among the houses round a station beside it
+  const Hb = fs * 1.75 + 14;
+  let LX = X, BT = Y + 22;
+  if (door && hall) {
+    const hx = (hall.cx + 0.5) * TILE, hy = (hall.cy + 0.5) * TILE, ax = Math.sign(Math.round(door.x - hx)), ay = Math.sign(Math.round(door.y - hy));
+    LX = door.x + ax * (tw / 2 + 26); BT = ay < 0 ? door.y - 24 - Hb : ay > 0 ? door.y + 24 : door.y - Hb / 2;
+  }
+  ctx.fillStyle = 'rgba(58,40,24,.92)'; ctx.fillRect(LX - tw / 2, BT, tw, fs + 6);
+  ctx.strokeStyle = '#c99a5b'; ctx.lineWidth = 1; ctx.strokeRect(LX - tw / 2, BT, tw, fs + 6);
+  ctx.fillStyle = '#ffe9c4'; ctx.fillText(label, LX, BT + (fs + 6) / 2 + 1);
   if (zoom >= 1.15) {
     ctx.font = `600 ${fs * 0.75}px system-ui`; ctx.fillStyle = 'rgba(20,18,14,.75)';
     const sz = townSize(s) + (pop > 0 ? ' · 👥 ' + Math.floor(pop) : ''), sw = ctx.measureText(sz).width + 10;
-    ctx.fillRect(X - sw / 2, Y + 22 + fs + 8, sw, fs * 0.75 + 5);
-    ctx.fillStyle = '#f3e6c8'; ctx.fillText(sz, X, Y + 22 + fs + 8 + (fs * 0.75 + 5) / 2 + 1);
+    ctx.fillRect(LX - sw / 2, BT + fs + 8, sw, fs * 0.75 + 5);
+    ctx.fillStyle = '#f3e6c8'; ctx.fillText(sz, LX, BT + fs + 8 + (fs * 0.75 + 5) / 2 + 1);
   }
+}
+
+/** A small paved forecourt in front of the station door, in the platform's colours (weedy while the town is in ruins). */
+function forecourt(ctx: CanvasRenderingContext2D, hall: Hall, door: { x: number; y: number }, ruin: boolean) {
+  const w = hall.horizontal ? 22 : 9, h = hall.horizontal ? 9 : 22;
+  const x = door.x - w / 2 + (hall.horizontal ? 0 : door.x < (hall.cx + 0.5) * TILE ? -w / 2 : w / 2), y = door.y - h / 2 + (hall.horizontal ? (door.y < (hall.cy + 0.5) * TILE ? -h / 2 : h / 2) : 0);
+  ctx.fillStyle = 'rgba(0,0,0,.18)'; ctx.fillRect(x + 1, y + 1, w, h);
+  ctx.fillStyle = ruin ? '#b8ad94' : '#d7ccb4'; ctx.fillRect(x, y, w, h);
+  ctx.fillStyle = ruin ? 'rgba(90,122,58,.6)' : 'rgba(120,108,88,.35)';
+  for (let i = 2; i < w - 1; i += 3) for (let j = 2; j < h - 1; j += 3) if ((i + j) % 2 === 0) ctx.fillRect(x + i, y + j, ruin ? 1 : 0.6, ruin ? 1 : 0.6);
 }
 
 /** true when a house here would sit on track or on the station (hall, platforms, building) */
@@ -80,11 +103,13 @@ function blockedAt(g: Game, hx: number, hy: number, w: number, hall?: Hall): boo
   for (const [ox, oy] of [[-w / 2, -7], [w / 2, -7], [-w / 2, 11], [w / 2, 11], [0, 2]]) {
     const x = Math.floor((hx + ox!) / TILE), y = Math.floor((hy + oy!) / TILE);
     if (g.track.has(y * n + x)) return true;
+    if (g.s.buildings?.some(b => footprint(n, b).includes(y * n + x))) return true; // nor on an industry
+    const tr = g.world.terr[y * n + x]; if (tr === undefined || tr === 0 || tr === 4) return true; // never in the water or on a mountain
     if (g.s.parks?.some(q => q.x === x && q.y === y)) return true; // a park or town project stands here
   }
   if (hall) {
     const X = (hall.cx + 0.5) * TILE, Y = (hall.cy + 0.5) * TILE, side = buildingSide(g.s.seed, hall);
-    const u = hall.horizontal ? hx - X : hy - Y, v = (hall.horizontal ? hy - Y : hx - X) * side;
+    const u = hall.horizontal ? hx - X : hy - Y, v = (hall.horizontal ? hy - Y : X - hx) * side; // v as drawHall turns it
     if (Math.abs(u) < 1.5 * TILE + w / 2 && v > -30 && v < 36) return true;
   }
   return false;

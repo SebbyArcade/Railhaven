@@ -3,7 +3,8 @@ import type { Site } from '../state.ts';
 import type { TrackMap } from '../track/types.ts';
 
 /**
- * Station halls. Every town with track on its square (or a straight line right beside it) has a hall three
+ * Station halls. Every town with track on its square (or a straight line right beside it, running past or ending
+ * there) has a hall three
  * squares long, centred there, lying along the line. Inside the hall the line is two platform tracks; the turnouts sit on the
  * square just outside each end. Track may enter a hall only at its two ends.
  */
@@ -38,6 +39,25 @@ export function hallOf(track: TrackMap, n: number, town: Site): Hall | null {
     const cx = town.x + ox, cy = town.y + oy, [dx, dy] = horizontal ? [1, 0] : [0, 1];
     const ok = [-1, 0, 1].every(k => track.get((cy + dy * k) * n + cx + dx * k)?.links === along);
     if (ok) return make(n, town, cx, cy, horizontal);
+  }
+  // a line that ends right beside the town (a mountain or the sea in the way, or just the end of a branch): a dead-end
+  // station, its platforms running back along the line from the square beside the town
+  for (const [ox, oy] of [[0, -1], [0, 1], [-1, 0], [1, 0]] as const) {
+    const horizontal = oy !== 0, along = horizontal ? bit(0) | bit(2) : bit(1) | bit(3);
+    const ex = town.x + ox, ey = town.y + oy, [dx, dy] = horizontal ? [1, 0] : [0, 1];
+    for (const s of [1, -1] as const) { // the line comes in from this side (+1: from east/south) and stops at (ex, ey)
+      const at = (k: number) => track.get((ey + dy * k * s) * n + ex + dx * k * s)?.links;
+      const inward = bit((horizontal ? (s === 1 ? 0 : 2) : (s === 1 ? 1 : 3)) as Dir);
+      if (at(0) !== inward || at(1) !== along || at(2) !== along) continue;
+      return make(n, town, ex + dx * s, ey + dy * s, horizontal);
+    }
+  }
+  // a line that comes straight at the town and stops on the square in front of it: a dead-end station on that line
+  for (const [ox, oy, away] of [[1, 0, 0], [0, 1, 1], [-1, 0, 2], [0, -1, 3]] as const) {
+    const along = ox ? bit(0) | bit(2) : bit(1) | bit(3);
+    const at = (k: number) => track.get((town.y + oy * k) * n + town.x + ox * k)?.links;
+    if (at(1) !== bit(away as Dir) || at(2) !== along || at(3) !== along) continue;
+    return make(n, town, town.x + ox * 2, town.y + oy * 2, ox !== 0);
   }
   return null;
 }
@@ -81,7 +101,7 @@ export function stationLinkError(track: TrackMap, n: number, sites: Site[], a: n
     else if (a === c || b === c) horizontal = horizontalLink;
     else continue;
     const inHall = (x: number, y: number) => horizontal ? y === hy && Math.abs(x - hx) <= 1 : x === hx && Math.abs(y - hy) <= 1;
-    const side = `Track can only enter ${s.name} station at its two ends, not from the side`;
+    const side = `Track can only enter ${s.name} station at its two ends, not from the side: the arrows show where`;
     if ((inHall(ax, ay) || inHall(bx, by)) && horizontalLink !== horizontal) return side;
     if (!cur) { // this link creates the hall: no track may already cross the squares it will cover
       const across = horizontal ? bit(1) | bit(3) : bit(0) | bit(2);

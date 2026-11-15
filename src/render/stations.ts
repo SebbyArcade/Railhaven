@@ -7,9 +7,22 @@ export function stationLevel(pop: number): number {
   return pop < 100 ? 0 : pop < 250 ? 1 : pop < 600 ? 2 : pop < 1500 ? 3 : 4;
 }
 
-/** Which side of the hall the station building stands on: +1 (south/east) or -1. */
+/**
+ * Which side of the hall the station building stands on, in the hall's frame (v > 0: south for an east-west hall,
+ * west for a north-south one, as drawHall turns it). A station beside its town faces the town; one built across the
+ * town square picks a side of its own.
+ */
 export function buildingSide(seed: number, h: Hall): 1 | -1 {
-  return hash(seed, h.town.x, h.town.y, 77) < 0.5 ? 1 : -1;
+  const t = h.town, off = h.horizontal ? t.y - h.cy : h.cx - t.x;
+  if (off) return off > 0 ? 1 : -1;
+  return hash(seed, t.x, t.y, 77) < 0.5 ? 1 : -1;
+}
+
+/** Where the station building's front door is (toward the town), in world pixels. */
+export function stationDoor(seed: number, h: Hall): { x: number; y: number } {
+  const side = buildingSide(seed, h), lv = stationLevel(h.town.pop ?? 0), v = 17 + [6, 8, 9, 10, 12][lv]!;
+  const X = (h.cx + 0.5) * TILE, Y = (h.cy + 0.5) * TILE;
+  return h.horizontal ? { x: X, y: Y + side * v } : { x: X - side * v, y: Y };
 }
 
 /**

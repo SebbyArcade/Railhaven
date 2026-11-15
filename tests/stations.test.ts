@@ -40,4 +40,30 @@ describe('station halls', () => {
     expect(atTown.length).toBe(2);
     for (const id of atTown) expect(net.passing[id]).toBe(true);
   });
+
+  it('a line ending right beside the town is a dead-end station (Brinemoor under the mountain)', () => {
+    const t: TrackMap = new Map(); layPath(t, N, line([[9, 16], [9, 10]])); // up the west side, ends beside the town
+    const h = hallOf(t, N, town)!;
+    expect(h).not.toBeNull();
+    expect(h.horizontal).toBe(false);
+    expect(h.squares).toEqual([sq(9, 10), sq(9, 11), sq(9, 12)]);
+    // two platform tracks with buffer stops at the town end
+    const dbl = doubleSquares(t, hallsOf(t, N, [town]));
+    const net = buildNetwork(t, N, { forceDouble: i => dbl.has(i) });
+    expect(net.bySquare.get(sq(9, 10))!.length).toBe(2);
+    // turning into the town from its side is still refused, with the reason
+    expect(stationLinkError(t, N, [town], sq(9, 10), sq(10, 10))).toMatch(/two ends/);
+    // ending one square short of the town is not a station
+    const u: TrackMap = new Map(); layPath(u, N, line([[9, 16], [9, 11]]));
+    expect(hallOf(u, N, town)).toBeNull(); // (9, 11) only touches the town's corner
+  });
+
+  it('a line coming straight at the town and ending in front of it is a dead-end station', () => {
+    const t: TrackMap = new Map(); layPath(t, N, line([[16, 10], [11, 10]])); // from the east, stops beside the town
+    const h = hallOf(t, N, town)!;
+    expect(h).not.toBeNull();
+    expect(h.horizontal).toBe(true);
+    expect(h.squares).toEqual([sq(11, 10), sq(12, 10), sq(13, 10)]);
+    expect(h.approaches).toEqual([sq(10, 10), sq(14, 10)]); // it can still run on into the town later
+  });
 });

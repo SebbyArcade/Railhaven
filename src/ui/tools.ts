@@ -23,7 +23,7 @@ export type Mode = 'pan' | 'rail' | 'double' | 'remove' | 'train' | 'build' | 's
 
 export const MODE_HINT: Record<Mode, string> = {
   pan: '',
-  rail: '🛤 Drag outward from your track (from Ashford at first). To join a town, lay track across its glowing square, or straight past right beside it. ✓ Build when done.',
+  rail: '🛤 Drag outward from your track (from Ashford at first). To join a town, follow its arrows: track straight across its square, past it, or ending right beside it. ✓ Build when done.',
   double: '═ Tap or drag along your track to make it double. Trains keep left, so two can pass.',
   remove: '✂ Tap a track square to remove it.',
   train: '🚂 Trains roll out of the engine shed and run themselves: each takes the best waiting load where it is needed.',
