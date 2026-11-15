@@ -55,7 +55,7 @@ that makes sense. Details for each line: `legacy/CHANGES.md` (search the version
 - [ ] Landmarks (old halt, lookout, falls, lighthouse, ranger hut, ruins) with small perks; shipwrecks; maps to buy
 - [ ] Town parks/projects, town specialties
 - [x] Adaptive missions with Mira (main + 2 side missions, rewards, swap), acts by Railway level with opening cards, journal, islands page
-- [ ] Guided lessons (first 9 steps with a pointer)
+- [x] Guided lessons (9 steps with Mira, Show me, gold ring and pointing hand, skip)
 
 ## Stage 5: extras, save import, art
 - [ ] Legacy save importer (localStorage `railhaven90` and RAILHAVEN2 codes/files) tested on every save in `tests/saves/`

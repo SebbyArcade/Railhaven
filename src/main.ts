@@ -23,6 +23,10 @@ import { buyFishing, FISHING } from './economy/upgrades.ts';
 import { checkStuck } from './economy/nofail.ts';
 import { ashford, missionsOf, msOf, swapMission } from './progress/missions.ts';
 import { missionPill } from './ui/story.ts';
+import { LESSONS, lessonOn, lessonText, skipLessons } from './progress/lessons.ts';
+import { toScreen } from './render/camera.ts';
+import { yardSquares, isLinked } from './buildings/industries.ts';
+import { orderDone } from './economy/towns.ts';
 import { townLinked } from './economy/towns.ts';
 import { islandOfB } from './ships/docks.ts';
 
@@ -32,7 +36,9 @@ const hud = document.getElementById('hud')!;
 const $ = (id: string) => document.getElementById(id)!;
 
 const params = new URLSearchParams(location.search);
-let game: Game = (!params.has('new') && loadFrom(localStorage)) || newGame(params.has('seed') ? +params.get('seed')! : undefined);
+/** a new game in the browser starts Mira's lessons */
+const freshGame = (seed?: number) => { const g = newGame(seed); g.s.tut = 0; return g; };
+let game: Game = (!params.has('new') && loadFrom(localStorage)) || freshGame(params.has('seed') ? +params.get('seed')! : undefined);
 const tools = new Tools(() => game);
 let renderer = new Renderer(game, tools);
 /** run the game rules for some seconds at once (screenshot checks and the bot) */
@@ -131,8 +137,17 @@ cardEl.onclick = e => {
 
 // Missions: the pill under the top bar opens the story card; Go › shows where to act
 const pill = $('mission');
+let skipArmed = 0;
 pill.onclick = e => {
   const b = (e.target as HTMLElement).closest('button');
+  if (lessonOn(game)) {
+    if (b?.dataset.show !== undefined) { showLesson(); return; }
+    if (b?.dataset.skip !== undefined) {
+      if (performance.now() - skipArmed > 3000) { skipArmed = performance.now(); toast('Tap Skip again to skip the lessons'); return; }
+      skipLessons(game); toast('Lessons skipped: Mira has missions for you under the top bar'); return;
+    }
+    game.s.lesMin = !game.s.lesMin; pill.innerHTML = lessonHtml(); return;
+  }
   if (b?.dataset.go !== undefined) { goMission(+b.dataset.go); return; }
   if (tools.card?.kind === 'story') closeCard(); else openCard({ kind: 'story', id: 0 });
 };
@@ -169,6 +184,95 @@ function goMission(i: number) {
   if (site) { lookAt(site.x, site.y); if (m.ty === 'order') openCard({ kind: 'town', id: site.id }); else toast(`🛤 ${m.how}`); }
 }
 
+// Lessons: the bar under the money holds the lesson; a gold ring and a hand show exactly what to tap
+function lessonHtml(): string {
+  const n = game.s.tut!, L = LESSONS[n]!, nice = game.s.lesAt !== undefined && game.s.t - game.s.lesAt < 3;
+  if (game.s.lesMin) return `<span class="mtext">🎓 Lesson ${n + 1}/${LESSONS.length} · ${L.title} ▾</span><button data-show>Show me ›</button>`;
+  return `<div class="les"><b class="lic">${L.icon}</b><div class="lbody">${nice ? '<div class="nice">✓ Nice! Next lesson</div>' : ''}<small class="cap">LESSON ${n + 1} OF ${LESSONS.length} ▴</small><b class="lt">${L.title}</b><i>${L.mira}</i><div>${lessonText(game, L)}</div>`
+    + `<div class="lbtn"><button data-show>Show me ›</button><button class="skip" data-skip>Skip lessons</button></div></div></div>`;
+}
+const unlinked = (k: (b: import('./buildings/industries.ts').Building) => boolean) => game.s.buildings?.find(b => k(b) && !isLinked(game, b));
+/** the yard end nearest the railway: where the track should reach */
+function yardEnd(b: import('./buildings/industries.ts').Building) {
+  const n = game.world.n, a = game.s.sites[0]!, ys = yardSquares(n, b);
+  // the square just past each end of the loading track: the line comes in through it
+  const out = [ys[0]! - (b.horizontal ? 1 : n), ys.at(-1)! + (b.horizontal ? 1 : n)];
+  return out.sort((p, q) => Math.hypot(p % n - a.x, ((p / n) | 0) - a.y) - Math.hypot(q % n - a.x, ((q / n) | 0) - a.y))[0]!;
+}
+const kindFor = (n: number) => n === 0 ? 'wood' : n === 3 ? 'farm' : n === 7 ? 'sawmill' : null;
+function nearTown() {
+  const a = game.s.sites[0]!, n = game.world.n;
+  return game.s.sites.filter((t, i) => i > 0 && t.kind === 'town' && !townLinked(game, t) && isRevealed(game, t.y * n + t.x)).sort((p, q) => Math.hypot(p.x - a.x, p.y - a.y) - Math.hypot(q.x - a.x, q.y - a.y))[0];
+}
+/** What to tap next for this lesson: a button, or a map square. */
+function lessonTarget(): { el?: Element | null; sq?: number; tip?: string } | null {
+  const n = game.s.tut!, N = game.world.n, a = game.s.sites[0]!, A = a.y * N + a.x;
+  const okb = $('ok') as HTMLButtonElement;
+  // ✓ is the next tap only when the tool open is the one this lesson uses
+  const ready = (m: Mode) => tools.mode === m && $('confirm').style.display !== 'none' && !okb.disabled;
+  const k = kindFor(n);
+  const rail = (b: import('./buildings/industries.ts').Building) => ready('rail') ? { el: okb } : tools.mode !== 'rail' ? { el: document.querySelector('#bar [data-mode="rail"]') } : { sq: yardEnd(b), tip: 'Drag to here, then onto the blue track' };
+  const loose = n === 1 ? unlinked(b => b.kind === 'wood') : n === 3 ? unlinked(b => b.kind === 'farm') : n === 8 ? unlinked(b => isFactory(b.kind)) : undefined;
+  if (loose) return rail(loose);
+  if (k && !(game.s.buildings ?? []).some(b => b.kind === k)) {
+    if (tools.mode === 'build' && tools.buildKind === k) return ready('build') ? { el: okb } : tools.previewErr && $('near').style.display !== 'none' ? { el: $('near') } : null;
+    if (menuOpen) return { el: menu.querySelector(`[data-k="${k}"]`) };
+    return { el: $('buildBtn') };
+  }
+  if (n === 2 && !game.s.shed) return ready('rail') ? { el: okb } : tools.mode !== 'rail' ? { el: document.querySelector('#bar [data-mode="rail"]') } : null;
+  if (n === 2) return ready('train') ? { el: okb } : tools.mode !== 'train' ? { el: document.querySelector('#bar [data-mode="train"]') } : null;
+  if (n === 4) {
+    if (tools.card?.kind === 'town' && tools.card.id === a.id) return orderDone(game, a) ? { el: cardEl.querySelector('[data-act="upgrade"]') } : null;
+    return { sq: A, tip: 'Tap Ashford' };
+  }
+  if (n === 5) {
+    const t = nearTown();
+    if (t) return ready('rail') ? { el: okb } : tools.mode !== 'rail' ? { el: document.querySelector('#bar [data-mode="rail"]') } : { sq: t.y * N + t.x, tip: `Lay track into ${t.name}` };
+    if (tools.mode !== 'scout') return { el: document.querySelector('#bar [data-mode="scout"]') };
+    if (!tools.scout) return { sq: A, tip: 'Tap Ashford' };
+    return ready('scout') ? { el: okb } : null;
+  }
+  return null;
+}
+/** Show me ›: do the first step for the player (open the right tool, bring the place into view); never builds or buys. */
+function showLesson() {
+  const n = game.s.tut!, a = game.s.sites[0]!, k = kindFor(n);
+  closeCard(); menuOpen = false; tools.mode = 'pan'; tools.cancel();
+  const loose = n === 1 ? unlinked(b => b.kind === 'wood') : n === 3 ? unlinked(b => b.kind === 'farm') : n === 8 ? unlinked(b => isFactory(b.kind)) : undefined;
+  if (loose) { const e = yardEnd(loose), N = game.world.n; lookAt(Math.round(((e % N) + a.x) / 2), Math.round((((e / N) | 0) + a.y) / 2)); tools.mode = 'rail'; toast('👇 Drag from your line to the ringed square and on onto the blue loading track, then ✓ Build'); return; }
+  if (k && !(game.s.buildings ?? []).some(b => b.kind === k)) { startBuild(k); toast('👇 The outline sits on a spot that fits: tap ✓ Build'); return; }
+  if (n === 2 && !game.s.shed) { lookAt(a.x, a.y); tools.mode = 'rail'; toast('👇 Run a few straight squares of track off your line near Ashford: the engine shed goes beside them'); return; }
+  if (n === 2) { tools.mode = 'train'; toast('👇 Tap ✓ Buy'); return; }
+  if (n === 4 || n === 6) {
+    const t = n === 4 ? a : game.s.sites.filter(s => s.kind === 'town' && (s === a || townLinked(game, s)) && !orderDone(game, s))[0] ?? a;
+    lookAt(t.x, t.y); openCard({ kind: 'town', id: t.id }); return;
+  }
+  if (n === 5) {
+    const t = nearTown();
+    if (t) { lookAt(Math.round((t.x + a.x) / 2), Math.round((t.y + a.y) / 2)); tools.mode = 'rail'; toast(`👇 Drag track from your line into ${t.name}'s station`); return; }
+    lookAt(a.x, a.y); tools.mode = 'scout'; toast('👇 Tap Ashford, then draw the route into the fog'); return;
+  }
+  const f = game.s.buildings?.find(b => isFactory(b.kind));
+  if (f) { lookAt(f.x, f.y); openCard({ kind: 'bld', id: f.id }); }
+}
+const ptr = $('tutPtr');
+let ringEl: Element | null = null;
+function updateLesson() {
+  const on = lessonOn(game);
+  pill.classList.toggle('lesson', on);
+  $('toast').style.top = on ? pill.getBoundingClientRect().bottom + 8 + 'px' : '';
+  let t: ReturnType<typeof lessonTarget> = null;
+  if (on) { const h = lessonHtml(); if (pill.innerHTML !== h) pill.innerHTML = h; pill.style.display = 'flex'; if (tools.card?.kind !== 'story') t = lessonTarget(); }
+  if (ringEl !== (t?.el ?? null)) { ringEl?.classList.remove('tutHi'); ringEl = t?.el ?? null; ringEl?.classList.add('tutHi'); }
+  tools.ring = t?.sq ?? null;
+  let x = 0, y = 0, up = false;
+  if (t?.el) { const r = t.el.getBoundingClientRect(); if (!r.width) { ptr.style.display = 'none'; return; } x = r.left + r.width / 2; up = r.top < 160; y = up ? r.bottom + 6 : r.top - 6; }
+  else if (t?.sq !== undefined) { const N = game.world.n; [x, y] = toScreen(game.s.camera, view, (t.sq % N + 0.5) * 32, (((t.sq / N) | 0) + 0.5) * 32); y -= 22 * game.s.camera.z; if (x < 0 || y < 0 || x > view.w || y > view.h) { ptr.style.display = 'none'; return; } }
+  else { ptr.style.display = 'none'; return; }
+  ptr.className = up ? 'up' : ''; ptr.innerHTML = up ? `<span>👆</span>${t.tip ?? ''}` : `${t.tip ?? ''}<span>👇</span>`;
+  ptr.style.display = 'block'; ptr.style.left = x + 'px'; ptr.style.top = (up ? y : y - ptr.offsetHeight) + 'px';
+}
+
 // Build menu: colourful tiles, one per industry
 const menu = $('buildMenu');
 let menuOpen = false;
@@ -196,7 +300,7 @@ $('newGame').onclick = () => {
   // the artifact frame blocks confirm(), so ask with a second tap instead
   if (performance.now() - newArmed > 3000) { newArmed = performance.now(); toast('Tap New again to start a new map'); return; }
   newArmed = 0;
-  game = newGame(); tools.cancel(); closeCard(); renderer = new Renderer(game, tools); saveTo(localStorage, game);
+  game = freshGame(); tools.cancel(); closeCard(); renderer = new Renderer(game, tools); saveTo(localStorage, game);
 };
 $('ok').onclick = () => tools.confirm();
 $('undo').onclick = () => tools.undo();
@@ -220,7 +324,7 @@ function updateUi() {
   if (bar) { $('ctext').textContent = bar.text; ($('ok') as HTMLButtonElement).disabled = !bar.can; $('ok').textContent = bar.ok; }
 }
 
-let last = performance.now(), saveT = 0, lastMenu = 0, lastCard = 0, newsAt = 0;
+let last0 = 0, last = performance.now(), saveT = 0, lastMenu = 0, lastCard = 0, newsAt = 0;
 function frame(now: number) {
   const dt = Math.min(0.1, (now - last) / 1000); last = now;
   if (!document.hidden) { game.s.t += dt; game.sys.tick(dt); tickProduction(game, dt); tickTowns(game, dt); tickTrains(game, dt); if (Math.floor(game.s.t / 5) !== Math.floor((game.s.t - dt) / 5)) checkStuck(game); if (tickBreaks(game)) breaksChanged(game); }
@@ -230,12 +334,13 @@ function frame(now: number) {
     const M = msOf(game); // a new act opens its card once nothing else is open
     if (M.actNew && !tools.card && tools.mode === 'pan' && !menuOpen) { M.actNew = false; openCard({ kind: 'story', id: 0, page: 'act' }); }
     renderCard();
-    const ph = missionPill(game); if (pill.innerHTML !== ph) pill.innerHTML = ph; pill.style.display = ph ? 'flex' : 'none';
+    if (!lessonOn(game)) { const ph = missionPill(game); if (pill.innerHTML !== ph) pill.innerHTML = ph; pill.style.display = ph ? 'flex' : 'none'; }
   }
   saveT += dt; if (saveT > 5) { saveT = 0; saveTo(localStorage, game); }
   renderer.draw(ctx, view, dpr, now / 1000);
   updateHud(hud, game);
   updateUi();
+  if (Math.floor(now / 120) !== Math.floor(last0 / 120)) updateLesson(); last0 = now;
   requestAnimationFrame(frame);
 }
 addEventListener('visibilitychange', () => { if (document.hidden) saveTo(localStorage, game); });

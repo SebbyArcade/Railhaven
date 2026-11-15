@@ -72,6 +72,8 @@ export interface GameState {
   pois?: import('./world/explore.ts').Poi[];
   /** scouts out exploring */
   scouts?: import('./world/explore.ts').Scout[];
+  /** guided lesson reached (new games start at 0; absent = no lessons), game time the last one was done, lesson bar folded */
+  tut?: number; lesAt?: number; lesMin?: boolean;
   /** missions with Mira, and the act shown */
   ms?: import('./progress/missions.ts').MissionState;
   /** cargo ships */
