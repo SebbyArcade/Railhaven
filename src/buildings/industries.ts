@@ -35,7 +35,7 @@ export const INDUSTRIES = {
   coal: { name: 'Coal Mine', icon: '⚫', makes: 'coal', price: 1000, rate: 1.1, needs: 'a coal seam at the foot of mountains' },
   iron: { name: 'Iron Mine', icon: '🧲', makes: 'iron', price: 1500, rate: 1.1, needs: 'an iron deposit (outer islands)' },
   oil: { name: 'Oil Well', icon: '🛢', makes: 'oil', price: 2500, rate: 0.6, needs: 'an oil seep (outer islands)' },
-  wool: { name: 'Sheep Farm', icon: '🐑', makes: 'wool', price: 900, rate: 1.1, needs: 'hills with pasture' },
+  wool: { name: 'Sheep Farm', icon: '🐑', makes: 'wool', price: 900, rate: 1.1, needs: 'open grassland for pasture' },
   sawmill: { name: 'Sawmill', icon: '🪚', makes: 'planks', price: 2500, rate: 0.6, needs: 'open flat land', in: { wood: 1 }, unlock: 1 },
   brickworks: { name: 'Brickworks', icon: '🧱', makes: 'bricks', price: 2500, rate: 0.6, needs: 'open flat land', in: { stone: 1 }, unlock: 1 },
   gristmill: { name: 'Flour Mill', icon: '🍞', makes: 'flour', price: 2500, rate: 0.6, needs: 'open flat land', in: { farm: 1 }, unlock: 1 },
@@ -111,7 +111,7 @@ export function shareAt(g: Game, b: Pick<Building, 'x' | 'y' | 'horizontal' | 's
   const t = g.world.terr, taken = takenSquares(g), free = (i: number) => !taken.has(i) && !extra?.has(i);
   if (b.kind === 'wood') return Math.min(1, around(g, b, 2).filter(i => t[i] === T.Forest && free(i)).length / 6);
   if (b.kind === 'farm') return Math.min(1, around(g, b, 1).filter(i => t[i] === T.Grass && free(i)).length / 6);
-  if (b.kind === 'wool') return Math.min(1, around(g, b, 1).filter(i => (t[i] === T.Hills || t[i] === T.Grass) && free(i)).length / 6);
+  if (b.kind === 'wool') return Math.min(1, around(g, b, 1).filter(i => t[i] === T.Grass && free(i)).length / 6);
   return 1;
 }
 
@@ -119,7 +119,7 @@ export function shareAt(g: Game, b: Pick<Building, 'x' | 'y' | 'horizontal' | 's
 export function fieldSquares(g: Game, b: Building): number[] {
   if (b.kind !== 'farm' && b.kind !== 'wool') return [];
   const t = g.world.terr, taken = takenSquares(g);
-  return around(g, b, 1).filter(i => (t[i] === T.Grass || (b.kind === 'wool' && t[i] === T.Hills)) && !taken.has(i)).slice(0, 6);
+  return around(g, b, 1).filter(i => t[i] === T.Grass && !taken.has(i)).slice(0, 6);
 }
 
 /** Buildings that would make less if these squares were built on, and how much less per minute. */
@@ -136,7 +136,7 @@ export const harmText = (h: { b: Building; lost: number }[]) => h.length ? ` · 
 
 /** Squares already used by track, buildings, towns and the shed. */
 export function takenSquares(g: Game, except?: Building): Set<number> {
-  const key = `${g.track.size}/${g.s.buildings?.length ?? 0}/${g.s.shed?.x},${g.s.shed?.y}`;
+  const key = `${g.track.size}/${g.s.buildings?.length ?? 0}/${g.s.shed?.x},${g.s.shed?.y}/${g.s.sites.filter(s => s.kind === 'town').length}`;
   if (!except && g.taken?.key === key && g.taken.net === g.net) return g.taken.set;
   const n = g.world.n, out = new Set<number>(g.track.keys());
   for (const b of g.s.buildings ?? []) if (b !== except) for (const i of footprint(n, b)) out.add(i);
@@ -168,6 +168,8 @@ export function placeError(g: Game, b: Pick<Building, 'x' | 'y' | 'horizontal' |
     const dep = depositUnder(g, b);
     if (!dep) return `A ${info.name} must stand on ${info.needs}`;
     if (!isMountainFoot(g.world, dep.x, dep.y) && (b.kind === 'stone' || b.kind === 'coal')) return 'This deposit is not at the foot of mountains';
+  } else if (b.kind === 'wool' && buildingSquares(n, b).some(i => t[i] !== T.Grass)) {
+    return 'A Sheep Farm stands on grassland: move it off the hills and woods onto open grass';
   } else if (shareAt(g, b) < 2 / 6) {
     return `A ${info.name} needs ${info.needs}: there is too little here`;
   }

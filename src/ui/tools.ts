@@ -15,7 +15,7 @@ export type Mode = 'pan' | 'rail' | 'double' | 'remove' | 'train' | 'build';
 
 export const MODE_HINT: Record<Mode, string> = {
   pan: '',
-  rail: '🛤 Drag from your track (or Ashford) to paint rails square by square. Tap next to the end to add one square.',
+  rail: '🛤 Drag from your track (or Ashford), or tap the track then tap where the line should go: it runs straight, turning once. ✓ Build when done.',
   double: '═ Tap or drag along your track to make it double. Trains keep left, so two can pass.',
   remove: '✂ Tap a track square to remove it.',
   train: '🚂 Trains roll out of the engine shed and run themselves: each takes the best waiting load where it is needed.',
@@ -93,6 +93,38 @@ export class Tools {
       if (bestPlacement(g, this.buildKind, x, y).place) this.glow.add(y * g.world.n + x);
   }
 
+  /** The line's end or a track square right next to i (within one square), to start a drag from. */
+  private nearStart(i: number): number | null {
+    const g = this.g(), n = g.world.n, x = i % n, y = (i / n) | 0, end = this.plan?.path.at(-1);
+    let best: number | null = null, bd = 9;
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+      const j = (y + dy) * n + x + dx, d = Math.abs(dx) + Math.abs(dy) - (j === end ? 0.5 : 0);
+      if ((j === end || isAnchor(g, j)) && d < bd) { bd = d; best = j; }
+    }
+    return best;
+  }
+
+  /**
+   * Run the line from its end to square i: straight on first, then one turn (the other way round if that is blocked).
+   * Stops at the first square that can't take track and says why.
+   */
+  private extendTo(i: number) {
+    const g = this.g(), n = g.world.n, p = this.plan!; const path0 = [...p.path];
+    const last = path0.at(-1)!, prev = path0.at(-2), lx = last % n, ly = (last / n) | 0, tx = i % n, ty = (i / n) | 0;
+    const goingX = prev === undefined ? Math.abs(tx - lx) >= Math.abs(ty - ly) : Math.abs(prev - last) === 1;
+    const corners = goingX ? [ly * n + tx, ty * n + lx] : [ty * n + lx, ly * n + tx];
+    let best: { path: number[]; refused?: PaintPlan['refused'] } | null = null;
+    for (const c of corners) {
+      p.path = [...path0]; p.refused = undefined;
+      extendPlan(g, p, c); if (!p.refused) extendPlan(g, p, i);
+      const got = { path: [...p.path], refused: p.refused };
+      if (!got.refused && got.path.at(-1) === i) { best = got; break; }
+      if (!best || got.path.length > best.path.length) best = got;
+    }
+    p.path = best!.path; p.refused = undefined;
+    if (best!.refused) this.refuse(best!.refused.square, best!.refused.why);
+  }
+
   private refuse(square: number, why: string) { this.flash = { square, until: performance.now() + 900 }; toast(why); }
 
   // ---- painting
@@ -103,8 +135,13 @@ export class Tools {
     }
     if (this.mode === 'rail') {
       if (this.plan && this.plan.path.includes(i)) { this.plan.path = this.plan.path.slice(0, this.plan.path.indexOf(i) + 1); return true; }
-      const p = startPlan(g, i); if (!p) return false;
-      this.plan = p; return true;
+      const p = startPlan(g, i);
+      if (p) { this.plan = p; return true; }
+      // a drag that starts just beside the end of the line or the track still paints (fingers are wide)
+      const near = this.nearStart(i); if (near === null) return false;
+      if (this.plan && this.plan.path.length > 1 && this.plan.path.at(-1) !== near) return false; // keep the line being drawn
+      if (!this.plan || this.plan.path.at(-1) !== near) this.plan = { path: [near] };
+      this.dragOver(i); return true;
     }
     if (this.mode === 'double') { if (!g.track.has(i)) return false; this.dbl.add(i); return true; }
     return false;
@@ -128,8 +165,11 @@ export class Tools {
     const g = this.g(), n = g.world.n;
     if (this.mode === 'rail') {
       const last = this.plan?.path.at(-1);
-      if (last !== undefined && Math.abs((last % n) - (i % n)) + Math.abs(((last / n) | 0) - ((i / n) | 0)) === 1) { this.dragOver(i); return true; }
-      if (isAnchor(g, i)) { this.plan = { path: [i] }; toast('Now drag or tap next to it to lay track'); return true; }
+      if (last !== undefined && !g.track.has(i)) { this.extendTo(i); return true; } // tap anywhere: the line runs there
+      if (isAnchor(g, i)) {
+        if (this.plan && this.plan.path.length > 1 && last !== i) { this.extendTo(i); return true; } // joining back onto the track
+        this.plan = { path: [i] }; toast('Now tap where the line should go (or drag)'); return true;
+      }
       toast('New track must join your network: start from your track or from Ashford'); return true;
     }
     if (this.mode === 'double') { if (g.track.has(i)) { if (this.dbl.has(i)) this.dbl.delete(i); else this.dbl.add(i); } return true; }

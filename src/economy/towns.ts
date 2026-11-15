@@ -1,6 +1,7 @@
 import type { Game, Site } from '../state.ts';
 import type { Good } from '../buildings/industries.ts';
 import { hallOf } from '../buildings/stations.ts';
+import { reveal } from '../world/fog.ts';
 
 /** The order ladder: one order per step; filling it lets the town grow one size. */
 export const LADDER: Partial<Record<Good, number>>[] = [
@@ -95,5 +96,18 @@ export function upgradeTown(g: Game, t: Site): string {
   if (price > g.s.money) return `Need $${(price - g.s.money).toLocaleString('en-US')} more to upgrade ${t.name}`;
   g.s.money -= price;
   t.lvl = stepOf(t) + 1; t.got = {}; t.filled = false;
+  return '';
+}
+
+/** Founding a town on a settlement site (the old game's price, money only). */
+export const FOUND_PRICE = 2500;
+
+/** Turn a settlement site into a new hamlet. Returns why it can't, or ''. */
+export function foundTown(g: Game, p: Site): string {
+  if (p.kind !== 'plot') return 'Towns can only be founded on 🚩 settlement sites';
+  if (g.s.money < FOUND_PRICE) return `Need ${'$' + (FOUND_PRICE - Math.floor(g.s.money)).toLocaleString('en-US')} more to found a town`;
+  g.s.money -= FOUND_PRICE;
+  p.kind = 'town'; p.pop = 15; p.lvl = 0; p.got = {};
+  reveal(g, p.x, p.y, 3);
   return '';
 }

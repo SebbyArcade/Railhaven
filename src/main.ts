@@ -14,7 +14,7 @@ import { tickProduction } from './economy/production.ts';
 import type { Game } from './state.ts';
 import { footprint } from './buildings/industries.ts';
 import { type Card, cardHtml } from './ui/cards.ts';
-import { sizeName, tickTowns, upgradeTown } from './economy/towns.ts';
+import { foundTown, sizeName, tickTowns, upgradeTown } from './economy/towns.ts';
 import { tickTrains } from './economy/dispatch.ts';
 
 const canvas = document.getElementById('c') as HTMLCanvasElement;
@@ -61,8 +61,9 @@ attachInput(canvas, () => game.s.camera, () => view, () => game.world.n * 32, {
     const bld = game.s.buildings?.find(b => footprint(n, b).includes(i));
     if (bld) { openCard({ kind: 'bld', id: bld.id }); return; }
     if (site?.kind === 'town') { openCard({ kind: 'town', id: site.id }); return; }
+    if (site?.kind === 'plot') { openCard({ kind: 'plot', id: site.id }); return; }
     if (tools.card) { closeCard(); return; }
-    if (site) toast(site.kind === 'plot' ? `🚩 Settlement site: ${site.name}` : `⛏ ${site.res} deposit`);
+    if (site) toast(`⛏ ${site.res} deposit`);
     else toast(TERRAIN_NAMES[game.world.terr[i]!]!);
   },
 });
@@ -79,6 +80,12 @@ function renderCard() {
 cardEl.onclick = e => {
   const b = (e.target as HTMLElement).closest('button'); if (!b) return;
   if (b.dataset.act === 'close') { closeCard(); return; }
+  if (b.dataset.act === 'found') {
+    const p = game.s.sites.find(s => s.id === +b.dataset.id!)!, name = p.name;
+    const why = foundTown(game, p);
+    if (why) { toast(why); renderCard(); return; }
+    toast(`🏘 ${name} founded! Lay track onto it to link it`); openCard({ kind: 'town', id: p.id }); return;
+  }
   if (b.dataset.act === 'upgrade') {
     const t = game.s.sites.find(s => s.id === +b.dataset.id!)!, L = (t.lvl ?? 0) + 1;
     const why = upgradeTown(game, t); toast(why || `⬆ ${t.name} is now a ${sizeName(L)}! New order on its card`); renderCard();

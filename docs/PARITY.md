@@ -15,6 +15,7 @@ that makes sense. Details for each line: `legacy/CHANGES.md` (search the version
 - [x] Same terrain as the old game for the same seed (tested bit for bit)
 - [x] Islands found and named, home island = Ashford Isle, open land within 8 squares of Ashford
 - [x] Seeded towns, settlement sites and deposits (iron and oil only on outer islands)
+- [x] Found a town on a settlement site ($2,500); a straight line right beside a town serves it as a station
 - [x] Fog, start reveal radius 9
 - [x] One finger pans, two fingers pinch, wheel zoom, zoom 0.1 to 3.4, default 1.8
 - [x] Terrain art from the old game (grass, shores, trees, mountains, moving water), cached in chunks
