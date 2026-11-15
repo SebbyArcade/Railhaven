@@ -1,5 +1,5 @@
 import type { Game, Site } from '../state.ts';
-import type { Good } from '../buildings/industries.ts';
+import { type Good, INDUSTRIES } from '../buildings/industries.ts';
 import { hallOf } from '../buildings/stations.ts';
 import { reveal } from '../world/fog.ts';
 import { islandSpec } from '../world/specialty.ts';
@@ -50,7 +50,7 @@ function orderBase(g: Game, t: Site): Partial<Record<Good, number>> {
 
 /** Goods the player's buildings make. */
 export function madeGoods(g: Game): Good[] {
-  return [...new Set((g.s.buildings ?? []).map(b => b.kind as Good))];
+  return [...new Set((g.s.buildings ?? []).filter(b => b.kind !== 'dock' || (b.fish ?? 0) > 0).map(b => INDUSTRIES[b.kind].makes as Good))];
 }
 
 /** How far along the order is, 0-1. */

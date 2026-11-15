@@ -23,6 +23,8 @@ import { buyFishing, FISHING } from './economy/upgrades.ts';
 import { checkStuck } from './economy/nofail.ts';
 import { ashford, missionsOf, msOf, swapMission } from './progress/missions.ts';
 import { missionPill } from './ui/story.ts';
+import { gameHtml } from './ui/gamecard.ts';
+import { decodeLegacy, importLegacy, isLegacy } from './save/legacy.ts';
 import { LESSONS, lessonOn, lessonText, skipLessons } from './progress/lessons.ts';
 import { toScreen } from './render/camera.ts';
 import { yardSquares, isLinked } from './buildings/industries.ts';
@@ -90,9 +92,11 @@ const cardEl = $('card');
 function openCard(c: Card | null) { tools.card = c; tools.selected = c?.kind === 'train' ? c.id : null; renderCard(); }
 function closeCard() { tools.card = null; tools.selected = null; renderCard(); }
 function renderCard() {
-  const html = tools.card && cardHtml(game, tools.card);
+  if (tools.card?.kind === 'game' && tools.card.page === 'paste' && cardEl.querySelector('#pasteCode')) return; // keep what is being typed
+  const html = tools.card && (tools.card.kind === 'game' ? gameHtml(tools.card.page, !!oldSave(), importReport) : cardHtml(game, tools.card));
   if (!html) { tools.card = null; cardEl.style.display = 'none'; return; }
   cardEl.innerHTML = `<button class="x" data-act="close">✕</button>${html}`; cardEl.style.display = 'block';
+  if (performance.now() - newArmed < 3000) { const nb = cardEl.querySelector<HTMLButtonElement>('button[data-act="newmap"]'); if (nb) { nb.classList.add('sure'); nb.textContent = '⚠ Tap again to start a new map'; } }
   if (armed && performance.now() < armed.until) { // the first Remove tap: ask again
     const b = cardEl.querySelector<HTMLButtonElement>(`button[data-act="remove"][data-id="${armed.id}"]`);
     if (b) { b.classList.add('sure'); b.textContent = '⚠ Tap again to remove it'; }
@@ -102,6 +106,14 @@ let armed: { id: number; until: number } | null = null;
 cardEl.onclick = e => {
   const b = (e.target as HTMLElement).closest('button'); if (!b) return;
   if (b.dataset.act === 'close') { closeCard(); return; }
+  if (b.dataset.act === 'newmap') {
+    // the artifact frame blocks confirm(), so ask with a second tap instead
+    if (performance.now() - newArmed > 3000) { newArmed = performance.now(); b.textContent = '⚠ Tap again to start a new map'; b.classList.add('sure'); return; }
+    newArmed = 0; startGame(freshGame()); return;
+  }
+  if (b.dataset.act === 'loadfile') { filePick.click(); return; }
+  if (b.dataset.act === 'loadold') { const t = oldSave(); if (t) void bringOver(t); return; }
+  if (b.dataset.act === 'loadpaste') { const t = (cardEl.querySelector('#pasteCode') as HTMLTextAreaElement | null)?.value ?? ''; if (t.trim()) void bringOver(t); else toast('Paste the code first'); return; }
   if (b.dataset.go !== undefined) { goMission(+b.dataset.go); return; }
   if (b.dataset.act === 'swap') { const why = swapMission(game, +b.dataset.m!); toast(why || `🎯 New mission: ${msOf(game).main?.title}`); renderCard(); return; }
   const bld = game.s.buildings?.find(x => x.id === +(b.dataset.id ?? -1));
@@ -296,12 +308,24 @@ $('buildBtn').onclick = () => {
 // toolbar: tapping a tool again closes it
 for (const b of document.querySelectorAll<HTMLButtonElement>('#bar [data-mode]')) b.onclick = () => { menuOpen = false; tools.setMode(b.dataset.mode as Mode); };
 let newArmed = 0;
-$('newGame').onclick = () => {
-  // the artifact frame blocks confirm(), so ask with a second tap instead
-  if (performance.now() - newArmed > 3000) { newArmed = performance.now(); toast('Tap New again to start a new map'); return; }
-  newArmed = 0;
-  game = freshGame(); tools.cancel(); closeCard(); renderer = new Renderer(game, tools); saveTo(localStorage, game);
-};
+// 🗺 Game: a new map, or a game brought over from the old Railhaven
+const OLD_KEY = 'railhaven90';
+let importReport: string[] | null = null;
+const oldSave = () => { try { return localStorage.getItem(OLD_KEY); } catch { return null; } };
+$('newGame').onclick = () => { if (tools.card?.kind === 'game') { closeCard(); return; } menuOpen = false; tools.mode = 'pan'; tools.cancel(); openCard({ kind: 'game', id: 0 }); };
+function startGame(g: Game) { game = g; tools.cancel(); closeCard(); renderer = new Renderer(game, tools); saveTo(localStorage, game); }
+async function bringOver(text: string) {
+  try {
+    toast('🚂 Bringing your game over…', 8000);
+    await new Promise(r => setTimeout(r, 30));
+    const o = await decodeLegacy(text);
+    if (!isLegacy(o)) { toast('This save is not from the old Railhaven'); return; }
+    const { g, report } = importLegacy(o);
+    startGame(g); importReport = report; openCard({ kind: 'game', id: 0, page: 'report' }); toast('✅ Your game is here', 2500);
+  } catch (e) { toast('⚠ ' + ((e as Error).message || 'That save could not be read')); }
+}
+const filePick = document.createElement('input'); filePick.type = 'file'; filePick.accept = '.json,.txt,application/json,text/plain';
+filePick.onchange = async () => { const f = filePick.files?.[0]; filePick.value = ''; if (f) await bringOver(await f.text()); };
 $('ok').onclick = () => tools.confirm();
 $('undo').onclick = () => tools.undo();
 $('turn').onclick = () => tools.turn();
