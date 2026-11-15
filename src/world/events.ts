@@ -17,7 +17,7 @@ export interface Mishap { crewAt: number; doneAt: number }
 
 export const EVENTS_START = 12 * 60;
 /** inside a storm trains run at this share of their top speed */
-export const STORM_SLOW = 0.7;
+export const STORM_SLOW = 0.5;
 const STORM_GAP = [6 * 60, 9 * 60], BREAKDOWN_GAP = [7 * 60, 10 * 60], FIRE_GAP = [8 * 60, 12 * 60];
 const FIX_TRAIN = 20, FIX_FIRE = 22;
 
