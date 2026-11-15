@@ -55,6 +55,9 @@ export class Sound {
       const len = ac.sampleRate * 2, buf = this.noise = ac.createBuffer(1, len, ac.sampleRate), d = buf.getChannelData(0);
       let b0 = 0, b1 = 0, b2 = 0; // soft (pink-ish) noise
       for (let i = 0; i < len; i++) { const w = Math.random() * 2 - 1; b0 = 0.99765 * b0 + w * 0.099; b1 = 0.963 * b1 + w * 0.2965; b2 = 0.57 * b2 + w * 1.0527; d[i] = (b0 + b1 + b2 + w * 0.1848) * 0.2; }
+      const X = Math.floor(ac.sampleRate * 0.25); // crossfade the last quarter second into the start: no click where the loop wraps
+      for (let i = 0; i < X; i++) { const k = i / X; d[i] = d[i]! * k + d[len - X + i]! * (1 - k); }
+      const out = ac.createBuffer(1, len - X, ac.sampleRate); out.getChannelData(0).set(d.subarray(0, len - X)); this.noise = out;
       this.apply();
       this.barAt = ac.currentTime + 0.3;
     }
@@ -74,8 +77,8 @@ export class Sound {
   /** Stop all sound while the game is paused or hidden. */
   pause(paused: boolean) {
     if (!this.ac) return;
-    if (paused && this.ac.state === 'running') void this.ac.suspend();
-    else if (!paused && this.ac.state === 'suspended') { void this.ac.resume(); this.barAt = Math.max(this.barAt, this.ac.currentTime + 0.2); }
+    if (paused && this.ac.state === 'running') { const ac = this.ac; this.master.gain.setTargetAtTime(0, ac.currentTime, 0.03); setTimeout(() => { if (this.ac?.state === 'running') void ac.suspend(); }, 150); }
+    else if (!paused && this.ac.state === 'suspended') { void this.ac.resume(); this.master.gain.setTargetAtTime(0.7, this.ac.currentTime + 0.05, 0.1); this.barAt = Math.max(this.barAt, this.ac.currentTime + 0.2); }
   }
 
   /** Call every frame with what is audible now. */
@@ -152,15 +155,16 @@ export class Sound {
   }
   private burst(t: number, dur: number, vol: number, pan: number, type: BiquadFilterType, freq: number, q = 1) {
     const ac = this.ac!, s = ac.createBufferSource(), f = ac.createBiquadFilter(), g = ac.createGain();
-    s.buffer = this.noise; s.playbackRate.value = rnd(0.8, 1.2); f.type = type; f.frequency.value = freq; f.Q.value = q;
-    g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
-    s.connect(f); f.connect(g); g.connect(this.out(pan)); s.start(t, rnd(0, 1.5)); s.stop(t + dur + 0.05);
+    s.buffer = this.noise; s.loop = true; s.playbackRate.value = rnd(0.8, 1.2); f.type = type; f.frequency.value = freq; f.Q.value = q;
+    const a = Math.min(0.012, dur * 0.3); // a short fade in: an instant jump to full volume pops
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vol, t + a); g.gain.exponentialRampToValueAtTime(0.001, t + dur); g.gain.linearRampToValueAtTime(0, t + dur + 0.02);
+    s.connect(f); f.connect(g); g.connect(this.out(pan)); s.start(t, rnd(0, 1.5)); s.stop(t + dur + 0.08);
   }
   private ping(t: number, f: number, dur: number, vol: number, pan: number, type: OscillatorType = 'sine', bend = 1) {
     const ac = this.ac!, o = ac.createOscillator(), g = ac.createGain(); o.type = type;
     o.frequency.setValueAtTime(f, t); if (bend !== 1) o.frequency.exponentialRampToValueAtTime(f * bend, t + dur);
-    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vol, t + 0.008); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
-    o.connect(g); g.connect(this.out(pan)); o.start(t); o.stop(t + dur + 0.05);
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vol, t + 0.01); g.gain.exponentialRampToValueAtTime(0.001, t + dur); g.gain.linearRampToValueAtTime(0, t + dur + 0.02);
+    o.connect(g); g.connect(this.out(pan)); o.start(t); o.stop(t + dur + 0.08);
   }
   private whistle(t: number, vol: number, pan: number) {
     const ac = this.ac!, g = ac.createGain(), f = ac.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 1100; f.Q.value = 2;
