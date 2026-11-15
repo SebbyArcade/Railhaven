@@ -1,4 +1,4 @@
-import { RLV } from '../economy/dispatch.ts';
+import { levelNow, RLV } from '../economy/dispatch.ts';
 import type { Game } from '../state.ts';
 
 export const fmtMoney = (n: number) => '$' + Math.floor(n).toLocaleString('en-US');
@@ -20,7 +20,7 @@ export function updateHud(el: HTMLElement, g: Game) {
   const set = (e: HTMLElement, t: string) => { if (e.textContent !== t) e.textContent = t; };
   set(m!, `💰 ${fmtMoney(g.s.money)}`);
   set(i!, `${inc < 0 ? '📉 −' : '📈 +'}${fmtMoney(Math.abs(inc))}/min`); i!.className = `chip ${inc < 0 ? 'neg' : 'pos'}`;
-  set(l!, `⭐ Level ${L} · 📋 ${o}${next ? '/' + next : ''}`);
+  set(l!, `⭐ Level ${L} · 📋 ${o}${next ? '/' + next : ''}${next !== undefined && o >= next && levelNow(g).blocked ? ' · ⛵' : ''}`); // ⛵: the next level waits for another island
 }
 
 let toastTimer = 0;

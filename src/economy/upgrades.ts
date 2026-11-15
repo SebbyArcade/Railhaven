@@ -6,22 +6,28 @@ import { orderOf } from './towns.ts';
 // ---- building levels
 
 export const MAX_LVL = 3;
+/** Railway level 4 lets industries and factories grow to level 4, Railway level 6 to level 5 (docks stop at 3). */
+export const maxLvlOf = (g: Game, b: Building) => b.kind === 'dock' ? MAX_LVL : MAX_LVL + ((g.s.rlv ?? 0) >= 4 ? 1 : 0) + ((g.s.rlv ?? 0) >= 6 ? 1 : 0);
+/** the Railway level that lets a building grow past this level, or 0 if none does */
+export const lvlUnlockAt = (b: Building) => b.kind === 'dock' ? 0 : b.lvl === 3 ? 4 : b.lvl === 4 ? 6 : 0;
+/** Express engines (Railway levels 5 and 8): every train 15% faster each time. */
+export const expressMul = (g: Game) => ((g.s.rlv ?? 0) >= 5 ? 1.15 : 1) * ((g.s.rlv ?? 0) >= 8 ? 1.15 : 1);
 
-/** Price to take a building up one level: industries 1.5× then 3× their base price, factories $3,000 then $7,500. */
+/** Price to take a building up one level: industries 1.5×, 3×, 6×, 12× their base price, factories $3,000, $7,500, $18,000, $40,000. */
 export function levelPrice(b: Building): number {
   if (b.kind === 'dock') return [8000, 15000][b.lvl - 1] ?? Infinity;
-  if (isFactory(b.kind)) return [3000, 7500][b.lvl - 1] ?? Infinity;
-  return Math.round(INDUSTRIES[b.kind].price * ([1.5, 3][b.lvl - 1] ?? Infinity) / 50) * 50;
+  if (isFactory(b.kind)) return [3000, 7500, 18000, 40000][b.lvl - 1] ?? Infinity;
+  return Math.round(INDUSTRIES[b.kind].price * ([1.5, 3, 6, 12][b.lvl - 1] ?? Infinity) / 50) * 50;
 }
 
 /** What the next level gives, in plain words. */
-export const levelGain = (b: Building) => (b.kind === 'dock' ? `reaches ${[70, 110][b.lvl - 1] ?? ''} squares by sea` : isFactory(b.kind) ? 'works faster, holds more' : '+50% output, +40 storage') + (growsTracks(b.kind) && tracksOf(b) < b.lvl + 2 ? `, ${['', '', '', '3rd', '4th'][b.lvl + 2]} loading track` : '');
+export const levelGain = (b: Building) => (b.kind === 'dock' ? `reaches ${[70, 110][b.lvl - 1] ?? ''} squares by sea` : isFactory(b.kind) ? 'works faster, holds more' : '+50% output, +40 storage') + (growsTracks(b.kind) && tracksOf(b) < Math.min(4, b.lvl + 2) ? `, ${['', '', '', '3rd', '4th'][b.lvl + 2]} loading track` : '');
 
 export function upgradeBuilding(g: Game, b: Building): string {
-  if (b.lvl >= MAX_LVL) return 'It is at full size: build a second one to make more';
+  if (b.lvl >= maxLvlOf(g, b)) return lvlUnlockAt(b) ? `Railway level ${lvlUnlockAt(b)} lets it grow bigger: fill more town orders` : 'It is at full size: build a second one to make more';
   const p = levelPrice(b);
   if (g.s.money < p) return `Need $${(p - Math.floor(g.s.money)).toLocaleString('en-US')} more`;
-  const more = growsTracks(b.kind) && tracksOf(b) < b.lvl + 2;
+  const more = growsTracks(b.kind) && tracksOf(b) < Math.min(4, b.lvl + 2);
   if (more && tracksOf(b) < 3) { const e = stripError(g, b); if (e) return `No room for another loading track: ${e}`; }
   g.s.money -= p; b.lvl++; b.paid = (b.paid ?? 0) + p;
   if (more) b.tracks = Math.min(4, b.lvl + 1);
@@ -93,7 +99,8 @@ export const FLEET: Record<FleetKey, { icon: string; name: string; what: string;
 export const fleetLvl = (g: Game, k: FleetKey) => g.s.fleet?.[k] ?? 0;
 export const fleetMulOf = (g: Game, k: FleetKey) => FLEET[k].lv[fleetLvl(g, k)]!;
 /** How many units one train carries. */
-export const trainCap = (g: Game) => Math.round(20 * fleetMulOf(g, 'wag'));
+/** Longer trains (Railway level 7): +20% cargo on every train. */
+export const trainCap = (g: Game) => Math.round(20 * fleetMulOf(g, 'wag') * ((g.s.rlv ?? 0) >= 7 ? 1.2 : 1));
 /** A train sets off when this many are ready (three quarters of a load). */
 export const minLoad = (g: Game) => Math.round(trainCap(g) * 0.75);
 

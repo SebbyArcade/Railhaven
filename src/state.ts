@@ -74,6 +74,8 @@ export interface GameState {
   /** goods being rushed (at most three) */
   rush?: { to: { kind: 'town' | 'bld'; id: number }; good: import('./buildings/industries.ts').Good; left: number }[];
   rlv?: number;
+  /** the Railway level whose ⛵ "needs islands" note was last shown (shown once per level) */
+  sailNag?: number;
   /** landmarks and shipwrecks (placed from the seed on first use) */
   pois?: import('./world/explore.ts').Poi[];
   /** 2 once the later landmarks (old halt, falls, ranger hut, windmill) were added to this map */

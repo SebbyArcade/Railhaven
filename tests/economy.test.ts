@@ -4,10 +4,10 @@ import { bestPlacement, build, type Building, yardSquares } from '../src/buildin
 import { buildPlan, extendPlan, startPlan } from '../src/track/paint.ts';
 import { tickProduction } from '../src/economy/production.ts';
 import { tickTowns, orderOf, upgradeTown } from '../src/economy/towns.ts';
-import { buyTrain, tickTrains, trainPrice } from '../src/economy/dispatch.ts';
+import { buyTrain, checkLevel, levelNow, RLV, tickTrains, trainPrice } from '../src/economy/dispatch.ts';
 import { shipPlan } from '../src/economy/shipping.ts';
 import type { Game } from '../src/state.ts';
-import { buyFleet, levelPrice, refundOf, removeBuilding, sellStock, toggleRush, trainCap, upgradeBuilding } from '../src/economy/upgrades.ts';
+import { buyFleet, expressMul, levelPrice, refundOf, removeBuilding, sellStock, toggleRush, trainCap, upgradeBuilding } from '../src/economy/upgrades.ts';
 import { outputOf, capOf } from '../src/buildings/industries.ts';
 import { checkStuck } from '../src/economy/nofail.ts';
 
@@ -112,13 +112,37 @@ describe('towns, orders and goods trains', () => {
     expect(upgradeBuilding(g, b)).toBe('');
     expect(b.lvl).toBe(2); expect(outputOf(g, b)).toBeGreaterThan(out1); expect(capOf(b)).toBeGreaterThan(cap1);
     expect(b.paid).toBe(800 + p);
-    upgradeBuilding(g, b); expect(upgradeBuilding(g, b)).toMatch(/full size/);
+    upgradeBuilding(g, b); expect(upgradeBuilding(g, b)).toMatch(/Railway level 4/);
+    // later Railway levels: level 4 at Railway level 4, level 5 at 6, then full size
+    g.s.rlv = 4; const o3 = outputOf(g, b); expect(upgradeBuilding(g, b)).toBe(''); expect(b.lvl).toBe(4); expect(outputOf(g, b)).toBeGreaterThan(o3);
+    expect(upgradeBuilding(g, b)).toMatch(/Railway level 6/);
+    g.s.rlv = 6; expect(upgradeBuilding(g, b)).toBe(''); expect(b.lvl).toBe(5); expect(b.tracks ?? 2).toBeLessThanOrEqual(4);
+    expect(upgradeBuilding(g, b)).toMatch(/full size/);
     b.stock = 40; const m = g.s.money;
     expect(sellStock(g, b)).toBe('');
     expect(b.stock).toBe(10); expect(g.s.money).toBeGreaterThan(m);
     const r = refundOf(b), m2 = g.s.money;
     expect(removeBuilding(g, b)).toBe('');
     expect(g.s.buildings!.includes(b)).toBe(false); expect(g.s.money).toBe(m2 + r);
+  });
+
+  it('Railway levels 5, 7 and 9 also need 2, 3 and 4 islands reached; a level already reached is kept', () => {
+    const { g } = farmGame();
+    g.s.rlv = 4; g.s.orders = RLV[9]!; // orders enough for the top level, only Ashford Isle reached
+    expect(levelNow(g)).toMatchObject({ L: 4, blocked: { level: 5, need: 2, have: 1 } });
+    checkLevel(g); expect(g.s.rlv).toBe(4);
+    expect(g.news?.some(m => m.includes('Time to sail'))).toBe(true);
+    g.s.rlv = 8; checkLevel(g); expect(g.s.rlv).toBe(8); // a save already past them keeps its level, but 9 waits
+    expect(levelNow(g).blocked).toMatchObject({ level: 9, need: 4 });
+    g.s.rlv = 2; g.s.orders = RLV[4]!; checkLevel(g); expect(g.s.rlv).toBe(4); // levels without the rule come from orders alone
+  });
+
+  it('later Railway levels: express engines and longer trains', () => {
+    const { g } = farmGame();
+    const c0 = trainCap(g), v0 = expressMul(g);
+    g.s.rlv = 5; expect(expressMul(g)).toBeCloseTo(v0 * 1.15);
+    g.s.rlv = 7; expect(trainCap(g)).toBe(Math.round(c0 * 1.2));
+    g.s.rlv = 8; expect(expressMul(g)).toBeCloseTo(1.15 * 1.15);
   });
 
   it('fleet upgrades carry more; a rush sends goods there first', () => {

@@ -41,7 +41,7 @@ that makes sense. Details for each line: `legacy/CHANGES.md` (search the version
 - [x] Towns: order ladder Hamlet → Village → Town → City → Metropolis → Megacity → endless; tap to upgrade; steady buying after orders (specialties come with islands)
 - [ ] Shipping plan: each building ships to the nearest place that needs it, arrows on the map, pins (done: plan shared nearest-first with factories, arrow from an open building card, 📌 pins)
 - [x] Pay per unit grows with distance (PAY .41), no passive income, train upkeep
-- [ ] Railway level from orders filled (to level 10), unlocks (done: levels, bonus, factory unlocks; to do: the later unlocks)
+- [x] Railway level from orders filled (to level 10), unlocks (levels, bonus, factory unlocks; level 4 and 6: buildings grow to level 4 and 5; level 5 and 8: express engines +15% each; level 7: longer trains +20% cargo; levels 5, 7 and 9 also need 2, 3 and 4 islands reached, a level already reached is kept)
 - [ ] Engine shed: buy trains (price curve, done), fleet upgrades (done: wagons, engines, repairs; to do with islands: tenders, wagon types, per island)
 - [x] Rush a good (max 3, fee 30%)
 - [x] Remove building (half refund), sell stock, building prices rise per extra of a kind, building levels 1-3
