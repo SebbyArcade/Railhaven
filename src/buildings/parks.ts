@@ -1,6 +1,7 @@
 import type { Game, Site } from '../state.ts';
 import { isRevealed } from '../world/fog.ts';
-import { T } from '../world/terrain.ts';
+import { T, TILE } from '../world/terrain.ts';
+import { labelAt } from '../render/stations.ts';
 import { hash } from '../core/rng.ts';
 import { takenSquares } from './industries.ts';
 import { hallsOf } from './stations.ts';
@@ -10,7 +11,7 @@ import { hallsOf } from './stations.ts';
  * and gives a small lasting bonus to that town only. Parks make its orders smaller; projects make deliveries there
  * pay more (the Tram Line makes orders smaller instead). Nothing here earns money by itself.
  */
-export type ParkKind = 'park' | 'clock' | 'market' | 'tram' | 'theatre' | 'foundry' | 'bridgeworks';
+export type ParkKind = 'park' | 'clock' | 'market' | 'tram' | 'theatre' | 'foundry' | 'bridgeworks' | 'grandstation' | 'cathedral' | 'exhibition';
 export interface Park { town: number; x: number; y: number; k: ParkKind }
 
 /** up to 3 parks per town, each making its orders 5% smaller */
@@ -24,6 +25,10 @@ export const PROJECTS: Project[] = [
   { k: 'foundry', icon: '⛰', name: 'Foundry', price: 6000, size: 0, ashford: true, rlv: 2, text: 'Tunnels: track can cross mountains ($250 a square)' },
   // the old game's 🌉 Bridge Works: here it builds strait bridges, so sister islands a few squares apart can be joined by rail
   { k: 'bridgeworks', icon: '🌉', name: 'Bridge Works', price: 18000, size: 0, ashford: true, rlv: 6, text: 'Strait bridges: track may cross up to 3 squares of sea to a nearby island ($4,000 a square)' },
+  // 🏛 Grand Ashford: late-game landmarks that turn spare money into lasting help (and one medal for show)
+  { k: 'grandstation', icon: '🚉', name: 'Grand Station', price: 50000, size: 3, ashford: true, rlv: 6, text: 'Trains load and unload 25% faster everywhere on Ashford Isle' },
+  { k: 'cathedral', icon: '⛪', name: 'Cathedral', price: 100000, size: 4, ashford: true, rlv: 7, text: 'Every town order pays a 5% bigger reward' },
+  { k: 'exhibition', icon: '🏛', name: 'Royal Exhibition Hall', price: 200000, size: 4, ashford: true, rlv: 8, text: 'Wins the 🏛 Royal Exhibition medal and the Royal Mail train paint' },
   { k: 'clock', icon: '🕰', name: 'Clock Tower', price: 15000, size: 2, pay: 0.10, text: 'Deliveries to this town pay 10% more' },
   { k: 'market', icon: '🛒', name: 'Market Hall', price: 30000, size: 3, pay: 0.15, text: 'Deliveries to this town pay 15% more' },
   { k: 'tram', icon: '🚋', name: 'Tram Line', price: 50000, size: 3, order: 0.05, text: 'Its orders are 5% smaller' },
@@ -34,6 +39,13 @@ export const projectOf = (k: ParkKind) => PROJECTS.find(p => p.k === k);
 export const projectsFor = (g: Game, t: Site) => PROJECTS.filter(P => !P.ashford || t === g.s.sites[0]);
 /** ⛰ Has Ashford built the Foundry? Then track may tunnel through mountains. */
 export const hasTunnels = (g: Game) => (g.s.parks ?? []).some(p => p.k === 'foundry');
+
+/** 🚉 Grand Station: load and unload time on Ashford Isle. */
+export const GRAND_LOAD = 0.75;
+export const hasGrandStation = (g: Game) => (g.s.parks ?? []).some(p => p.k === 'grandstation');
+/** ⛪ Cathedral: order rewards 5% bigger. */
+export const CATHEDRAL_PAY = 0.05;
+export const rewardMul = (g: Game) => (g.s.parks ?? []).some(p => p.k === 'cathedral') ? 1 + CATHEDRAL_PAY : 1;
 
 export const parksOf = (g: Game, t: Site) => (g.s.parks ?? []).filter(p => p.town === t.id && p.k === 'park');
 export const projectsOf = (g: Game, t: Site) => (g.s.parks ?? []).filter(p => p.town === t.id && p.k !== 'park');
@@ -67,11 +79,19 @@ export function parkFree(g: Game, x: number, y: number): boolean {
 }
 
 /** The best free square 2-4 squares from the town centre: near, away from the rails. */
-export function parkSpot(g: Game, t: Site): { x: number; y: number } | null {
+export function parkSpot(g: Game, t: Site, clearLabel = false): { x: number; y: number } | null {
   const n = g.world.n; let best: { x: number; y: number } | null = null, bd = Infinity;
+  // 👑 Grand Ashford landmarks keep clear of the town's name board, so they are seen whole
+  let box: [number, number, number, number] | null = null;
+  if (clearLabel) {
+    const w = Math.max((t.name ?? '').length * 7.5 + 12, 150), Hb = 12 * 1.75 + 14;
+    const { LX, BT } = labelAt(g.s.seed, t, hallsOf(g.track, n, g.s.sites, g.world.terr).find(h => h.town === t), n, w, Hb);
+    box = [LX - w / 2 - 4, BT - 8, LX + w / 2 + 4, BT + Hb + 16];
+  }
   for (let dy = -4; dy <= 4; dy++) for (let dx = -4; dx <= 4; dx++) {
     const d = Math.hypot(dx, dy); if (d < 2 || d > 4.3) continue;
     const x = t.x + dx, y = t.y + dy; if (!parkFree(g, x, y)) continue;
+    if (box && x * TILE < box[2] && (x + 1) * TILE > box[0] && y * TILE < box[3] && (y + 1) * TILE > box[1]) continue;
     let adj = 0; for (const [a, b] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) if (g.track.has((y + b!) * n + x + a!)) adj++;
     const sc = d + adj * 2 + hash(g.s.seed, x, y, 5) * 0.3;
     if (sc < bd) { bd = sc; best = { x, y }; }
@@ -109,7 +129,7 @@ export function projectError(g: Game, t: Site, k: ParkKind): string {
 /** Build a town project. Returns why not, or ''. */
 export function buyProject(g: Game, t: Site, k: ParkKind): string {
   const e = projectError(g, t, k); if (e) return e;
-  const p = parkSpot(g, t); if (!p) return NO_ROOM(t);
-  g.s.money -= projectOf(k)!.price; (g.s.parks ??= []).push({ town: t.id, ...p, k });
+  const P = projectOf(k)!, p = (P.ashford && P.size >= 3 ? parkSpot(g, t, true) : null) ?? parkSpot(g, t); if (!p) return NO_ROOM(t);
+  g.s.money -= P.price; (g.s.parks ??= []).push({ town: t.id, ...p, k });
   return '';
 }

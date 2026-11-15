@@ -166,6 +166,95 @@ function drawPark(ctx: Ctx, g: Game, p: Park, zoom: number, tm: number) {
     ctx.fillStyle = '#d8d0c0'; ctx.fillRect(wx + 0.8, deck - 7.2, 2, 1.4); ctx.fillRect(wx + 3.2, deck - 7.4, 2, 1.6);
     if (zoom > 1.2) { person(ctx, u - 9, y + 15, '#3a5a8a'); person(ctx, u + 8, y + 15.5, '#8a5a2a'); }
   }
+  else if (p.k === 'grandstation') {
+    // 🚉 the Grand Station: a long glass train shed with iron ribs, two tracks running in under it with a train at the
+    // platform, and a cream stone front with a clock, a flag and passengers waiting outside
+    const sx = x + 3, sw = TILE - 6, sy = y + 3, sh = 17;
+    ctx.fillStyle = 'rgba(20,16,10,.3)'; ctx.fillRect(sx + 1.5, sy + 1.5, sw, sh);
+    ctx.fillStyle = '#6b6f74'; ctx.fillRect(sx, sy, sw, sh); // floor seen through the glass
+    ctx.fillStyle = '#6b4a2e'; for (let k = 0; k < 10; k++) for (const ty of [sy + 5, sy + 11]) ctx.fillRect(sx + 1 + k * 2.6, ty - 1.4, 0.9, 2.8);
+    ctx.fillStyle = '#3e3a38'; for (const ty of [sy + 5, sy + 11]) { ctx.fillRect(sx, ty - 1, sw, 0.45); ctx.fillRect(sx, ty + 0.6, sw, 0.45); }
+    ctx.fillStyle = '#2f5d3a'; ctx.fillRect(sx + 4, sy + 3.6, 14, 2.8); ctx.fillStyle = '#d9b44a'; ctx.fillRect(sx + 4, sy + 4.6, 14, 0.5); // a train in
+    ctx.fillStyle = '#d8d0c0'; ctx.fillRect(sx, sy + 7.4, sw, 1.8); // the platform between
+    const gl = ctx.createLinearGradient(0, sy, 0, sy + sh);
+    gl.addColorStop(0, 'rgba(200,230,245,.55)'); gl.addColorStop(0.5, 'rgba(235,248,255,.25)'); gl.addColorStop(1, 'rgba(170,205,225,.5)');
+    ctx.fillStyle = gl; ctx.fillRect(sx, sy, sw, sh); // the glass roof
+    ctx.strokeStyle = '#4a5560'; ctx.lineWidth = 0.45;
+    for (let k = 0; k <= 8; k++) { const xx = sx + k * sw / 8; ctx.beginPath(); ctx.moveTo(xx, sy); ctx.lineTo(xx, sy + sh); ctx.stroke(); }
+    ctx.beginPath(); ctx.moveTo(sx, sy + sh / 2); ctx.lineTo(sx + sw, sy + sh / 2); ctx.stroke();
+    ctx.strokeStyle = 'rgba(255,255,255,.55)'; ctx.lineWidth = 0.6; ctx.beginPath(); ctx.moveTo(sx + 1, sy + 2); ctx.lineTo(sx + sw - 1, sy + 2); ctx.stroke();
+    // the stone front with its arched entrance and clock
+    const fy = sy + sh;
+    ctx.fillStyle = '#e8dcc0'; ctx.fillRect(sx - 0.5, fy - 1, sw + 1, 7);
+    ctx.fillStyle = '#c9b892'; ctx.fillRect(sx - 0.5, fy - 1.6, sw + 1, 1);
+    ctx.fillStyle = '#e8dcc0'; ctx.beginPath(); ctx.moveTo(u - 6, fy - 1.6); ctx.lineTo(u, fy - 5); ctx.lineTo(u + 6, fy - 1.6); ctx.fill();
+    ctx.fillStyle = '#f6efdc'; ctx.beginPath(); ctx.arc(u, fy - 1.8, 1.6, 0, 7); ctx.fill();
+    ctx.strokeStyle = '#3a2e22'; ctx.lineWidth = 0.3; ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(u, fy - 1.8); ctx.lineTo(u + Math.sin(tm / 60 * 6.283) * 1.2, fy - 1.8 - Math.cos(tm / 60 * 6.283) * 1.2); ctx.stroke();
+    ctx.fillStyle = '#4a3a2a'; for (const dx of [-7, 0, 7]) { ctx.beginPath(); ctx.moveTo(u + dx - 1.5, fy + 5); ctx.lineTo(u + dx - 1.5, fy + 2.4); ctx.arc(u + dx, fy + 2.4, 1.5, Math.PI, 0); ctx.lineTo(u + dx + 1.5, fy + 5); ctx.fill(); }
+    ctx.fillStyle = 'rgba(255,214,120,.8)'; for (const dx of [-11, -4, 4, 11]) ctx.fillRect(u + dx - 0.6, fy + 1.2, 1.2, 1.6);
+    ctx.fillStyle = '#5a4630'; ctx.fillRect(u - 0.2, fy - 9, 0.4, 4); // the flag
+    ctx.fillStyle = '#c0392b'; ctx.fillRect(u + 0.2, fy - 9 + Math.sin(tm * 3) * 0.2, 2.6, 1.6);
+    if (zoom > 1.2) { person(ctx, u - 9, y + TILE - 3, '#2c4f8a'); person(ctx, u + 3, y + TILE - 3, '#a8402e'); person(ctx, u + 9, y + TILE - 2.5, '#5a7a3a'); }
+    if (zoom > 1) puff(ctx, sx + 6, sy + 2, tm * 0.6, false, 0.6);
+  }
+  else if (p.k === 'cathedral') {
+    // ⛪ a stone cathedral seen from above: a long nave with a slate roof, short transepts, a round rose window over
+    // the door, and a tall spire at the front with a gold cross; a lawn and two yews beside it
+    ctx.fillStyle = '#7fb85a'; ctx.fillRect(x + 2, y + 2, 7, TILE - 4); ctx.fillRect(x + TILE - 9, y + 2, 7, TILE - 4);
+    const nx = u - 5, nw = 10, ny = y + 4, nh = 20;
+    ctx.fillStyle = 'rgba(20,16,10,.3)'; ctx.fillRect(nx + 2, ny + 2, nw, nh); ctx.fillRect(u - 10 + 2, ny + 6 + 2, 20, 6);
+    ctx.fillStyle = '#4e5a66'; ctx.fillRect(nx, ny, nw, nh); ctx.fillRect(u - 10, ny + 6, 20, 6); // slate roofs (nave and transepts)
+    ctx.fillStyle = '#3a444e'; ctx.fillRect(u - 0.4, ny, 0.8, nh); ctx.fillRect(u - 10, ny + 8.6, 20, 0.8); // ridges
+    ctx.fillStyle = '#5c6874'; ctx.beginPath(); ctx.arc(u, ny + 1, 5, Math.PI, 0); ctx.fill(); // the round apse at the back
+    ctx.fillStyle = '#cfc4a8'; ctx.fillRect(nx - 0.5, ny + nh, nw + 1, 4); // the stone front wall
+    ctx.fillStyle = '#c0392b'; ctx.beginPath(); ctx.arc(u, ny + nh + 1.4, 1.5, 0, 7); ctx.fill();
+    ctx.fillStyle = '#2c4f8a'; ctx.beginPath(); ctx.arc(u, ny + nh + 1.4, 0.8, 0, 7); ctx.fill(); // the rose window
+    ctx.fillStyle = '#5a3a20'; ctx.beginPath(); ctx.moveTo(u - 1.3, ny + nh + 4); ctx.lineTo(u - 1.3, ny + nh + 3); ctx.arc(u, ny + nh + 3, 1.3, Math.PI, 0); ctx.lineTo(u + 1.3, ny + nh + 4); ctx.fill();
+    // the spire, rising from the front corner and leaning back over the roof as seen from above
+    const bx = nx + nw - 1, by = ny + nh - 2;
+    ctx.fillStyle = '#bfb397'; ctx.fillRect(bx - 2.5, by - 1, 5, 7);
+    ctx.fillStyle = '#4a5560'; ctx.beginPath(); ctx.moveTo(bx - 2.8, by - 1); ctx.lineTo(bx, by - 13); ctx.lineTo(bx + 2.8, by - 1); ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,.18)'; ctx.beginPath(); ctx.moveTo(bx - 2.8, by - 1); ctx.lineTo(bx, by - 13); ctx.lineTo(bx - 0.6, by - 1); ctx.fill();
+    ctx.fillStyle = '#e8c25a'; ctx.fillRect(bx - 0.25, by - 16, 0.5, 3); ctx.fillRect(bx - 1, by - 15.2, 2, 0.5);
+    tree(ctx, x + 5, y + 9, 2.6, '#2f5a30'); tree(ctx, x + TILE - 5, y + 20, 2.6, '#2f5a30');
+    if (zoom > 1.2) { person(ctx, u - 4, y + TILE - 2.5, '#2e2a26'); person(ctx, u + 5, y + TILE - 2, '#7a3a8a'); }
+  }
+  else if (p.k === 'exhibition') {
+    // 🏛 the Royal Exhibition Hall: a crystal palace of glass and white iron with a great dome in the middle, red and
+    // gold banners on top, a fountain in front and visitors walking about
+    const hx = x + 2.5, hw = TILE - 5, hy = y + 7, hh = 13;
+    ctx.fillStyle = 'rgba(20,16,10,.3)'; ctx.fillRect(hx + 1.5, hy + 1.5, hw, hh);
+    const gl = ctx.createLinearGradient(0, hy, 0, hy + hh);
+    gl.addColorStop(0, '#d6eef8'); gl.addColorStop(1, '#9cc6dc');
+    ctx.fillStyle = gl; ctx.fillRect(hx, hy, hw, hh);
+    ctx.strokeStyle = '#f6f4ee'; ctx.lineWidth = 0.5;
+    for (let k = 0; k <= 10; k++) { const xx = hx + k * hw / 10; ctx.beginPath(); ctx.moveTo(xx, hy); ctx.lineTo(xx, hy + hh); ctx.stroke(); }
+    for (const yy of [hy + hh * 0.4, hy + hh * 0.7]) { ctx.beginPath(); ctx.moveTo(hx, yy); ctx.lineTo(hx + hw, yy); ctx.stroke(); }
+    ctx.strokeRect(hx, hy, hw, hh);
+    // the great dome over the middle
+    ctx.fillStyle = 'rgba(20,16,10,.25)'; ctx.beginPath(); ctx.ellipse(u + 1, hy + 3, 8, 7, 0, Math.PI, 0); ctx.fill();
+    const dg = ctx.createRadialGradient(u - 3, hy - 3, 1, u, hy + 2, 9);
+    dg.addColorStop(0, '#f4fbff'); dg.addColorStop(1, '#8cbad4');
+    ctx.fillStyle = dg; ctx.beginPath(); ctx.ellipse(u, hy + 2, 7.5, 7, 0, Math.PI, 0); ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = '#f6f4ee'; ctx.lineWidth = 0.4;
+    for (const a of [0.2, 0.4, 0.6, 0.8]) { ctx.beginPath(); ctx.moveTo(u, hy - 5); ctx.quadraticCurveTo(u + (a - 0.5) * 18, hy - 2, u + (a - 0.5) * 15, hy + 2); ctx.stroke(); }
+    ctx.fillStyle = '#e8c25a'; ctx.beginPath(); ctx.arc(u, hy - 5.2, 0.9, 0, 7); ctx.fill();
+    // banners along the roof
+    for (const [dx, col] of [[-11, '#c0392b'], [-7, '#e8c25a'], [7, '#e8c25a'], [11, '#c0392b']] as const) {
+      ctx.fillStyle = '#5a4630'; ctx.fillRect(u + dx - 0.2, hy - 4, 0.4, 4);
+      ctx.fillStyle = col; ctx.fillRect(u + dx + 0.2, hy - 4 + Math.sin(tm * 3 + dx) * 0.2, 2.2, 1.3);
+    }
+    // the grand doorway and the fountain in front
+    ctx.fillStyle = '#e8dcc0'; ctx.fillRect(u - 3.5, hy + hh - 4, 7, 4);
+    ctx.fillStyle = '#4a3a2a'; ctx.fillRect(u - 1.2, hy + hh - 2.6, 2.4, 2.6);
+    const fy = y + TILE - 6;
+    ctx.fillStyle = '#c9bfa8'; ctx.beginPath(); ctx.ellipse(u, fy, 5, 2.4, 0, 0, 7); ctx.fill();
+    ctx.fillStyle = '#5a9ac8'; ctx.beginPath(); ctx.ellipse(u, fy, 4, 1.7, 0, 0, 7); ctx.fill();
+    const jet = 1.6 + Math.sin(tm * 4) * 0.4;
+    ctx.fillStyle = 'rgba(235,248,255,.85)'; ctx.fillRect(u - 0.3, fy - jet - 1, 0.6, jet + 1); ctx.beginPath(); ctx.arc(u, fy - jet - 1, 0.8, 0, 7); ctx.fill();
+    if (zoom > 1.2) { person(ctx, u - 9, fy + 1, '#7a3a8a'); person(ctx, u + 8, fy, '#2c4f8a'); person(ctx, u - 6, fy + 3.5, '#a8402e'); person(ctx, u + 10, fy + 3.5, '#e8c25a'); }
+  }
   if (zoom > 1.6) { fence(ctx, x + 2, y + TILE - 2, x + 9, y + TILE - 2); fence(ctx, x + TILE - 9, y + TILE - 2, x + TILE - 2, y + TILE - 2); }
   void pine;
 }

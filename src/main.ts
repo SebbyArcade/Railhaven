@@ -14,7 +14,7 @@ import { homeHtml, isHomePage } from './ui/home.ts';
 import { mapThumb } from './render/thumb.ts';
 import { canInstall, installApp, isInstalled, servedOnline, setupPwa } from './ui/pwa.ts';
 import { checkMedals, loadProfile, saveProfile } from './progress/achievements.ts';
-import { PAINTS, setLooks, THEMES } from './render/looks.ts';
+import { lookOpen, PAINTS, setLooks, THEMES } from './render/looks.ts';
 import { xpOf } from './progress/achievements.ts';
 import { isRevealed } from './world/fog.ts';
 import { TERRAIN_NAMES } from './world/terrain.ts';
@@ -157,7 +157,7 @@ cardEl.onclick = e => {
   if (b.dataset.act === 'mgroup') { openCard({ kind: 'game', id: +b.dataset.id!, page: 'mgroup' }); return; }
   if (b.dataset.act === 'look') {
     const paint = b.dataset.kind === 'paint', l = (paint ? PAINTS : THEMES).find(x => x.k === b.dataset.k); if (!l) return;
-    if (xpOf(profile) < l.xp) { toast(`🔒 ${l.name} unlocks at ${l.xp} XP: earn medals to get there`); return; }
+    if (!lookOpen(l, xpOf(profile), profile.medals)) { toast('medal' in l && l.medal ? `🔒 ${l.name}: build the Royal Exhibition Hall in Ashford to win it` : `🔒 ${l.name} unlocks at ${l.xp} XP: earn medals to get there`); return; }
     if (paint) profile.paint = l.k; else profile.theme = l.k;
     setLooks(profile.paint, profile.theme); keepProfile(); toast(`🎨 ${l.name}`); renderCard(); return;
   }
@@ -248,7 +248,7 @@ cardEl.onclick = e => {
     if (why) { toast(why); return; }
     const p = game.s.parks!.at(-1)!, P = projectOf(p.k);
     game.taken = undefined; game.terrainDirty?.([p.y * game.world.n + p.x]);
-    toast(P ? `${P.icon} ${P.name} opened in ${t.name}: ${P.text.toLowerCase()}` : `🌳 Park opened in ${t.name}: its orders are now ${parksOf(game, t).length * 5}% smaller`, 3500);
+    toast(P ? `${P.icon} ${P.name} opened in ${t.name}: ${P.text[0]!.toLowerCase() + P.text.slice(1)}` : `🌳 Park opened in ${t.name}: its orders are now ${parksOf(game, t).length * 5}% smaller`, 3500);
     renderCard(); return;
   }
   if (b.dataset.act === 'upgrade') {

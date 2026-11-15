@@ -3,7 +3,7 @@ import type { Game, Site } from '../state.ts';
 import { fallsMul, POI, POI_RARITY, poisOf, RARITY } from '../world/explore.ts';
 import { buildingSquares, yardSquares, bufOf, growsTracks, stripError, tracksOf, type Building, capOf, GOODS, type Good, INDUSTRIES, type IndustryKind, inputsOf, isFactory, isLinked, lockedText, outputOf, shareAt, forestOf, stumpsOf } from '../buildings/industries.ts';
 import { factoryState } from '../economy/production.ts';
-import { hasProject, nextParkPrice, orderMul, PARK_PRICE, parkSpot, parksOf, payMul, projectsFor, projectsOf } from '../buildings/parks.ts';
+import { hasProject, nextParkPrice, orderMul, PARK_PRICE, parkSpot, parksOf, payMul, projectsFor, projectsOf, rewardMul } from '../buildings/parks.ts';
 import { FOUND_PRICE, orderDone, orderOf, reward, sizeName, steadyGoods, stepOf, townLinked, upgradePrice } from '../economy/towns.ts';
 import { type Dest, destinationsOf, destName, type Ship, shipPlan, siteOf } from '../economy/shipping.ts';
 import { FERRY_FEE, islandOfTrain, spareTrains, trainPrice, trainStatus } from '../economy/dispatch.ts';
@@ -75,7 +75,7 @@ function townCard(g: Game, t: Site, page?: string): string {
     const p = upgradePrice(L), can = p <= g.s.money;
     h += `<button class="act" data-act="upgrade" data-id="${t.id}" ${can ? '' : 'disabled'}>⬆ Grow into a ${sizeName(L + 1)} · ${fmtMoney(p)}</button>`;
     if (!can) h += `<small class="why">Need ${fmtMoney(p - g.s.money)} more: deliveries keep paying</small>`;
-  } else { const fm = fallsMul(g, t.x, t.y); h += `<div class="gift">🎁 ${fmtMoney(Math.round(reward(L) * fm))} when the order is filled${fm > 1 ? ' (💧 Silver Falls +10%)' : ''}</div>`; }
+  } else { const fm = fallsMul(g, t.x, t.y), cm = rewardMul(g); h += `<div class="gift">🎁 ${fmtMoney(Math.round(reward(L) * fm * cm))} when the order is filled${fm > 1 ? ' (💧 Silver Falls +10%)' : ''}${cm > 1 ? ' (⛪ Cathedral +5%)' : ''}</div>`; }
   const st = steadyGoods(t, g);
   if (st.length) h += `<h3>🛒 Keeps buying</h3><div class="chips">${st.map(k => `<span class="chip2">${GOODS[k].icon} ${GOODS[k].name}</span>`).join('')}</div>`;
   const coming = g.s.trains.filter(x => x.job && sameDest(x.job.to, { kind: 'town', id: t.id })).length;
@@ -105,7 +105,10 @@ function townPage(g: Game, t: Site, page: string): string {
   }
   h += `<h3>🏛 Town projects</h3><div class="note">Big projects for a growing town. Each adds a building to ${name}'s streets and a lasting bonus here.</div>`;
   const room = !!parkSpot(g, t);
+  let grand = false;
   for (const P of projectsFor(g, t)) {
+    if (P.size >= 3 && P.ashford && !grand) { grand = true; h += `<h3>👑 Grand Ashford</h3><div class="note">Landmarks for a rich railway: they help the whole network.</div>`; }
+    if (!P.ashford && grand) { grand = false; h += `<h3>🏘 For Ashford's streets</h3>`; }
     const has = hasProject(g, t, P.k), rl = !!P.rlv && (g.s.rlv ?? 0) < P.rlv, lock = stepOf(t) < P.size || rl;
     h += `<div class="row${has ? ' done' : ''}"><b class="ico">${P.icon}</b><div class="grow"><div class="line"><span>${P.name}</span><span>${has ? '✅ Built' : rl ? `🔒 Railway level ${P.rlv}` : lock ? `🔒 ${sizeName(P.size)}` : fmtMoney(P.price)}</span></div><small>${P.text}</small>`;
     if (!has && !lock) h += room ? `<button class="mini" data-act="project" data-id="${t.id}" data-k="${P.k}" ${g.s.money >= P.price ? '' : 'disabled'}>🏗 Build · ${fmtMoney(P.price)}</button>` : `<small class="why">No free grass near ${name} for it</small>`;

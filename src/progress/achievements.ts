@@ -141,6 +141,7 @@ export const MEDALS: Medal[] = [
   { id: 'railisl6', g: 'track', icon: '🌉', name: 'Rails Across the Sea', how: 'Have rails on 6 islands in one game', xp: 75, prog: g => [railIslands(g), 6] },
   { id: 'double500', g: 'track', icon: '═', name: 'Double the Line', how: 'Double 500 squares of track in one game', xp: 25, prog: g => [doubled(g), 500] },
   { id: 'double1500', g: 'track', icon: '🚄', name: 'Four-Track Mainline', how: 'Double 1,500 squares of track in one game', xp: 50, prog: g => [doubled(g), 1500] },
+  { id: 'exhibition', g: 'railway', icon: '🏛', name: 'Royal Exhibition', how: 'Build the Royal Exhibition Hall in Ashford', xp: 75, prog: g => has((g.s.parks ?? []).some(p => p.k === 'exhibition')) },
   { id: 'games3', g: 'railway', icon: '🗂', name: 'Fresh Start', how: `Play three different maps to Railway level ${FRESH_LVL}`, xp: 25, prog: (_g, p) => [p.seeds.length, 3] },
 ];
 

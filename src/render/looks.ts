@@ -2,7 +2,7 @@
  * Looks unlocked with achievement XP: train paints and town themes. Pure decoration: nothing in play changes.
  * The first of each is the game's normal look and is always available.
  */
-export interface Paint { k: string; name: string; xp: number; body: string; roof: string; band: string; beam: string }
+export interface Paint { k: string; name: string; xp: number; body: string; roof: string; band: string; beam: string; /** unlocked by this medal instead of XP */ medal?: string }
 export const PAINTS: Paint[] = [
   { k: 'green', name: 'Forest green', xp: 0, body: '#2f5d3a', roof: '#24452c', band: '#d9b44a', beam: '#c0392b' },
   { k: 'crimson', name: 'Crimson and gold', xp: 150, body: '#8e2a22', roof: '#5e1c16', band: '#e8c25a', beam: '#1d1d1d' },
@@ -13,7 +13,11 @@ export const PAINTS: Paint[] = [
   { k: 'purple', name: 'Royal purple', xp: 1300, body: '#5a2e6e', roof: '#3a1e48', band: '#e8c25a', beam: '#c0392b' },
   { k: 'silver', name: 'Silver streak', xp: 1650, body: '#9aa4ae', roof: '#5a646e', band: '#2c4f8a', beam: '#c0392b' },
   { k: 'night', name: 'Midnight express', xp: 2100, body: '#1f2a44', roof: '#0f1626', band: '#f0d040', beam: '#e8e0cc' },
+  // 🏛 won with the Royal Exhibition medal (build the Royal Exhibition Hall in Ashford)
+  { k: 'royalmail', name: 'Royal Mail', xp: 0, medal: 'exhibition', body: '#a3201c', roof: '#2a2a2a', band: '#f2c230', beam: '#2a2a2a' },
 ];
+/** Is this look open to the player: enough XP, or the medal it needs. */
+export const lookOpen = (l: { xp: number; medal?: string }, xp: number, medals: Record<string, unknown>) => l.medal ? !!medals[l.medal] : xp >= l.xp;
 
 export interface Theme { k: string; name: string; xp: number; roofs: string[]; walls: string[] }
 export const THEMES: Theme[] = [
