@@ -12,6 +12,7 @@ import { loadFrom, onSave, readSave, saveCode, saveJson, saveTo } from './save/s
 import { addSlot, copySlot, deleteSlot, openSlot, readIndex, renameSlot, touchActive } from './save/slots.ts';
 import { homeHtml, isHomePage } from './ui/home.ts';
 import { mapThumb } from './render/thumb.ts';
+import { canInstall, installApp, isInstalled, servedOnline, setupPwa } from './ui/pwa.ts';
 import { checkMedals, loadProfile, saveProfile } from './progress/achievements.ts';
 import { PAINTS, setLooks, THEMES } from './render/looks.ts';
 import { xpOf } from './progress/achievements.ts';
@@ -131,7 +132,7 @@ function renderCard() {
   if (tools.card?.kind === 'game' && cardEl.contains(document.activeElement) && document.activeElement?.tagName === 'INPUT') return; // keep a name or map number being typed
   const home = tools.card?.kind === 'game' && isHomePage(tools.card.page);
   cardEl.classList.toggle('home', home);
-  const html = tools.card && (tools.card.kind === 'game' ? (home ? homeHtml(tools.card.page, readIndex(localStorage), tools.card.id, delArmed?.id === tools.card.id && performance.now() < delArmed.until, profile, game) : gameHtml(tools.card.page === 'settings' ? '' : tools.card.page, !!oldSave(), importReport, myCode, tools.card.page === 'stats' ? gameReport(game) : null, sound.settings)) : cardHtml(game, tools.card, tools.view));
+  const html = tools.card && (tools.card.kind === 'game' ? (home ? homeHtml(tools.card.page, readIndex(localStorage), tools.card.id, delArmed?.id === tools.card.id && performance.now() < delArmed.until, profile, game) : gameHtml(tools.card.page === 'settings' ? '' : tools.card.page, !!oldSave(), importReport, myCode, tools.card.page === 'stats' ? gameReport(game) : null, sound.settings, { online: servedOnline(), installed: isInstalled(), offer: canInstall() })) : cardHtml(game, tools.card, tools.view));
   if (!html) { tools.card = null; cardEl.style.display = 'none'; return; }
   cardEl.innerHTML = `<button class="x" data-act="close">✕</button>${html}`; cardEl.style.display = 'block';
   if (performance.now() - newArmed < 3000) { const nb = cardEl.querySelector<HTMLButtonElement>('button[data-act="newmap"]'); if (nb) { nb.classList.add('sure'); nb.textContent = '⚠ Tap again to start a new map'; } }
@@ -150,6 +151,7 @@ cardEl.onclick = e => {
     newArmed = 0; startGame(freshGame()); return; // (no longer offered: new games start from Your games)
   }
   if (b.dataset.act === 'loadfile') { filePick.click(); return; }
+  if (b.dataset.act === 'install') { void installApp().then(ok => { if (!ok) toast('In Chrome: ⋮ menu → Install app'); renderCard(); }); return; }
   if (b.dataset.act === 'mgroup') { openCard({ kind: 'game', id: +b.dataset.id!, page: 'mgroup' }); return; }
   if (b.dataset.act === 'look') {
     const paint = b.dataset.kind === 'paint', l = (paint ? PAINTS : THEMES).find(x => x.k === b.dataset.k); if (!l) return;
@@ -524,4 +526,5 @@ const onHome = () => tools.card?.kind === 'game' && isHomePage(tools.card.page);
 const idle = () => onHome() || performance.now() - lastTouch > IDLE_S * 1000;
 // the game opens on the home screen (automated checks skip it unless they ask for it with ?home)
 if (!(navigator.webdriver && !params.has('home')) && !params.has('new') && !params.has('seed')) openHome();
+setupPwa(() => renderCard());
 requestAnimationFrame(frame);
