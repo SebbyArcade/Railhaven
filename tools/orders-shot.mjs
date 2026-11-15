@@ -1,0 +1,21 @@
+// The 📋 Orders board on a rebuild save. Usage: node tools/orders-shot.mjs save.json
+import { chromium } from 'playwright';
+import { existsSync, readFileSync, mkdirSync } from 'node:fs';
+import { resolve } from 'node:path';
+mkdirSync('shots', { recursive: true });
+const [file] = process.argv.slice(2);
+const browser = await chromium.launch({ executablePath: existsSync('/opt/pw-browsers/chromium') ? '/opt/pw-browsers/chromium' : undefined });
+const page = await browser.newPage({ viewport: { width: 412, height: 860 }, deviceScaleFactor: 2, hasTouch: true });
+const errors = []; page.on('pageerror', e => errors.push(String(e)));
+if (file) await page.addInitScript(s => { localStorage.setItem('railhaven2', s); }, readFileSync(file, 'utf8'));
+await page.goto('file://' + resolve('dist/index.html') + (file ? '' : '?new&seed=4242'));
+await page.waitForTimeout(1500);
+await page.evaluate(() => { window.railhaven.openCard(null); window.railhaven.step(20); });
+await page.click('#hud [data-orders]'); await page.waitForTimeout(1200);
+await page.screenshot({ path: 'shots/orders.png' });
+await page.evaluate(() => document.querySelector('#card').scrollTop = 9999); await page.waitForTimeout(300);
+await page.screenshot({ path: 'shots/orders-2.png' });
+await page.click('#card button[data-act="open"]'); await page.waitForTimeout(700);
+await page.screenshot({ path: 'shots/orders-open.png' });
+console.log(await page.evaluate(() => JSON.stringify(window.railhaven.tools.card)), errors.join('\n') || 'no page errors');
+await browser.close();

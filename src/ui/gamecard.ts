@@ -22,5 +22,6 @@ export function gameHtml(page: string | undefined, hasOld: boolean, report: stri
     + (hasOld ? `<div class="gift">🚂 This browser has a game from the old Railhaven. <button class="act" data-act="loadold">📥 Bring it over</button></div>` : '')
     + `<div class="tiles"><button class="tile" data-act="page" data-page="move">📤 Move my game<small>to Chrome or the Claude app</small></button><button class="tile" data-act="loadfile">📂 Load a save file<small>from here or the old game</small></button><button class="tile" data-act="page" data-page="paste">📋 Paste a code<small>from here or the old game</small></button></div>`
     + `<div class="note">Loading a game replaces the one you are playing now.</div>`
+    + `<button class="act alt" data-act="full">⛶ Full screen</button>`
     + `<button class="act warnb" data-act="newmap">🗺 Start a new map</button>`;
 }

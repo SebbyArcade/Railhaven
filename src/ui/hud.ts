@@ -14,8 +14,13 @@ export function updateHud(el: HTMLElement, g: Game) {
   if (sec !== histT) { histT = sec; hist.push((g.s.earned ?? 0) - (g.s.upkeep ?? 0)); if (hist.length > 61) hist.shift(); }
   const inc = hist.length > 5 ? (hist.at(-1)! - hist[0]!) * 60 / (hist.length - 1) : 0;
   const L = g.s.rlv ?? 0, o = g.s.orders ?? 0, next = RLV[L + 1];
-  const html = `<span class="chip money">💰 ${fmtMoney(g.s.money)}</span><span class="chip ${inc < 0 ? 'neg' : 'pos'}">${inc < 0 ? '📉 −' : '📈 +'}${fmtMoney(Math.abs(inc))}/min</span><span class="chip">⭐ Level ${L} · 📋 ${o}${next ? '/' + next : ''}</span>`;
-  if (el.innerHTML !== html) el.innerHTML = html;
+  // three chips that stay in place (only their text changes), so a tap on one always lands on it
+  if (el.children.length !== 3) el.innerHTML = `<span class="chip money"></span><span class="chip"></span><span class="chip tap" data-orders="1"></span>`;
+  const [m, i, l] = el.children as unknown as HTMLElement[];
+  const set = (e: HTMLElement, t: string) => { if (e.textContent !== t) e.textContent = t; };
+  set(m!, `💰 ${fmtMoney(g.s.money)}`);
+  set(i!, `${inc < 0 ? '📉 −' : '📈 +'}${fmtMoney(Math.abs(inc))}/min`); i!.className = `chip ${inc < 0 ? 'neg' : 'pos'}`;
+  set(l!, `⭐ Level ${L} · 📋 ${o}${next ? '/' + next : ''}`);
 }
 
 let toastTimer = 0;
