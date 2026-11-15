@@ -2,6 +2,7 @@ import type { Game, Site } from '../state.ts';
 import { isRevealed } from '../world/fog.ts';
 import { T } from '../world/terrain.ts';
 import { isMountainFoot } from '../world/sites.ts';
+import { stationLinkError } from './stations.ts';
 
 /** Goods and what they are worth per unit (the old game's `rate`). */
 export const GOODS = {
@@ -91,6 +92,13 @@ export function shareAt(g: Game, b: Pick<Building, 'x' | 'y' | 'horizontal' | 's
   if (b.kind === 'farm') return Math.min(1, around(g, b, 1).filter(i => t[i] === T.Grass && free(i)).length / 6);
   if (b.kind === 'wool') return Math.min(1, around(g, b, 1).filter(i => (t[i] === T.Hills || t[i] === T.Grass) && free(i)).length / 6);
   return 1;
+}
+
+/** The squares a wheat or sheep farm works (its fields or pasture): free grass next to it, at most six. */
+export function fieldSquares(g: Game, b: Building): number[] {
+  if (b.kind !== 'farm' && b.kind !== 'wool') return [];
+  const t = g.world.terr, taken = takenSquares(g);
+  return around(g, b, 1).filter(i => (t[i] === T.Grass || (b.kind === 'wool' && t[i] === T.Hills)) && !taken.has(i)).slice(0, 6);
 }
 
 /** Buildings that would make less if these squares were built on, and how much less per minute. */
@@ -194,7 +202,21 @@ export function build(g: Game, p: ReturnType<typeof placementsAt>[number]): Buil
     const along = b.horizontal ? (k > 0 ? 1 << 2 : 0) | (k < sq.length - 1 ? 1 : 0) : (k > 0 ? 1 << 3 : 0) | (k < sq.length - 1 ? 1 << 1 : 0);
     cur.links |= along; g.track.set(sq[k]!, cur);
   }
+  joinYardEnds(g, b);
   return b;
+}
+
+/** A yard placed with an end against existing track joins it there (only at its ends, as everywhere). Returns how many ends joined. */
+export function joinYardEnds(g: Game, b: Building): number {
+  const n = g.world.n, sq = yardSquares(n, b), step = b.horizontal ? 1 : n;
+  const out = b.horizontal ? [2, 0] : [3, 1]; // direction out of the first end, out of the last end
+  let joined = 0;
+  [[sq[0]!, sq[0]! - step, out[0]!], [sq.at(-1)!, sq.at(-1)! + step, out[1]!]].forEach(([end, next, d]) => {
+    const o = g.track.get(next!); if (!o) return;
+    if (stationLinkError(g.track, n, g.s.sites, end!, next!) || yardLinkError(g, end!, next!)) return;
+    g.track.get(end!)!.links |= 1 << d!; o.links |= 1 << ((d! + 2) % 4); joined++;
+  });
+  return joined;
 }
 
 /** Output per second, stock cap (by level). */
@@ -230,3 +252,30 @@ export function linkedSquares(g: Game): Set<number> {
 }
 
 export const isLinked = (g: Game, b: Building) => g.linked?.has(yardSquares(g.world.n, b)[0]!) ?? false;
+
+/**
+ * The nearest place on uncovered land where this kind fits, searching out from (cx, cy); null when there is none.
+ * Mines only look at their deposits; other kinds look within `R` squares.
+ */
+export function nearestSpot(g: Game, kind: IndustryKind, cx: number, cy: number, R = 30): { x: number; y: number } | null {
+  const n = g.world.n;
+  if (MINES.has(kind)) {
+    const res = INDUSTRIES[kind].makes;
+    const deps = g.s.sites.filter(s => s.kind === 'dep' && s.res === res && !s.hidden && isRevealed(g, s.y * n + s.x))
+      .sort((p, q) => Math.hypot(p.x - cx, p.y - cy) - Math.hypot(q.x - cx, q.y - cy));
+    for (const d of deps) if (bestPlacement(g, kind, d.x, d.y).place) return { x: d.x, y: d.y };
+    return null;
+  }
+  for (let r = 0; r <= R; r++) for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
+    if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
+    const x = cx + dx, y = cy + dy;
+    if (x < 1 || y < 1 || x >= n - 1 || y >= n - 1 || !isRevealed(g, y * n + x)) continue;
+    if (bestPlacement(g, kind, x, y).place) return { x, y };
+  }
+  return null;
+}
+
+/** Why there is nowhere to build this kind yet, and what to do. */
+export const noSpotText = (kind: IndustryKind) => MINES.has(kind)
+  ? `No ${INDUSTRIES[kind].needs.replace(/^an? /, '').replace(/ at the foot of mountains| \(outer islands\)/, '')} uncovered yet: lay track toward the mountains to uncover more land`
+  : `No room for a ${INDUSTRIES[kind].name} on uncovered land: it needs ${INDUSTRIES[kind].needs}`;

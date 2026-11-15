@@ -4,45 +4,86 @@ import { isRevealed } from '../world/fog.ts';
 import { hallsOf } from './stations.ts';
 import { footprint } from './industries.ts';
 
-/** The engine shed: a building beside a plain straight stretch of line near Ashford, its doors facing the track. */
-export interface Shed { x: number; y: number; /** direction from the shed to the track */ side: Dir }
+/**
+ * The engine shed: a building near Ashford joined to the line by its own short siding. The siding runs from a
+ * plain straight stretch of line (a turnout there), across one square, into the shed: two squares of track, enough
+ * for a whole train to stand clear of the line.
+ */
+export interface Shed { x: number; y: number; /** direction from the shed toward the line */ side: Dir }
 
 const SEARCH = 6;
+const opp = (d: Dir) => ((d + 2) % 4) as Dir;
+const bit = (d: number) => 1 << d;
 
-function squareOk(g: Game, x: number, y: number, blocked: Set<number>): Dir | -1 {
-  const n = g.world.n, i = y * n + x, t = g.world.terr[i];
-  if (x < 1 || y < 1 || x >= n - 1 || y >= n - 1 || !(t === 1 || t === 2) || !isRevealed(g, i) || g.track.has(i) || blocked.has(i)) return -1;
-  if (g.s.sites.some(s => Math.abs(s.x - x) <= 1 && Math.abs(s.y - y) <= 1)) return -1;
-  let side: Dir | -1 = -1;
-  for (const d of [0, 1, 2, 3] as Dir[]) {
-    const j = (y + DY[d]) * n + x + DX[d], sq = g.track.get(j);
-    if (!sq) continue;
-    if (side >= 0) return -1; // track on two sides: no room
-    // the track beside must be a plain straight running past the doors (not towards them)
-    const along = DX[d] !== 0 ? (1 << 1) | (1 << 3) : (1 << 0) | (1 << 2);
-    if (sq.links !== along || blocked.has(j) || !(g.linked?.has(j) ?? true)) return -1; // beside the railway, not a loose yard
-    side = d;
-  }
-  if (side < 0) return -1;
-  // nothing behind or beside the shed
-  for (const d of [0, 1, 2, 3] as Dir[]) if (d !== side && g.track.has((y + DY[d]) * n + x + DX[d])) return -1;
-  return side;
+/** The shed square, the siding square in front of it, and the line square the siding joins. */
+export function shedSiding(g: Game, sh = g.s.shed): { shed: number; mid: number; line: number } | null {
+  if (!sh) return null;
+  const n = g.world.n, d = sh.side, at = (k: number) => (sh.y + DY[d] * k) * n + sh.x + DX[d] * k;
+  return { shed: at(0), mid: at(1), line: at(2) };
 }
 
-/** Keep the shed where it is if it still fits, otherwise find the closest good square to Ashford (or none yet). */
-export function placeShed(g: Game) {
+/** Can the shed stand on (x, y) with its siding toward `d`? `own` is the shed already there (its siding is allowed). */
+function fits(g: Game, x: number, y: number, d: Dir, blocked: Set<number>, own: boolean): boolean {
+  const n = g.world.n, S = y * n + x, A = S + DX[d] + DY[d] * n, L = A + DX[d] + DY[d] * n;
+  const lx = x + 2 * DX[d], ly = y + 2 * DY[d];
+  if (x < 2 || y < 2 || x >= n - 2 || y >= n - 2 || lx < 1 || ly < 1 || lx >= n - 1 || ly >= n - 1) return false;
+  for (const i of [S, A]) {
+    const t = g.world.terr[i];
+    if (!(t === 1 || t === 2) || !isRevealed(g, i) || blocked.has(i)) return false;
+  }
+  if (g.s.sites.some(s => Math.abs(s.x - x) <= 1 && Math.abs(s.y - y) <= 1)) return false;
+  // the shed square holds only the siding's end; the middle square only the siding
+  const sTrack = g.track.get(S)?.links ?? 0, aTrack = g.track.get(A)?.links ?? 0;
+  if (own ? sTrack !== bit(d) || aTrack !== (bit(d) | bit(opp(d))) : sTrack || aTrack) return false;
+  // the line: a plain straight running across the siding (plus the siding's own turnout when it is ours)
+  const line = g.track.get(L), along = DX[d] !== 0 ? bit(1) | bit(3) : bit(0) | bit(2);
+  if (!line || blocked.has(L) || !(g.linked?.has(L) ?? true)) return false;
+  if (line.links !== (own ? along | bit(opp(d)) : along)) return false;
+  // nothing else touching the shed or the siding from the sides
+  const side = DX[d] !== 0 ? [1, 3] : [0, 2];
+  for (const e of [opp(d), ...side] as Dir[]) if (g.track.has((y + DY[e]) * n + x + DX[e])) return false;
+  for (const e of side as Dir[]) if (g.track.has(A + DX[e] + DY[e] * n)) return false;
+  return true;
+}
+
+/** Take the siding up (only its own links: any track the player laid across those squares stays). */
+function liftSiding(g: Game) {
+  const s = shedSiding(g); if (!s) return;
+  const d = g.s.shed!.side;
+  if (g.track.get(s.shed)?.links !== bit(d)) return; // no siding here (an older save, or the player built over it)
+  const drop = (i: number, bits: number) => { const t = g.track.get(i); if (!t) return; t.links &= ~bits; if (!t.links) g.track.delete(i); };
+  drop(s.shed, bit(d)); drop(s.mid, bit(d) | bit(opp(d))); drop(s.line, bit(opp(d)));
+}
+
+function laySiding(g: Game) {
+  const s = shedSiding(g)!, d = g.s.shed!.side;
+  g.track.set(s.shed, { links: bit(d) });
+  g.track.set(s.mid, { links: bit(d) | bit(opp(d)) });
+  g.track.get(s.line)!.links |= bit(opp(d));
+}
+
+/**
+ * Keep the shed where it is if it still fits, otherwise move it (siding and all) to the closest good spot to
+ * Ashford, or take it away until the line has a straight stretch. Changes the track: call before building the network.
+ * Returns the squares that changed.
+ */
+export function placeShed(g: Game): number[] {
   const n = g.world.n, a = g.s.sites[0]!, blocked = new Set<number>();
   for (const h of hallsOf(g.track, n, g.s.sites)) for (const i of [...h.squares, ...h.approaches]) blocked.add(i);
   for (const b of g.s.buildings ?? []) for (const i of footprint(n, b)) blocked.add(i);
   const cur = g.s.shed;
-  if (cur && squareOk(g, cur.x, cur.y, blocked) === cur.side) return;
-  let best: { x: number; y: number; side: Dir } | undefined, bd = Infinity;
-  for (let dy = -SEARCH; dy <= SEARCH; dy++) for (let dx = -SEARCH; dx <= SEARCH; dx++) {
-    const x = a.x + dx, y = a.y + dy, side = squareOk(g, x, y, blocked);
-    if (side < 0) continue;
-    const d = Math.hypot(dx, dy); if (d < bd) { bd = d; best = { x, y, side: side as Dir }; }
+  if (cur && fits(g, cur.x, cur.y, cur.side, blocked, true)) return [];
+  if (cur && fits(g, cur.x, cur.y, cur.side, blocked, false)) { laySiding(g); return Object.values(shedSiding(g)!); } // an older save: no siding yet
+  const before = cur ? Object.values(shedSiding(g)!) : [];
+  if (cur) liftSiding(g);
+  let best: Shed | undefined, bd = Infinity;
+  for (let dy = -SEARCH; dy <= SEARCH; dy++) for (let dx = -SEARCH; dx <= SEARCH; dx++) for (const d of [0, 1, 2, 3] as Dir[]) {
+    const x = a.x + dx, y = a.y + dy;
+    if (!fits(g, x, y, d, blocked, false)) continue;
+    const dist = Math.hypot(dx, dy); if (dist < bd) { bd = dist; best = { x, y, side: d }; }
   }
-  if (best) g.s.shed = best; else delete g.s.shed;
+  if (best) { g.s.shed = best; laySiding(g); } else delete g.s.shed;
+  return [...before, ...(best ? Object.values(shedSiding(g)!) : [])];
 }
 
 export const shedSquare = (g: Game) => g.s.shed ? g.s.shed.y * g.world.n + g.s.shed.x : -1;

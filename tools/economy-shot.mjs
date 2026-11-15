@@ -43,5 +43,11 @@ await page.evaluate(() => { const R = window.railhaven, b = R.game.g ?? R.game.s
 await page.waitForTimeout(1200); await page.screenshot({ path: 'shots/econ-building.png' });
 await page.evaluate(() => { const R = window.railhaven; R.openCard({ kind: 'train', id: R.game.s.trains[0].id }); });
 await page.waitForTimeout(1200); await page.screenshot({ path: 'shots/econ-train.png' });
+// the engine shed and its siding, with a new train standing on it
+await page.evaluate(() => { const R = window.railhaven, g = R.game, sh = g.s.shed; g.s.money += 5000; R.tools.mode = 'train'; R.tools.confirm(); R.tools.mode = 'pan'; R.openCard(null); g.s.camera.x = (sh.x + 0.5) * 32; g.s.camera.y = (sh.y + 0.5) * 32; g.s.camera.z = 3; });
+await page.waitForTimeout(800); await page.screenshot({ path: 'shots/econ-shed.png' });
+// the farm and its fields up close
+await page.evaluate(() => { const g = window.railhaven.game, b = g.s.buildings[0]; g.s.camera.x = (b.x + 1.5) * 32; g.s.camera.y = (b.y + 2) * 32; g.s.camera.z = 3; });
+await page.waitForTimeout(800); await page.screenshot({ path: 'shots/econ-farm.png' });
 await browser.close();
 if (errors.length) { console.error(errors.join('\n')); process.exit(1); }
