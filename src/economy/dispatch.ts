@@ -10,7 +10,7 @@ import { isDock } from '../ships/docks.ts';
 import { tickShips } from '../ships/ships.ts';
 import { tickScouts } from '../world/explore.ts';
 import { tickMissions } from '../progress/missions.ts';
-import { fleetMulOf, minLoad, rushDelivered, trainCap } from './upgrades.ts';
+import { expressMul, fleetMulOf, minLoad, rushDelivered, trainCap } from './upgrades.ts';
 import { V_MAX } from '../trains/train.ts';
 import { isRev } from '../track/route.ts';
 import { payMul } from '../buildings/parks.ts';
@@ -129,7 +129,7 @@ function sendLoaded(g: Game, t: Train) {
 }
 
 /** Railway level unlocks, in plain words (index = level). */
-export const UNLOCKS = ['', '🏭 Sawmill, Brickworks and Flour Mill', '🏭 Steel Mill, Refinery and Cannery', '🏭 Textile Mill', '', '', '', '', '', ''];
+export const UNLOCKS = ['', '🏭 Sawmill, Brickworks and Flour Mill', '🏭 Steel Mill, Refinery and Cannery', '🏭 Textile Mill', '⬆ industries and factories grow to level 4', '🚂 Express engines: every train 15% faster', '⬆ industries and factories grow to level 5', '🚃 Longer trains: 20% more cargo on every train', '🚂 Express engines II: another 15% faster', ''];
 
 const pay = (g: Game, v: number) => { g.s.money += v; g.s.earned = (g.s.earned ?? 0) + v; };
 
@@ -194,7 +194,7 @@ export function tickTrains(g: Game, dt: number) {
   let plan: Plan | null = null;
   const P = () => (plan ??= shipPlan(g));
   const fm = fleetMul(g.s.trains.length) * fleetMulOf(g, 'rep');
-  g.sys.vmax = V_MAX * fleetMulOf(g, 'eng');
+  g.sys.vmax = V_MAX * fleetMulOf(g, 'eng') * expressMul(g);
   for (const t of g.s.trains) {
     if (t.v > 0) { const c = UPKEEP * fm * dt; g.s.money -= c; g.s.upkeep = (g.s.upkeep ?? 0) + c; }
     const j = t.job;

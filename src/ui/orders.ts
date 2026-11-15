@@ -1,6 +1,6 @@
 import type { Game, Site } from '../state.ts';
 import type { Building } from '../buildings/industries.ts';
-import { MAX_LVL } from '../economy/upgrades.ts';
+import { maxLvlOf } from '../economy/upgrades.ts';
 import { reachedIslands } from '../progress/missions.ts';
 import { capOf, GOODS, type Good, INDUSTRIES, isFactory, isLinked } from '../buildings/industries.ts';
 import { factoryState } from '../economy/production.ts';
@@ -45,7 +45,7 @@ export function stuckList(g: Game, plan = shipPlan(g)): Stuck[] {
     const b = x.makers.find(m => isFactory(m.kind) && factoryState(g, m).waits.length) ?? [...x.makers].sort((p, q) => p.lvl - q.lvl)[0]!;
     const name = placeName(g, b), w = isFactory(b.kind) ? factoryState(g, b).waits : [];
     const fix = b.closed ? `the ${name} is closed: open it again` : w.length ? `the ${name} is short of ${w.map(k => `${GOODS[k].icon} ${GOODS[k].name.toLowerCase()}`).join(' and ')}: bring more in`
-      : b.lvl < MAX_LVL ? `the ${name} can't keep up: upgrade it or build another` : `the ${name} can't keep up: build another`;
+      : b.lvl < maxLvlOf(g, b) ? `the ${name} can't keep up: upgrade it or build another` : `the ${name} can't keep up: build another`;
     out.push({ icon: '🐢', text: `${x.towns.length} towns wait for ${GOODS[x.good].icon} ${GOODS[x.good].name.toLowerCase()}: ${fix}`, btn: open('bld', b.id), x: b.x, y: b.y, ...(b.closed ? {} : { bld: b.id }) });
   }
   const idle = g.s.trains.filter(t => !t.job);

@@ -11,7 +11,7 @@ import { dockRange, islandName, islandOfB, seaDist } from '../ships/docks.ts';
 import { lanesFrom, SHIP_HOLD, SHIP_PRICE, SHIP_UP, type ShipUpKey, shipCap, shipSpeed, shipUpLvl, waitingAt } from '../ships/ships.ts';
 import { catchOf, FISHING } from '../economy/upgrades.ts';
 import { islandSpec, SPEC_TEXT, specMul } from '../world/specialty.ts';
-import { FLEET, type FleetKey, fleetLvl, levelGain, levelPrice, MAX_LVL, MAX_RUSH, refundOf, RUSH_FEE, rushOf, sellOffer, trainCap } from '../economy/upgrades.ts';
+import { FLEET, type FleetKey, fleetLvl, levelGain, levelPrice, lvlUnlockAt, MAX_LVL, maxLvlOf, MAX_RUSH, refundOf, RUSH_FEE, rushOf, sellOffer, trainCap } from '../economy/upgrades.ts';
 import type { Train } from '../trains/train.ts';
 import { fmtMoney } from './hud.ts';
 import { storyHtml } from './story.ts';
@@ -270,12 +270,13 @@ function buildingCard(g: Game, b: Building, page?: string): string {
   const tr = g.s.trains.filter(t => t.job?.src === b.id || (t.job && sameDest(t.job.to, { kind: 'bld', id: b.id })));
   if (!b.closed) h += `<div class="note">🚂 ${tr.length ? `${tr.length} train${tr.length > 1 ? 's' : ''} on this` : g.s.trains.length ? `Trains collect when ${Math.round(trainCap(g) * 0.75)} are ready` : 'Buy a train at the engine shed (🚂 Train)'}</div>`;
   // grow it, sell what's piled up, or take it down
-  if (b.lvl < MAX_LVL) {
+  if (b.lvl < maxLvlOf(g, b)) {
     const p = levelPrice(b), room = growsTracks(b.kind) && tracksOf(b) < 3 ? stripError(g, b) : '', can = g.s.money >= p && !room;
     h += `<button class="act" data-act="lvl" data-id="${b.id}" ${can ? '' : 'disabled'}>⬆ Level ${b.lvl + 1}: ${levelGain(b)} · ${fmtMoney(p)}</button>`;
     if (room) h += `<small class="why">🚧 No room for another loading track: ${room}</small>`;
     else if (!can) h += `<small class="why">Need ${fmtMoney(p - Math.floor(g.s.money))} more</small>`;
-  } else h += `<div class="gift">⭐ Full size (level ${MAX_LVL}): build a second one to make more</div>`;
+  } else if (lvlUnlockAt(b)) h += `<div class="gift">🔒 Level ${b.lvl + 1} opens at Railway level ${lvlUnlockAt(b)} (you are at ${g.s.rlv ?? 0}): build a second one to make more meanwhile</div>`;
+  else h += `<div class="gift">⭐ Full size (level ${b.lvl}): build a second one to make more</div>`;
   if (!b.closed) h += `<button class="act alt" data-act="shut" data-id="${b.id}">⛔ Close for now</button><small class="why">Closed, it makes nothing${fac ? ' and takes nothing in' : ''}, and barriers keep trains out of its yard${yardThrough(g, b) ? ' (trains that pass through it go another way or wait)' : ''}. Open it again any time.</small>`;
   const so = sellOffer(b);
   h += `<div class="pair"><button class="act alt" data-act="sell" data-id="${b.id}" ${so.n > 0 ? '' : 'disabled'}>💸 Sell ${so.n} ${G.icon} · ${fmtMoney(so.pay)}</button>`;
