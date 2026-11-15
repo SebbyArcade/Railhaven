@@ -154,7 +154,7 @@ export class TrainSystem {
       if (t.area && t.dest !== undefined && t.platTry !== t.dest && steps.some(s => this.anyLane.has(s.piece) && !this.free(t, s.piece))) {
         t.platTry = t.dest;
         const taken = (p: number) => !this.free(t, p);
-        const way = this.route({ head: t.trail.at(-1)!, tail: t.trail[0]!, trail: t.trail, trainLen: trainLength(t), canReverseNow: false, goal: this.goalFor(t.dest, t.area),
+        const way = this.route({ head: t.trail.at(-1)!, tail: t.trail[0]!, trail: t.trail, trainLen: trainLength(t), canReverseNow: false, goal: this.goalFor(t.dest, t.area, trainLength(t)),
           extra: s => this.anyLane.has(s.piece) && taken(s.piece) ? Infinity : this.laneCost(s) });
         if (way && way.length && !way.some(isRev)) { t.plan = way; t.held = 0; this.rebuildHolds(); }
       }
@@ -281,11 +281,17 @@ export class TrainSystem {
   }
 
   /** is this step a place where t's trip ends? */
-  private goalFor(dest: number, area?: number[]): (s: Step) => boolean {
+  private goalFor(dest: number, area?: number[], len = 0): (s: Step) => boolean {
     if (!area) return s => this.net.pieces[s.piece]!.squares.includes(dest);
     const set = new Set(area), inside = (s: Step) => this.net.pieces[s.piece]!.squares.every(q => set.has(q));
+    // where the line beyond turns a corner, the switch (the lanes' fan) sits on the area's own end square: stop short
+    // of it, on the plain loading or platform track, so the switch stays clear (when the train fits there)
+    const fan = (s: Step) => this.net.pieces[s.piece]!.kind === 'fan';
+    const plain = area.filter(q => (this.net.bySquare.get(q) ?? []).every(id => this.net.pieces[id]!.kind !== 'fan')).length * 32;
+    const ok = plain >= len && area.some(q => (this.net.bySquare.get(q) ?? []).some(id => this.net.pieces[id]!.kind === 'fan'))
+      ? (s: Step) => inside(s) && !fan(s) : inside;
     // inside the area, at its far end: going on would leave it
-    return s => inside(s) && !nextStepsOf(this.net, s).some(inside);
+    return s => ok(s) && !nextStepsOf(this.net, s).some(ok);
   }
 
   /** Send a train to the far end of a yard or station hall (whichever end it comes in from). */
@@ -306,7 +312,7 @@ export class TrainSystem {
 
   /** Plan a trip to a square (or the far end of an area). Returns false when there is no way. */
   sendTo(t: Train, dest: number, area?: number[]): boolean {
-    const goal = this.goalFor(dest, area);
+    const goal = this.goalFor(dest, area, trainLength(t));
     const req: RouteRequest = {
       head: t.trail.at(-1)!, tail: t.trail[0]!, trail: t.trail, trainLen: trainLength(t), canReverseNow: true,
       goal,
@@ -402,7 +408,7 @@ export class TrainSystem {
     // waiting for a broken rail to be fixed: nothing else to do
     const nextFree = t.plan.filter(m => !isRev(m))[t.held] as Step | undefined;
     if (nextFree && this.blocked.has(nextFree.piece)) return;
-    const dest = t.dest, L = trainLength(t), goal = this.goalFor(dest, t.area);
+    const dest = t.dest, L = trainLength(t), goal = this.goalFor(dest, t.area, L);
     // pieces under other trains can't be passed; pieces they have only signalled ahead are just costly
     const bodies = new Set<number>();
     for (const o of this.trains) if (o !== t) for (const s of o.trail) { bodies.add(s.piece); for (const c of this.net.conflicts[s.piece]!) bodies.add(c); }
