@@ -135,6 +135,24 @@ function drawPark(ctx: Ctx, g: Game, p: Park, zoom: number, tm: number) {
     }
     if (zoom > 1.2) person(ctx, u + 4, y + TILE - 4, '#4a4440');
   }
+  else if (p.k === 'bridgeworks') {
+    // 🌉 a bridge works: a tall erecting shed, a steel truss span on trestles in the yard, a crane, rivets glowing
+    cottage(ctx, u - 4, y + 12, 16, 14, { wall: '#7d8a96', roof: '#3a4048', walls: 'plain', storeys: 2, door: false });
+    ctx.fillStyle = '#2a2e34'; ctx.fillRect(u - 7, y + 15, 6, 7); // the big shed door
+    const sx = x + 4, sy = y + TILE - 8, sw = 18; // a truss span waiting to be shipped out
+    ctx.fillStyle = 'rgba(0,0,0,.25)'; ctx.fillRect(sx + 1, sy + 4.6, sw, 1.4);
+    ctx.fillStyle = '#6b4a2e'; ctx.fillRect(sx + 1, sy + 1, 1.4, 4); ctx.fillRect(sx + sw - 2.4, sy + 1, 1.4, 4); // trestles
+    ctx.strokeStyle = '#a8483a'; ctx.lineWidth = 0.9; ctx.beginPath();
+    ctx.moveTo(sx, sy + 1); ctx.lineTo(sx + sw, sy + 1); ctx.moveTo(sx, sy - 3); ctx.lineTo(sx + sw, sy - 3);
+    for (let k = 0; k <= 6; k++) { const a = sx + k * sw / 6; ctx.moveTo(a, sy + 1); ctx.lineTo(a, sy - 3); if (k < 6) { ctx.moveTo(a, sy + 1); ctx.lineTo(a + sw / 6, sy - 3); } }
+    ctx.stroke();
+    ctx.strokeStyle = '#e0b040'; ctx.lineWidth = 0.8; ctx.beginPath(); // a crane over the yard
+    ctx.moveTo(u + 9, y + TILE - 4); ctx.lineTo(u + 9, y + 3); ctx.lineTo(u - 1, y + 3); ctx.moveTo(u + 9, y + 6); ctx.lineTo(u + 6, y + 3); ctx.stroke();
+    ctx.strokeStyle = 'rgba(40,40,40,.7)'; ctx.lineWidth = 0.4; ctx.beginPath(); ctx.moveTo(u + 1, y + 3); ctx.lineTo(u + 1, y + 9); ctx.stroke();
+    const glow = 0.5 + 0.5 * Math.sin(tm * 7 + p.y);
+    ctx.fillStyle = `rgba(255,190,80,${glow})`; ctx.beginPath(); ctx.arc(sx + sw * 0.6, sy - 1, 0.9, 0, 7); ctx.fill(); // a rivet being heated
+    if (zoom > 1.2) person(ctx, sx + sw * 0.6 + 2, sy + 4, '#3a5a8a');
+  }
   if (zoom > 1.6) { fence(ctx, x + 2, y + TILE - 2, x + 9, y + TILE - 2); fence(ctx, x + TILE - 9, y + TILE - 2, x + TILE - 2, y + TILE - 2); }
   void pine;
 }

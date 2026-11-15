@@ -1,6 +1,6 @@
 import { restoreShed, type Shed } from '../buildings/shed.ts';
 import type { Game } from '../state.ts';
-import { bridgeJoinsIslands, squareCost } from './rules.ts';
+import { bridgeJoinsIslands, bridgeSpans, squareCost, STRAIT_COST } from './rules.ts';
 import { layPath } from './edit.ts';
 import { stationLinkError } from '../buildings/stations.ts';
 import { joinYardEnds, parkName, yardSquares, yardLinkError } from '../buildings/industries.ts';
@@ -55,8 +55,18 @@ export function extendPlan(g: Game, p: PaintPlan, i: number) {
 /** Price of the new squares in a stroke (existing track is free to join). */
 export function planCost(g: Game, p: PaintPlan): number {
   let c = 0;
-  for (const i of p.path) if (!g.track.has(i)) { const k = squareCost(g, i); if (typeof k === 'number') c += k; }
+  const strait = straitSquares(g, p);
+  for (const i of p.path) if (!g.track.has(i)) { const k = strait.has(i) ? STRAIT_COST : squareCost(g, i); if (typeof k === 'number') c += k; }
   return c;
+}
+
+/** New water squares in this stroke that join two islands (a strait bridge, priced higher). */
+export function straitSquares(g: Game, p: PaintPlan): Set<number> {
+  const water = p.path.filter(i => !g.world.terr[i] && !g.track.has(i)), out = new Set<number>();
+  if (!water.length) return out;
+  const set = new Set([...g.track.keys(), ...p.path]);
+  for (const s of bridgeSpans(g, water, j => set.has(j))) if (s.islands.size === 2) for (const i of s.squares) if (!g.track.has(i)) out.add(i);
+  return out;
 }
 
 /** Why a stroke can't be built, or ''. */

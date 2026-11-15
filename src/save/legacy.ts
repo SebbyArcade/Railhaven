@@ -213,6 +213,12 @@ export function importLegacy(o: any): ImportResult {
     if (at) { (g.s.parks ??= []).push({ town: sites[0]!.id, ...at, k: 'foundry' }); g.taken = undefined; report.push('⛰ The Foundry stands in Ashford again: track can tunnel through mountains'); }
     else { refund += projectOf('foundry')!.price; report.push(`⛰ No room near Ashford for the Foundry: ${fmt(projectOf('foundry')!.price)} paid back`); }
   }
+  // the old 🌉 Bridge Works landmark (it made water track cheaper): it stands again and now builds strait bridges
+  if (o.lm?.viaduct && !hasProject(g, sites[0]!, 'bridgeworks')) {
+    const at = parkSpot(g, sites[0]!);
+    if (at) { (g.s.parks ??= []).push({ town: sites[0]!.id, ...at, k: 'bridgeworks' }); g.taken = undefined; report.push('🌉 The Bridge Works stands in Ashford again: it now builds strait bridges to islands up to 3 squares away'); }
+    else { refund += projectOf('bridgeworks')!.price; report.push(`🌉 No room near Ashford for the Bridge Works: ${fmt(projectOf('bridgeworks')!.price)} paid back`); }
+  }
   g.s.money = (o.money ?? 0) + refund;
   g.news = []; // what the rebuild noticed while laying it all out (landmarks seen, seas charted) is old news
   report.push(`⭐ Railway level ${g.s.rlv} (${g.s.orders} orders filled) · 💰 ${fmt(g.s.money)}`);

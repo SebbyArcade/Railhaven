@@ -30,7 +30,7 @@ that makes sense. Details for each line: `legacy/CHANGES.md` (search the version
 - [ ] Rail model: straights, wide smooth curves, gradual turnouts, crossings, double track, crossovers (done: straights, wide curves, double track, fans, gentle turnouts; to do: crossings, double-track turnouts)
 - [x] Station halls (2 platform lanes, entered only at the ends, building per town size)
 - [x] Trains on rail pieces: no spin, reverse at dead ends, queue at signals, easing (plus: parked trains move aside, trains step aside when the way is blocked)
-- [ ] Bridges: trestle/stone/steel truss by depth, $500/$1,500/$3,500 per square, upkeep, never join two islands, max 3 from land / 8 long (done except upkeep, which comes with the economy)
+- [ ] Bridges: trestle/stone/steel truss by depth, $500/$1,500/$3,500 per square, upkeep, never join two islands (new: after the 🌉 Bridge Works, a strait bridge of up to 3 squares can join sister islands, $4,000 a square; new maps place 2-3 sister-island pairs, older saves keep their maps), max 3 from land / 8 long (done except upkeep, which comes with the economy)
 - [x] Remove track square, route-cut warning, broken rail events + repair handcar (done, route-cut warning names the towns and buildings a removal cuts off)
 - [x] Engine shed with stalls beside the line (spare trains parked inside come with buying trains in stage 3)
 

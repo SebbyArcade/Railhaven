@@ -4,7 +4,7 @@ import { checkPois } from './world/explore.ts';
 import { chartSea, islandOfB, linkedDocks } from './ships/docks.ts';
 const isHomeDock = (g: Game, b: import('./buildings/industries.ts').Building) => islandOfB(g, b) === g.world.home;
 import { doubleSquares, hallsOf } from './buildings/stations.ts';
-import { generateWorld, refreshIslands, refreshWater, TILE } from './world/terrain.ts';
+import { generateWorld, MAP_N, MAP_VERSION, refreshIslands, refreshWater, TILE } from './world/terrain.ts';
 import { generateSites } from './world/sites.ts';
 import { emptyFog, reveal } from './world/fog.ts';
 import { buildNetwork, type Network } from './track/network.ts';
@@ -22,7 +22,7 @@ export const START_DEPOSIT_REVEAL = 4;
 
 /** Rebuild the world from the seed and apply saved terrain edits. */
 export function buildWorld(s: GameState) {
-  const world = generateWorld(s.seed);
+  const world = generateWorld(s.seed, MAP_N, s.mapV ?? 1); // saves from before sister islands keep their maps
   const edits = Object.entries(s.terrainEdits);
   if (edits.length) {
     for (const [i, t] of edits) world.terr[+i] = t;
@@ -63,12 +63,12 @@ function assemble(s: GameState): Game {
 }
 
 export function newGame(seed = Math.floor(Math.random() * 1e6)): Game {
-  const world = generateWorld(seed);
+  const world = generateWorld(seed, MAP_N, MAP_VERSION);
   const { sites, mountains } = generateSites(world);
   const terrainEdits: Record<number, number> = {};
   for (const i of mountains) terrainEdits[i] = world.terr[i]!;
   const s: GameState = {
-    version: 1, seed, t: 0, money: START_MONEY, fog: emptyFog(world.n), sites, terrainEdits,
+    version: 1, mapV: MAP_VERSION, seed, t: 0, money: START_MONEY, fog: emptyFog(world.n), sites, terrainEdits,
     camera: { x: world.cx * TILE + TILE / 2, y: world.cy * TILE + TILE / 2, z: 1.8 },
     track: [], trains: [], netKey: '', nextId: 1,
   };

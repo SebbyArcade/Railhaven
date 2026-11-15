@@ -38,6 +38,8 @@ export interface Site {
 export interface GameState {
   version: 1;
   seed: number;
+  /** map maker version (missing = 1, the old game's maps; 2 adds sister islands) */
+  mapV?: number;
   /** game time in seconds */
   t: number;
   money: number;

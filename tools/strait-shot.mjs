@@ -1,0 +1,22 @@
+// Sister islands and a strait bridge, from tools/strait-save.ts. Usage: node tools/strait-shot.mjs [save]
+import { chromium } from 'playwright';
+import { existsSync, readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+const file = process.argv[2] ?? 'shots/strait.json';
+const browser = await chromium.launch({ executablePath: existsSync('/opt/pw-browsers/chromium') ? '/opt/pw-browsers/chromium' : undefined });
+const page = await browser.newPage({ viewport: { width: 412, height: 860 }, deviceScaleFactor: 2, hasTouch: true });
+const errors = []; page.on('pageerror', e => errors.push(String(e)));
+await page.addInitScript(s => localStorage.setItem('railhaven2', s), readFileSync(file, 'utf8'));
+await page.goto('file://' + resolve('dist/index.html'));
+await page.waitForTimeout(1500);
+const cam = await page.evaluate(() => { const r = window.railhaven, g = r.game; g.found = []; if (g.s.ms) g.s.ms.actNew = false; r.openCard(null); return { ...g.s.camera }; });
+await page.waitForTimeout(1000); await page.screenshot({ path: 'shots/strait-bridge.png' });
+await page.evaluate(c => { const g = window.railhaven.game; g.s.camera.z = 0.55; }, cam);
+await page.waitForTimeout(1200); await page.screenshot({ path: 'shots/strait-islands.png' });
+await page.evaluate(() => { const r = window.railhaven; r.openCard({ kind: 'town', id: r.game.s.sites[0].id, page: 'projects' }); });
+await page.waitForTimeout(600); await page.screenshot({ path: 'shots/strait-card.png' });
+await page.click('[data-act="project"][data-k="bridgeworks"]'); await page.waitForTimeout(400);
+const p = await page.evaluate(() => { const r = window.railhaven, g = r.game, p = g.s.parks.find(q => q.k === 'bridgeworks'); r.openCard(null); g.s.camera.x = (p.x + 0.5) * 32; g.s.camera.y = (p.y + 1.5) * 32; g.s.camera.z = 3.2; return p; });
+await page.waitForTimeout(1200); await page.screenshot({ path: 'shots/strait-works.png' });
+console.log(JSON.stringify({ cam, p }), errors.join('\n') || 'no page errors');
+await browser.close();

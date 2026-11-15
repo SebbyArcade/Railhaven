@@ -43,9 +43,14 @@ export function squareCost(g: Game, i: number): number | string {
   return t === T.Hills ? TRACK_COST.hills : TRACK_COST.flat;
 }
 
-/** Bridges may cross rivers, lakes and inlets, never join two islands. Returns the reason if this layout does. */
-export function bridgeJoinsIslands(g: Game, water: Iterable<number>, isTrack: (i: number) => boolean): string {
-  const n = g.world.n, seen = new Set<number>();
+/** A strait bridge (after the 🌉 Bridge Works) may join two islands across at most this many squares of water, at this price a square. */
+export const STRAIT_MAX = 3;
+export const STRAIT_COST = 4000;
+export const hasBridgeWorks = (g: Game) => (g.s.parks ?? []).some(p => p.k === 'bridgeworks');
+
+/** Each run of bridge squares (water with track) through these water squares, and the islands its ends touch. */
+export function bridgeSpans(g: Game, water: Iterable<number>, isTrack: (i: number) => boolean): { squares: number[]; islands: Set<number> }[] {
+  const n = g.world.n, seen = new Set<number>(), out: { squares: number[]; islands: Set<number> }[] = [];
   for (const start of water) {
     if (seen.has(start)) continue;
     const q = [start], islands = new Set<number>(); seen.add(start);
@@ -57,8 +62,23 @@ export function bridgeJoinsIslands(g: Game, water: Iterable<number>, isTrack: (i
         else if (!seen.has(j)) { seen.add(j); q.push(j); }
       }
     }
-    if (islands.size > 1) return 'A bridge can\'t join two islands: build a dock and ship goods across';
-    if (q.length > BRIDGE_MAX_LEN) return `A bridge can be at most ${BRIDGE_MAX_LEN} squares long (this one is ${q.length})`;
+    out.push({ squares: q, islands });
+  }
+  return out;
+}
+
+/**
+ * Bridges may cross rivers, lakes and inlets. Joining two islands takes the 🌉 Bridge Works and a short strait
+ * (at most STRAIT_MAX squares of water); anything wider needs a dock and ships. Returns the reason if this layout breaks a rule.
+ */
+export function bridgeJoinsIslands(g: Game, water: Iterable<number>, isTrack: (i: number) => boolean): string {
+  for (const { squares, islands } of bridgeSpans(g, water, isTrack)) {
+    if (islands.size > 2) return 'A bridge can join at most two islands';
+    if (islands.size === 2) {
+      if (!hasBridgeWorks(g)) return 'A bridge can\'t join two islands yet: build the 🌉 Bridge Works in Ashford (Railway level 6) for short straits, or a dock and ships';
+      if (squares.length > STRAIT_MAX) return `A strait bridge between islands can cross at most ${STRAIT_MAX} squares of water (this one is ${squares.length}): for wider seas use a dock and ships`;
+    }
+    if (squares.length > BRIDGE_MAX_LEN) return `A bridge can be at most ${BRIDGE_MAX_LEN} squares long (this one is ${squares.length})`;
   }
   return '';
 }
