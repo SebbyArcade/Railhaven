@@ -38,7 +38,7 @@ export class Tools {
   dbl = new Set<number>();
   removeAt: number | null = null;
   /** the building just built: Undo takes it back with a full refund (until the next build, or for a minute) */
-  lastBuild: { id: number; paid: number; at: number } | null = null;
+  lastBuild: { id: number; paid: number; at: number; before: [number, number | null][] } | null = null;
   /** when the outline was last tapped (a second tap soon after builds it) */
   private outlineTapAt = 0;
   /** what removing that square would cut off the railway ('' when nothing) */
@@ -313,9 +313,10 @@ export class Tools {
   undo() {
     const g = this.g(), ub = this.undoBuilding();
     if (ub) { // take back the building just built, with all its money
-      const paid = this.lastBuild!.paid, err = removeBuilding(g, ub); if (err) { toast(err); return; }
+      const { paid, before } = this.lastBuild!, err = removeBuilding(g, ub); if (err) { toast(err); return; }
+      takeBackYard(g, before);
       g.s.money += paid - refundOf(ub); this.lastBuild = null;
-      trackChanged(g); g.terrainDirty?.(footprint(g.world.n, ub));
+      trackChanged(g); g.terrainDirty?.([...footprint(g.world.n, ub), ...before.map(([i]) => i)]);
       toast(`${INDUSTRIES[ub.kind].icon} ${INDUSTRIES[ub.kind].name} taken back · ${fmtMoney(paid)} back`); return;
     }
     const b = this.lastStroke;
@@ -372,6 +373,7 @@ export class Tools {
     const g = this.g();
     if (this.mode === 'rail' && this.plan) {
       const b = buildPlan(g, this.plan); if (typeof b === 'string') { toast(b); return; }
+      this.lastBuild = null; // new track: a building can no longer be taken back
       this.lastStroke = b.revealed ? null : b;
       if (b.revealed) toast('New land uncovered! (Track that uncovers land can\'t be undone)');
       trackChanged(g); g.terrainDirty?.(this.plan.path);
@@ -379,12 +381,15 @@ export class Tools {
     } else if (this.mode === 'double') {
       const add = [...this.dbl].filter(i => g.track.has(i) && !g.track.get(i)!.dbl), c = add.length * TRACK_COST.double;
       if (c > g.s.money) { toast('Not enough money'); return; }
-      g.s.money -= c; for (const i of add) g.track.get(i)!.dbl = true; this.lastStroke = null;
+      g.s.money -= c; for (const i of add) g.track.get(i)!.dbl = true; this.lastStroke = null; this.lastBuild = null;
       trackChanged(g); this.dbl.clear();
     } else if (this.mode === 'build' && this.preview) {
-      const m0 = g.s.money, b = build(g, this.preview); if (typeof b === 'string') { toast(b); return; }
-      this.lastBuild = { id: b.id, paid: m0 - g.s.money, at: performance.now() };
+      const fog0 = g.s.fog.slice(), m0 = g.s.money, ys = yardSquares(g.world.n, this.preview), st = this.preview.horizontal ? 1 : g.world.n;
+      const before = [ys[0]! - st, ...ys, ys.at(-1)! + st].map(i => [i, g.track.get(i)?.links ?? null] as [number, number | null]); // the yard's squares and the squares past its ends, as they were
+      const b = build(g, this.preview); if (typeof b === 'string') { toast(b); return; }
+      this.lastBuild = { id: b.id, paid: m0 - g.s.money, at: performance.now(), before };
       trackChanged(g); g.terrainDirty?.(footprint(g.world.n, b));
+      if (!g.s.fog.every((v, k) => v === fog0[k])) { this.lastBuild = null; toast(`${INDUSTRIES[b.kind].icon} ${INDUSTRIES[b.kind].name} built: it uncovered new land, so it can't be undone`, 3500); this.preview = null; this.previewErr = ''; this.glowKey = ''; return; }
       toast(isLinked(g, b) ? `${INDUSTRIES[b.kind].icon} ${INDUSTRIES[b.kind].name} built · ↶ Undo if it's the wrong spot` : `${INDUSTRIES[b.kind].icon} Built! Now lay track from your railway to one end of its yard · ↶ Undo if it's the wrong spot`);
       this.preview = null; this.previewErr = ''; this.glowKey = '';
     } else if (this.mode === 'train') {
@@ -400,7 +405,7 @@ export class Tools {
     } else if (this.mode === 'remove' && this.removeAt !== null) {
       const i = this.removeAt;
       if (g.s.trains.some(t => t.trail.some(s => g.net.pieces[s.piece]!.squares.includes(i)))) { toast('A train is on this track'); return; }
-      this.lastStroke = null;
+      this.lastStroke = null; this.lastBuild = null;
       removeSquare(g.track, g.world.n, i); trackChanged(g); g.terrainDirty?.([i]); this.removeAt = null;
     }
   }
@@ -435,4 +440,21 @@ function placeAround(horizontal: boolean, side: 1 | -1, cx: number, cy: number):
 function centreOf(p: { x: number; y: number; horizontal: boolean; side: 1 | -1 }): [number, number] {
   if (p.horizontal) return [p.x + 1.5, (p.side > 0 ? p.y : p.y - 1) + 0.5];
   return [(p.side > 0 ? p.x : p.x - 1) + 0.5, p.y + 1.5];
+}
+
+/** Undo of a building: its yard track goes again. Squares that were already track get their old rails back; squares
+ *  laid only for the yard are removed, along with any rails joined onto them since. */
+export function takeBackYard(g: Game, before: [number, number | null][]) {
+  const n = g.world.n, gone: number[] = [];
+  for (const [i, links] of before) {
+    if (links === null) { if (g.track.has(i) && before.some(([j, l]) => j === i && l === null) && isYardOnly(before, i)) { g.track.delete(i); gone.push(i); } }
+    else { const t = g.track.get(i); if (t) t.links = links | (t.links & ~yardBits(before, i, n)); }
+  }
+  for (const i of gone) for (const [d, j] of [[0, i + 1], [1, i + n], [2, i - 1], [3, i - n]] as const) { const t = g.track.get(j); if (t) t.links &= ~(1 << ((d + 2) % 4)); }
+}
+/** the yard's own squares (not the two squares past its ends) */
+const isYardOnly = (before: [number, number | null][], i: number) => before.findIndex(([j]) => j === i) > 0 && before.findIndex(([j]) => j === i) < before.length - 1;
+/** links on square i that point to a yard square laid fresh */
+function yardBits(before: [number, number | null][], i: number, n: number): number {
+  let m = 0; for (const [d, j] of [[0, i + 1], [1, i + n], [2, i - 1], [3, i - n]] as const) if (before.some(([k, l], x) => k === j && l === null && x > 0 && x < before.length - 1)) m |= 1 << d; return m;
 }

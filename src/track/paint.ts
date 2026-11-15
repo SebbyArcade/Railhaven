@@ -2,7 +2,7 @@ import type { Game } from '../state.ts';
 import { bridgeJoinsIslands, squareCost } from './rules.ts';
 import { layPath } from './edit.ts';
 import { stationLinkError } from '../buildings/stations.ts';
-import { yardLinkError } from '../buildings/industries.ts';
+import { joinYardEnds, yardSquares, yardLinkError } from '../buildings/industries.ts';
 import type { TrackMap, TrackSquare } from './types.ts';
 import { reveal } from '../world/fog.ts';
 
@@ -95,6 +95,14 @@ export function buildPlan(g: Game, p: PaintPlan): BuiltStroke | string {
   const before: BuiltStroke['before'] = [...new Set(p.path)].map(i => { const o = g.track.get(i); return [i, o && { ...o }]; });
   g.s.money -= cost;
   layPath(g.track, n, p.path);
+  // a yard whose end touches the new track joins it there, as if the track were laid into it
+  const on = new Set(p.path);
+  for (const b of g.s.buildings ?? []) {
+    const sq = yardSquares(n, b), st = b.horizontal ? 1 : n;
+    if (!on.has(sq[0]! - st) && !on.has(sq.at(-1)! + st)) continue;
+    for (const e of [sq[0]!, sq.at(-1)!, sq[0]! - st, sq.at(-1)! + st]) if (!before.some(([i]) => i === e)) { const o = g.track.get(e); before.push([e, o && { ...o }]); } // so Undo puts the yard back too
+    joinYardEnds(g, b);
+  }
   let revealed = 0;
   for (const i of fresh) revealed += reveal(g, i % n, (i / n) | 0, TRACK_REVEAL);
   return { before, cost, revealed };
