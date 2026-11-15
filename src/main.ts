@@ -28,7 +28,7 @@ const tools = new Tools(() => game);
 let renderer = new Renderer(game, tools);
 /** run the game rules for some seconds at once (screenshot checks and the bot) */
 function step(secs: number) { for (let k = 0; k < secs * 20; k++) { const dt = 0.05; game.s.t += dt; game.sys.tick(dt); tickProduction(game, dt); tickTowns(game, dt); tickTrains(game, dt); if (tickBreaks(game)) breaksChanged(game); } }
-(window as any).railhaven = { get game() { return game; }, tools, step, openCard: (c: Card) => openCard(c), breakRail: (i: number) => { const b = breakRail(game, i); breaksChanged(game); return b; } };
+(window as any).railhaven = { get game() { return game; }, tools, step, openCard: (c: Card | null) => openCard(c), breakRail: (i: number) => { const b = breakRail(game, i); breaksChanged(game); return b; } };
 
 const view: View = { w: 0, h: 0 };
 let dpr = 1;
@@ -69,7 +69,7 @@ attachInput(canvas, () => game.s.camera, () => view, () => game.world.n * 32, {
 
 // Cards: town, building and train; redrawn every second while open so numbers stay live
 const cardEl = $('card');
-function openCard(c: Card) { tools.card = c; tools.selected = c.kind === 'train' ? c.id : null; renderCard(); }
+function openCard(c: Card | null) { tools.card = c; tools.selected = c?.kind === 'train' ? c.id : null; renderCard(); }
 function closeCard() { tools.card = null; tools.selected = null; renderCard(); }
 function renderCard() {
   const html = tools.card && cardHtml(game, tools.card);
@@ -94,7 +94,14 @@ function renderMenu() {
     return `<button data-k="${k}" class="${tools.buildKind === k ? 'on' : ''}"><b>${d.icon}</b>${d.name}<small>${fmtMoney(p)}</small></button>`;
   }).join('');
 }
-menu.onclick = e => { const b = (e.target as HTMLElement).closest('button'); if (!b) return; tools.chooseBuild(b.dataset.k as IndustryKind); menuOpen = false; };
+menu.onclick = e => {
+  const b = (e.target as HTMLElement).closest('button'); if (!b) return;
+  const spot = tools.chooseBuild(b.dataset.k as IndustryKind); menuOpen = false;
+  if (!spot) return;
+  // the nearest spot is off screen: bring it into view (the camera moves, nothing is built)
+  const c = game.s.camera, [sx, sy] = [(spot.x + 0.5) * 32, (spot.y + 0.5) * 32];
+  if (Math.abs(sx - c.x) * c.z > view.w * 0.4 || Math.abs(sy - c.y) * c.z > view.h * 0.3) { c.x = sx; c.y = sy; toast('The nearest spot that fits is glowing here'); }
+};
 $('buildBtn').onclick = () => {
   if (tools.mode === 'build' || menuOpen) { menuOpen = false; tools.setMode('pan'); tools.mode = 'pan'; tools.buildKind = null; return; }
   tools.mode = 'pan'; tools.cancel(); menuOpen = true; renderMenu();
@@ -110,6 +117,7 @@ $('newGame').onclick = () => {
 };
 $('ok').onclick = () => tools.confirm();
 $('undo').onclick = () => tools.undo();
+$('turn').onclick = () => tools.turn();
 $('cancel').onclick = () => { tools.cancel(); };
 
 function updateUi() {
@@ -122,6 +130,7 @@ function updateUi() {
   $('undo').style.display = tools.canUndo() ? 'block' : 'none';
   const bar = tools.bar(), cb = $('confirm');
   cb.style.display = bar ? 'flex' : 'none';
+  $('turn').style.display = bar?.turn ? 'block' : 'none';
   if (bar) { $('ctext').textContent = bar.text; ($('ok') as HTMLButtonElement).disabled = !bar.can; $('ok').textContent = bar.ok; }
 }
 

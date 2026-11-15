@@ -71,9 +71,14 @@ const ART: Record<Building['kind'], Art> = {
   farm: (ctx, tm, H) => { // barn, silo, golden field rows
     house(ctx, -36, -1, 20, 14, '#a8402e', '#6e2a20'); ctx.fillStyle = '#efe6d2'; ctx.fillRect(-38, 3, 4, 3.5);
     ctx.fillStyle = '#c9c2b0'; ctx.beginPath(); ctx.arc(-18, -2, 5, 0, 7); ctx.fill(); ctx.fillStyle = '#8a8478'; ctx.beginPath(); ctx.arc(-18, -2, 2.4, 0, 7); ctx.fill();
-    for (let r = 0; r < 5; r++) { ctx.fillStyle = r % 2 ? '#d8b44a' : '#c49a34'; ctx.fillRect(-6, -12 + r * 5, 62, 3.6); }
-    const sway = Math.sin(tm * 1.5) * 0.6; ctx.fillStyle = 'rgba(255,240,170,.35)'; for (let k = 0; k < 10; k++) ctx.fillRect(-4 + k * 6 + sway, -12 + (k % 5) * 5, 1, 3.6);
-    void H;
+    // the home field by the barn: ripe wheat in rows, ears swaying, a hedge along its far side
+    ctx.fillStyle = '#d9b54e'; ctx.fillRect(-7, -13, 64, 26);
+    ctx.strokeStyle = '#b8902e'; ctx.lineWidth = 1.1;
+    for (let r = -10; r < 13; r += 3.2) { ctx.beginPath(); for (let u = -7; u <= 57; u += 5) ctx.lineTo(u, r + Math.sin(u * 0.35) * 0.4); ctx.stroke(); }
+    ctx.fillStyle = '#f3dc8a';
+    for (let k = 0; k < 40; k++) { const u = -5 + H(100 + k) * 60, v = -11 + H(200 + k) * 22; ctx.fillRect(u + Math.sin(tm * 1.8 + u * 0.08) * 0.9, v, 0.9, 2); }
+    ctx.strokeStyle = '#3f6a2e'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(-7, 13); ctx.lineTo(57, 13); ctx.stroke();
+    for (let k = 0; k < 9; k++) { ctx.fillStyle = k % 2 ? '#4f7f38' : '#3b6329'; ctx.beginPath(); ctx.arc(-5 + k * 7.5, 13, 1.8, 0, 7); ctx.fill(); }
   },
   stone: (ctx, tm, H, lvl) => { // a stepped quarry pit and a little crane
     ctx.fillStyle = '#6f6a62'; ctx.beginPath(); ctx.ellipse(10, 2, 30, 11, 0, 0, 7); ctx.fill();

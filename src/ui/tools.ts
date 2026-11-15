@@ -7,7 +7,7 @@ import { buyTrain, trainPrice } from '../economy/dispatch.ts';
 import { bodyPoint, trainLength } from '../trains/train.ts';
 import { fmtMoney, toast } from './hud.ts';
 import type { Card } from './cards.ts';
-import { bestPlacement, build, footprint, INDUSTRIES, type IndustryKind, isLinked, placeError, placementsAt, priceOf, shareAt, harmOf, harmText } from '../buildings/industries.ts';
+import { bestPlacement, build, footprint, INDUSTRIES, type IndustryKind, isLinked, placeError, placementsAt, priceOf, shareAt, harmOf, harmText, nearestSpot, noSpotText } from '../buildings/industries.ts';
 
 type Placement = ReturnType<typeof placementsAt>[number];
 
@@ -19,7 +19,7 @@ export const MODE_HINT: Record<Mode, string> = {
   double: '═ Tap or drag along your track to make it double. Trains keep left, so two can pass.',
   remove: '✂ Tap a track square to remove it.',
   train: '🚂 Trains roll out of the engine shed and run themselves: each takes the best waiting load where it is needed.',
-  build: '🏗 Pick what to build, then tap a glowing spot. Tap it again to turn the yard.',
+  build: '🏗 Pick what to build, then tap a glowing spot. ⟳ Turn changes which way it faces.',
 };
 
 /** The build tools: what the player is doing, and the confirm bar it needs. */
@@ -40,7 +40,6 @@ export class Tools {
   private glowKey = '';
   preview: Placement | null = null;
   private previewAt = -1;
-  private previewTurn = 0;
 
   constructor(private g: () => Game) {}
 
@@ -52,7 +51,13 @@ export class Tools {
   cancel() { this.plan = null; this.dbl.clear(); this.removeAt = null; this.preview = null; this.previewAt = -1; if (this.mode !== 'build') this.buildKind = null; }
 
   /** choose what to build: glowing squares show where it fits */
-  chooseBuild(k: IndustryKind) { this.mode = 'build'; this.buildKind = k; this.preview = null; this.glowKey = ''; }
+  chooseBuild(k: IndustryKind): { x: number; y: number } | null {
+    this.mode = 'build'; this.buildKind = k; this.preview = null; this.glowKey = '';
+    const g = this.g(), c = g.s.camera, cx = Math.floor(c.x / 32), cy = Math.floor(c.y / 32);
+    const spot = nearestSpot(g, k, cx, cy);
+    if (!spot) { toast(noSpotText(k)); return null; }
+    return spot;
+  }
 
   /** recompute the glowing squares around the view (cheap enough to call each frame: cached on what matters) */
   updateGlow(cx: number, cy: number) {
@@ -100,19 +105,27 @@ export class Tools {
     if (this.mode === 'double') { if (g.track.has(i)) { if (this.dbl.has(i)) this.dbl.delete(i); else this.dbl.add(i); } return true; }
     if (this.mode === 'build' && this.buildKind) {
       const x = i % n, y = (i / n) | 0;
-      if (this.previewAt === i && this.preview) { // tap again: turn the yard to the next way that fits
-        const all = placementsAt(this.buildKind, x, y).filter(p => !placeError(g, p));
-        if (all.length > 1) { this.previewTurn = (this.previewTurn + 1) % all.length; this.preview = all[this.previewTurn]!; }
-        return true;
-      }
+      if (this.previewAt === i && this.preview) { this.turn(); return true; } // tap again: turn it
       const b = bestPlacement(g, this.buildKind, x, y);
       if (!b.place) { this.refuse(i, b.why); return true; }
-      this.preview = b.place; this.previewAt = i; this.previewTurn = 0;
+      this.preview = b.place; this.previewAt = i;
       return true;
     }
     if (this.mode === 'remove') { this.removeAt = g.track.has(i) ? i : null; if (!g.track.has(i)) toast('No track here'); return true; }
     if (this.mode === 'train') return true;
     return false;
+  }
+
+  /** Turn the building being placed to the next way that fits on the same spot. */
+  turn() {
+    const g = this.g(), n = g.world.n, i = this.previewAt;
+    if (!this.buildKind || !this.preview || i < 0) return;
+    const all = placementsAt(this.buildKind, i % n, (i / n) | 0).filter(p => !placeError(g, p));
+    // ways that differ: direction and side (shifting along the row is not a turn)
+    const ways = all.filter((p, k) => all.findIndex(q => q.horizontal === p.horizontal && q.side === p.side) === k);
+    if (ways.length < 2) { toast('Only one way fits on this spot: try a more open spot to turn it'); return; }
+    const cur = ways.findIndex(p => p.horizontal === this.preview!.horizontal && p.side === this.preview!.side);
+    this.preview = ways[(cur + 1) % ways.length]!;
   }
 
   /** a tap near a train selects it */
@@ -143,7 +156,7 @@ export class Tools {
   }
 
   // ---- the confirm bar
-  bar(): { text: string; ok: string; can: boolean } | null {
+  bar(): { text: string; ok: string; can: boolean; turn?: boolean } | null {
     const g = this.g();
     if (this.mode === 'rail' && this.plan && this.plan.path.length > 1) {
       const e = planError(g, this.plan), n = this.plan.path.filter(i => !g.track.has(i)).length;
@@ -160,7 +173,7 @@ export class Tools {
     }
     if (this.mode === 'build' && this.preview) {
       const k = this.preview.kind, price = priceOf(g, k), out = Math.round(INDUSTRIES[k].rate * shareAt(g, this.preview) * 60);
-      return { text: `${INDUSTRIES[k].icon} ${INDUSTRIES[k].name} · ${fmtMoney(price)} · makes ${out}/min${harmText(harmOf(g, footprint(g.world.n, this.preview)))}`, ok: '✓ Build', can: price <= g.s.money };
+      return { text: `${INDUSTRIES[k].icon} ${INDUSTRIES[k].name} · ${fmtMoney(price)} · makes ${out}/min${harmText(harmOf(g, footprint(g.world.n, this.preview)))}`, ok: '✓ Build', can: price <= g.s.money, turn: true };
     }
     return null;
   }

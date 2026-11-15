@@ -1,3 +1,4 @@
+import { isRevealed } from '../src/world/fog.ts';
 import { describe, expect, it } from 'vitest';
 import { newGame } from '../src/game.ts';
 import { buildPlan, extendPlan, startPlan, undoStroke } from '../src/track/paint.ts';
@@ -19,7 +20,9 @@ describe('painting track', () => {
 
   it('track uncovers the land around it (such strokes are not undoable)', () => {
     const g = newGame(4242), n = g.world.n, a = g.s.sites[0]!, at = (dx: number, dy: number) => (a.y + dy) * n + a.x + dx;
-    const p = startPlan(g, at(0, 0))!; extendPlan(g, p, at(8, 0));
+    // whichever way still has fog 8 squares out (the first deposits start uncovered)
+    const dir = [[8, 0], [-8, 0], [0, 8], [0, -8]].find(([dx, dy]) => !isRevealed(g, at(dx! + Math.sign(dx!) * 3, dy! + Math.sign(dy!) * 3)))!;
+    const p = startPlan(g, at(0, 0))!; extendPlan(g, p, at(dir[0]!, dir[1]!));
     const b = buildPlan(g, p);
     if (typeof b === 'string') throw new Error(b);
     expect(b.revealed).toBeGreaterThan(0);

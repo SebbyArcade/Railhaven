@@ -3,7 +3,7 @@ import type { Train } from '../trains/train.ts';
 import { placeTrain } from '../trains/train.ts';
 import { type Building, GOODS, type Good, INDUSTRIES, isLinked, yardSquares } from '../buildings/industries.ts';
 import { hallOf } from '../buildings/stations.ts';
-import { shedSquare } from '../buildings/shed.ts';
+import { shedSiding } from '../buildings/shed.ts';
 import { bldDist, destSquares, MIN_LOAD, payFor, railDist, type Ship, shipPlan, siteOf, TRAIN_CAP } from './shipping.ts';
 import { deliverToTown, orderDone, reward, sizeName, stepOf } from './towns.ts';
 
@@ -29,16 +29,17 @@ export function buyTrain(g: Game): Train | string {
   const price = trainPrice(g);
   if (!g.s.shed) return 'Lay a straight bit of line near Ashford first: the engine shed goes beside it';
   if (price > g.s.money) return `Need $${(price - g.s.money).toLocaleString('en-US')} more for a train`;
-  const n = g.world.n, sh = g.s.shed, sq = shedSquare(g);
-  const DXY = [1, n, -1, -n], at = sq + DXY[sh.side]!;
-  const ids = g.net.bySquare.get(at) ?? [];
-  for (const id of [...ids].sort((a, b) => g.net.pieces[a]!.squares.length - g.net.pieces[b]!.squares.length)) for (const dir of [1, -1] as const) {
+  // the new train stands on the siding, engine toward the line, its last wagon inside the shed
+  const sd = shedSiding(g)!;
+  for (const id of g.net.bySquare.get(sd.mid) ?? []) for (const dir of [1, -1] as const) {
     const t = placeTrain(g.net, g.s.nextId, { piece: id, dir }, 3);
-    if (t.trail.some(s => g.sys.holder.has(s.piece) || g.sys.blocked.has(s.piece))) continue;
+    const sq = t.trail.flatMap(s => g.net.pieces[s.piece]!.squares);
+    if (!sq.includes(sd.shed) || sq.includes(sd.line)) continue; // facing the wrong way
+    if (t.trail.some(s => g.sys.holder.has(s.piece) || g.sys.blocked.has(s.piece))) return 'A train is still on the shed siding: try again in a moment';
     g.s.nextId++; g.s.money -= price; g.s.trains.push(t); g.sys.rebuildHolds();
     return t;
   }
-  return 'A train is standing by the shed: try again in a moment';
+  return 'The shed siding is busy: try again in a moment';
 }
 
 /** Units of stock already promised to trains on their way to collect. */

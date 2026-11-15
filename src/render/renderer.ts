@@ -7,6 +7,7 @@ import { drawSites } from './sites.ts';
 import { drawHall } from './stations.ts';
 import { drawBreak, drawShed } from './shed.ts';
 import { drawBuilding } from './buildings.ts';
+import { drawFields } from './fields.ts';
 import { shedSquare } from '../buildings/shed.ts';
 import { hallsOf } from '../buildings/stations.ts';
 import { landDistance } from '../track/rules.ts';
@@ -57,10 +58,11 @@ export class Renderer {
     const halls = hallsOf(g.track, n, g.s.sites);
     for (const h of halls) if (vis(h.squares[1]) && isRevealed(g, h.squares[1])) drawHall(ctx, g.s.seed, h, cam.z);
     drawSites(ctx, g, x0, y0, x1, y1, cam.z, tm, halls);
+    for (const b of g.s.buildings ?? []) if (vis(b.y * n + b.x) && isRevealed(g, b.y * n + b.x)) drawFields(ctx, g, b, tm, cam.z);
     for (const b of g.s.buildings ?? []) if (vis(b.y * n + b.x) && isRevealed(g, b.y * n + b.x)) drawBuilding(ctx, g, b, tm, cam.z);
-    drawShed(ctx, g, tm);
     for (const b of g.s.breaks ?? []) if (vis(b.square)) drawBreak(ctx, g, b, tm);
     drawTrains(ctx, g.net, g.s.trains, tm);
+    drawShed(ctx, g, tm); // after trains: a train on the siding runs in under its roof
     if (tm - this.planAt > 1) { this.planAt = tm; this.plan = shipPlan(g); } // the plan changes slowly: once a second is plenty
     if (this.tools?.card?.kind === 'bld') drawShipArrow(ctx, g, this.plan, this.tools.card.id, tm);
     drawTownBadges(ctx, g, this.plan, cam.z, tm);

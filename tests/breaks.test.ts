@@ -3,6 +3,8 @@ import { breaksChanged, newGame, trackChanged } from '../src/game.ts';
 import { buildPlan, extendPlan, startPlan } from '../src/track/paint.ts';
 import { breakRail, tickBreaks } from '../src/track/breaks.ts';
 import { placeTrain } from '../src/trains/train.ts';
+import { shedSiding } from '../src/buildings/shed.ts';
+import { buyTrain } from '../src/economy/dispatch.ts';
 
 function setup() {
   const g = newGame(4242), n = g.world.n, a = g.s.sites[0]!, at = (dx: number, dy: number) => (a.y + dy) * n + a.x + dx;
@@ -13,19 +15,25 @@ function setup() {
 }
 
 describe('engine shed and broken rails', () => {
-  it('the engine shed stands beside the line near Ashford, and moves if track is laid on it', () => {
+  it('the engine shed stands near Ashford on its own siding, and moves if track is laid on it', () => {
     const { g } = setup();
     expect(g.s.shed).toBeDefined();
-    const sh = g.s.shed!, a = g.s.sites[0]!;
+    const sh = g.s.shed!, a = g.s.sites[0]!, n = g.world.n, sd = shedSiding(g)!;
     expect(Math.hypot(sh.x - a.x, sh.y - a.y)).toBeLessThanOrEqual(6);
-    expect(g.track.has(sh.y * g.world.n + sh.x)).toBe(false);
-    const n = g.world.n, line = g.track.get((sh.y + [0, 1, 0, -1][sh.side]!) * n + sh.x + [1, 0, -1, 0][sh.side]!);
-    expect(line).toBeDefined();
-    // paint a branch straight through the shed's square: allowed, and the shed moves
-    const i = sh.y * n + sh.x, j = (sh.y + [0, 1, 0, -1][sh.side]!) * n + sh.x + [1, 0, -1, 0][sh.side]!;
-    const p = startPlan(g, j)!; extendPlan(g, p, i);
+    // the siding: shed square, middle square, and a turnout on the line, all joined to Ashford
+    for (const i of [sd.shed, sd.mid, sd.line]) expect(g.linked!.has(i)).toBe(true);
+    expect(g.net.bySquare.get(sd.shed)?.length).toBeGreaterThan(0);
+    // a bought train stands on the siding, clear of the line
+    g.s.money = 1e5;
+    const t = buyTrain(g); if (typeof t === 'string') throw new Error(t);
+    const sq = t.trail.flatMap(s => g.net.pieces[s.piece]!.squares);
+    expect(sq).toContain(sd.shed); expect(sq).not.toContain(sd.line);
+    // paint on from the shed square: allowed; the shed moves and the track stays
+    const back = sd.shed - (sd.mid - sd.shed);
+    const p = startPlan(g, sd.shed)!; extendPlan(g, p, back);
     expect(typeof buildPlan(g, p)).not.toBe('string'); trackChanged(g);
-    expect(g.s.shed && g.s.shed.y * n + g.s.shed.x).not.toBe(i);
+    expect(g.s.shed && g.s.shed.y * n + g.s.shed.x).not.toBe(sd.shed);
+    expect(g.linked!.has(back)).toBe(true);
   });
 
   it('a train waits at a broken rail and goes on once the crew has fixed it', () => {

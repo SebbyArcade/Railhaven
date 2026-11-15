@@ -3,19 +3,14 @@ import type { Game } from '../state.ts';
 import type { Break } from '../track/breaks.ts';
 import { TILE } from '../world/terrain.ts';
 
-/** The engine shed: brick stalls with gabled roofs, arched doors and short stall rails out to the line. */
+/** The engine shed: brick stalls with gabled roofs and arched doors; its siding (real track) runs out of the middle door to the line. */
 export function drawShed(ctx: CanvasRenderingContext2D, g: Game, tm: number) {
   const sh = g.s.shed; if (!sh) return;
   const T = TILE;
   ctx.save();
   ctx.translate((sh.x + 0.5) * T, (sh.y + 0.5) * T);
   ctx.rotate(Math.atan2(DY[sh.side], DX[sh.side]) - Math.PI / 2); // the track is now towards +y
-  const stalls = 3, w = 26, d = 20, top = -14;
-  // stall rails from the doors to the line
-  ctx.strokeStyle = '#5b4330'; ctx.lineWidth = 1.6;
-  for (let k = 0; k < stalls; k++) { const u = -w / 2 + (k + 0.5) * (w / stalls); for (let v = top + d; v < T / 2; v += 3.5) { ctx.beginPath(); ctx.moveTo(u - 2.6, v); ctx.lineTo(u + 2.6, v); ctx.stroke(); } }
-  ctx.strokeStyle = '#c9ccd1'; ctx.lineWidth = 0.7;
-  for (let k = 0; k < stalls; k++) { const u = -w / 2 + (k + 0.5) * (w / stalls); for (const o of [-1.7, 1.7]) { ctx.beginPath(); ctx.moveTo(u + o, top + d); ctx.lineTo(u + o, T / 2); ctx.stroke(); } }
+  const stalls = 3, w = 28, d = 22, top = -15;
   // building
   ctx.fillStyle = 'rgba(0,0,0,.28)'; ctx.fillRect(-w / 2 + 2, top + 2, w, d);
   ctx.fillStyle = '#8c3f2c'; ctx.fillRect(-w / 2, top, w, d);

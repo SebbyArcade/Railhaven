@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { newGame, trackChanged } from '../src/game.ts';
-import { bestPlacement, build, isLinked, placeError, priceOf, yardSquares } from '../src/buildings/industries.ts';
+import { bestPlacement, build, isLinked, nearestSpot, placeError, priceOf, yardSquares } from '../src/buildings/industries.ts';
 import { buildPlan, extendPlan, startPlan } from '../src/track/paint.ts';
 import { tickProduction } from '../src/economy/production.ts';
 
@@ -44,5 +44,30 @@ describe('industries and yards', () => {
     trackChanged(g);
     expect(isLinked(g, b)).toBe(true);
     tickProduction(g, 10); expect(b.stock).toBeGreaterThan(0);
+  });
+
+  it('a stone quarry and a coal mine can be built at the start on every seed', () => {
+    for (const seed of [4242, 1, 77, 123456, 999]) {
+      const g = newGame(seed), a = g.s.sites[0]!;
+      for (const k of ['stone', 'coal'] as const) expect(nearestSpot(g, k, a.x, a.y), `${k} on seed ${seed}`).not.toBeNull();
+    }
+  });
+
+  it('a yard placed with its end against existing track joins it', () => {
+    const g = g0(), n = g.world.n, a = g.s.sites[0]!;
+    // a straight line east of Ashford; then a farm whose yard continues it
+    const p = startPlan(g, a.y * n + a.x)!; for (let k = 1; k <= 6; k++) extendPlan(g, p, a.y * n + a.x + k);
+    const r = buildPlan(g, p); if (typeof r === 'string') throw new Error(r);
+    trackChanged(g);
+    const end = a.y * n + a.x + 6;
+    let b = null;
+    for (const side of [1, -1] as const) {
+      const q = { kind: 'farm' as const, x: a.x + 7, y: a.y, horizontal: true, side };
+      if (!placeError(g, q)) { b = build(g, q); break; }
+    }
+    if (!b || typeof b === 'string') return; // no room on this map: nothing to check
+    trackChanged(g);
+    expect(g.track.get(end)!.links & 1).toBe(1);
+    expect(isLinked(g, b)).toBe(true);
   });
 });

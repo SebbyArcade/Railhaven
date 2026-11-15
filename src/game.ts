@@ -7,13 +7,14 @@ import { buildNetwork, type Network } from './track/network.ts';
 import { trackFromSave, trackToSave } from './track/state.ts';
 import type { TrackMap } from './track/types.ts';
 import { TrainSystem } from './trains/train.ts';
-import { placeShed, shedSquare } from './buildings/shed.ts';
-import { type Building, linkedSquares, yardSquares } from './buildings/industries.ts';
+import { placeShed } from './buildings/shed.ts';
+import { bestPlacement, type Building, nearestSpot, linkedSquares, yardSquares } from './buildings/industries.ts';
 import { blockedPieces } from './track/breaks.ts';
 import { networkKey, relocate, snapshot } from './trains/relocate.ts';
 
 export const START_MONEY = 12000;
 export const START_REVEAL = 9;
+export const START_DEPOSIT_REVEAL = 4;
 
 /** Rebuild the world from the seed and apply saved terrain edits. */
 export function buildWorld(s: GameState) {
@@ -38,15 +39,18 @@ function makeNetwork(track: TrackMap, n: number, sites: Site[], buildings: Build
 }
 
 function assemble(s: GameState): Game {
-  const world = buildWorld(s), track = trackFromSave(s.track ?? []), net = makeNetwork(track, world.n, s.sites, s.buildings);
+  const world = buildWorld(s), track = trackFromSave(s.track ?? []);
   s.trains ??= []; s.nextId ??= 1;
-  const g: Game = { s, world, track, net, sys: new TrainSystem(net, s.trains) };
+  const g = { s, world, track } as Game;
+  g.linked = linkedSquares(g); placeShed(g); g.linked = linkedSquares(g); // the shed lays its siding first
+  const net = makeNetwork(track, world.n, s.sites, s.buildings);
+  g.net = net; g.sys = new TrainSystem(net, s.trains);
   if (s.netKey !== networkKey(net)) {
     // the rails were built by different code: find every train again by where it stood
     for (const t of s.trains) if (t.at) relocate(net, t, t.at);
     s.netKey = networkKey(net);
   }
-  g.linked = linkedSquares(g); placeShed(g); g.sys.blocked = blockedPieces(g); g.sys.anyLane = platformPieces(g);
+  g.sys.blocked = blockedPieces(g); g.sys.anyLane = platformPieces(g);
   for (const t of s.trains) if (t.dest !== undefined && t.plan.length === 0) g.sys.sendTo(t, t.dest, t.area);
   g.sys.rebuildHolds();
   return g;
@@ -64,11 +68,30 @@ export function newGame(seed = Math.floor(Math.random() * 1e6)): Game {
   };
   const g = assemble(s);
   reveal(g, world.cx, world.cy, START_REVEAL);
+  revealFirstDeposits(g);
   return g;
 }
 
 export function loadGame(s: GameState): Game {
-  return assemble(s);
+  const g = assemble(s);
+  revealFirstDeposits(g); // older saves started with every deposit in the fog
+  return g;
+}
+
+/** The nearest stone outcrop and coal seam are uncovered (if none of that kind is yet), so the first quarry and mine can be built. */
+function revealFirstDeposits(g: Game) {
+  const { cx, cy } = g.world;
+  for (const res of ['stone', 'coal'] as const) {
+    const deps = g.s.sites.filter(s => s.kind === 'dep' && s.res === res && !s.hidden);
+    if (nearestSpot(g, res, cx, cy)) continue; // one is already uncovered and a mine fits
+    // the nearest one where a mine actually fits (try uncovering it; put the fog back if it doesn't fit)
+    for (const d of deps.sort((p, q) => Math.hypot(p.x - cx, p.y - cy) - Math.hypot(q.x - cx, q.y - cy))) {
+      const fog = g.s.fog.slice();
+      reveal(g, d.x, d.y, START_DEPOSIT_REVEAL);
+      if (bestPlacement(g, res, d.x, d.y).place) break;
+      g.s.fog = fog;
+    }
+  }
 }
 
 /** Before saving: write the live track and where every train stands into the state. */
@@ -81,13 +104,15 @@ export function prepareSave(g: Game) {
 /** After the track changed: rebuild the rails and put every train back where it stood. */
 export function trackChanged(g: Game) {
   const where = g.s.trains.map(t => snapshot(g.net, t));
+  g.linked = linkedSquares(g);
+  const moved = placeShed(g); // may move the shed and its siding: before the rails are rebuilt
+  if (moved.length) { g.linked = linkedSquares(g); g.terrainDirty?.(moved); }
   g.net = makeNetwork(g.track, g.world.n, g.s.sites, g.s.buildings);
-  g.linked = linkedSquares(g); g.dist = new Map();
+  g.dist = new Map();
   g.sys.setNetwork(g.net);
   g.s.trains.forEach((t, k) => { relocate(g.net, t, where[k]!); });
   g.s.breaks = g.s.breaks?.filter(b => g.track.has(b.square));
-  const oldShed = shedSquare(g); placeShed(g);
-  if (shedSquare(g) !== oldShed) g.terrainDirty?.([oldShed, shedSquare(g)].filter(i => i >= 0)); g.sys.blocked = blockedPieces(g); g.sys.anyLane = platformPieces(g);
+  g.sys.blocked = blockedPieces(g); g.sys.anyLane = platformPieces(g);
   g.sys.rebuildHolds();
   for (const t of g.s.trains) if (t.dest !== undefined) g.sys.sendTo(t, t.dest, t.area);
   g.s.netKey = networkKey(g.net);
