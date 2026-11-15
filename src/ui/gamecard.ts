@@ -1,8 +1,16 @@
+import type { SoundSettings } from '../audio/sound.ts';
 /** The game's own web address (Firebase Hosting), set when the publish workflow builds it; empty in other builds. */
 export const APP_URL: string = (import.meta as any).env?.VITE_APP_URL ?? '';
 
 /** ⚙ Settings on the home screen (and its pages): start a new map, or bring a game over from the old Railhaven (its save file, a pasted code, or this browser's old save). */
-export function gameHtml(page: string | undefined, hasOld: boolean, report: string[] | null, code: string | null = null, stats: string | null = null, snd = { music: true, sfx: true }, app = { online: false, installed: false, offer: false }): string {
+/** A row of five bars that grow taller: tap one to set the volume (0 = off shows them all empty). */
+function volRow(label: string, k: 'musicVol' | 'sfxVol', on: number): string {
+  let bars = '';
+  for (let v = 1; v <= 5; v++) bars += `<button class="vb${v <= on ? ' on' : ''}" data-act="vol" data-k="${k}" data-v="${v}" aria-label="${label} ${v} of 5"><i style="height:${8 + v * 5}px"></i></button>`;
+  return `<div class="vol"><span>${label}</span><div class="vbars">${bars}</div></div>`;
+}
+
+export function gameHtml(page: string | undefined, hasOld: boolean, report: string[] | null, code: string | null = null, stats: string | null = null, snd: SoundSettings = { music: true, sfx: true, musicVol: 3, sfxVol: 3, muted: false }, app = { online: false, installed: false, offer: false }): string {
   const back = `<button class="act back" data-act="page" data-page="settings">‹ Back</button>`;
   if (page === 'report' && report) {
     return `<div class="head"><b class="big">🚂</b><div><h2>Your game is here</h2><span class="chip2">from the old Railhaven</span></div></div>`
@@ -40,7 +48,9 @@ export function gameHtml(page: string | undefined, hasOld: boolean, report: stri
     + (hasOld ? `<div class="gift">🚂 This browser has a game from the old Railhaven. <button class="act" data-act="loadold">📥 Bring it over</button></div>` : '')
     + `<div class="tiles"><button class="tile" data-act="page" data-page="move">📤 Move my game<small>to Chrome or the Claude app</small></button><button class="tile" data-act="loadfile">📂 Load a save file<small>from here or the old game</small></button><button class="tile" data-act="page" data-page="paste">📋 Paste a code<small>from here or the old game</small></button><button class="tile" data-act="page" data-page="stats">📊 Game report<small>to copy into the chat</small></button></div>`
     + `<div class="note">A game you load goes into a new slot in 🗂 Your games: the one you are playing stays saved.</div>`
+    + (snd.muted ? `<div class="gift">🔇 The game is silenced with the button at the top right. <button class="act" data-act="unmute">🔊 Turn sound back on</button></div>` : '')
     + `<div class="tiles"><button class="tile${snd.music ? ' on' : ''}" data-act="snd" data-k="music">${snd.music ? '🎵' : '🔇'} Music<small>${snd.music ? 'on · tap to turn off' : 'off · tap to turn on'}</small></button><button class="tile${snd.sfx ? ' on' : ''}" data-act="snd" data-k="sfx">${snd.sfx ? '🔊' : '🔇'} Sounds<small>${snd.sfx ? 'on · what you see on the map' : 'off · tap to turn on'}</small></button></div>`
+    + volRow('🎵 Music volume', 'musicVol', snd.music ? snd.musicVol : 0) + volRow('🔊 Sounds volume', 'sfxVol', snd.sfx ? snd.sfxVol : 0)
     + (app.installed ? '' : `<button class="act" data-act="page" data-page="app">📲 Install the game<small style="display:inline;margin-left:6px">home screen icon, full screen, plays offline</small></button>`)
     + `<button class="act alt" data-act="full">⛶ Full screen</button>`
     + `<button class="act back" data-act="page" data-page="">‹ Back</button>`;
