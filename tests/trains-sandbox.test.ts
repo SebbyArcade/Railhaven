@@ -10,10 +10,10 @@ it('a train parked on a short branch moves aside so another can pass', () => {
   layPath(t, N, path([0, 0], [6, 0], [6, 4])); layPath(t, N, path([6, 4], [0, 4], [0, 2])); layPath(t, N, path([3, 0], [3, 2]));
   for (let x = 1; x <= 5; x++) t.get(sq(x, 4))!.dbl = true;
   const net = buildNetwork(t, N);
-  const a = placeTrain(net, 1, { piece: net.bySquare.get(sq(2, 0))![0]!, dir: 1 }, 3);
+  const a = placeTrain(net, 1, { piece: net.bySquare.get(sq(2, 0))!.find(id => net.pieces[id]!.squares.length === 1)!, dir: 1 }, 3);
   const sys = new TrainSystem(net, [a]); sys.rebuildHolds();
-  const b = placeTrain(net, 2, { piece: net.bySquare.get(sq(4, 4))![0]!, dir: 1 }, 3); sys.trains.push(b); sys.rebuildHolds();
-  expect(sys.sendTo(a, sq(0, 2)) && sys.sendTo(b, sq(3, 2))).toBe(true);
+  const b = placeTrain(net, 2, { piece: net.bySquare.get(sq(4, 4))!.find(id => net.pieces[id]!.squares.length === 1)!, dir: 1 }, 3); sys.trains.push(b); sys.rebuildHolds();
+  expect([sys.sendTo(a, sq(0, 2)), sys.sendTo(b, sq(3, 2))]).toEqual([true, true]);
   const done = { a: false, b: false };
   for (let k = 0; k < 30 * 40; k++) { sys.tick(1 / 30); if (a.dest === undefined && net.pieces[a.trail.at(-1)!.piece]!.squares.includes(sq(0, 2))) done.a = true; if (b.dest === undefined && b.plan.length === 0 && k > 30) done.b = true; }
   expect(done.a).toBe(true); expect(done.b).toBe(true);

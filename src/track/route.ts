@@ -38,6 +38,8 @@ export interface RouteRequest {
   /** the train's head step and its tail step (tail step is listed with the train's direction) */
   head: Step;
   tail: Step;
+  /** the whole train, back to front (better than just head and tail for reversing at buffer stops) */
+  trail?: Step[];
   trainLen: number;
   /** is this step a place to stop? */
   goal: (s: Step) => boolean;
@@ -63,6 +65,25 @@ export function findRoute(net: Network, q: RouteRequest): Move[] | null {
     dist.set(k, d); prev.set(k, { from, moves }); pushH(d, s);
   };
   const START = -1;
+  const len = (x: Step) => net.pieces[x.piece]!.len;
+  /** the step under the back of the train when its front has just driven onto s (state k), from the way it came */
+  const bodyBack = (k: number, s: Step): Step | null => {
+    let covered = len(s), cur = k, last = s;
+    while (covered < q.trainLen) {
+      const p = prev.get(cur)!;
+      if (p.from === START) { // back onto the train's starting place
+        if (p.moves.some(isRev)) return null;
+        const tr = q.trail; if (!tr) return q.tail;
+        for (let j = tr.length - 2; j >= 0; j--) { covered += len(tr[j]!); if (covered >= q.trainLen) return tr[j]!; }
+        return tr[0]!;
+      }
+      const prevStep = stepOf(p.from);
+      if (p.moves.some(isRev)) return null; // the body folds back over a reversal: too short to tell
+      last = prevStep; covered += len(prevStep); cur = p.from;
+    }
+    return last;
+  };
+  const stepOf = (k: number): Step => ({ piece: k >> 1, dir: k & 1 ? -1 : 1 });
   relax(0, q.head, START, []);
   if (q.canReverseNow) relax(REVERSE_COST, rev(q.tail), START, [{ rev: true, clear: null }]);
   while (heap.length) {
@@ -79,7 +100,11 @@ export function findRoute(net: Network, q: RouteRequest): Move[] | null {
       relax(d + net.pieces[nx.piece]!.len + e, nx, k, [nx]);
     }
     const run = reverseRunOn(net, s, q.trainLen);
-    if (run) {
+    if (run && !run.length) {
+      // at a buffer stop: after reversing, the front of the train is where its back was, a train length back
+      const back = bodyBack(k, s);
+      if (back) relax(d + REVERSE_COST, rev(back), k, [{ rev: true, clear: 'end' }]);
+    } else if (run) {
       // drive on past the end, reverse, and come back over the same pieces onto s the other way
       let e = 0; for (const r of run) e += (q.extra?.(r) ?? 0) + net.pieces[r.piece]!.len * 2;
       if (e !== Infinity) relax(d + REVERSE_COST + e, rev(s), k, [...run, { rev: true, clear: run.length ? exitNode(net, s) : 'end' }, ...run.slice().reverse().map(rev), rev(s)]);

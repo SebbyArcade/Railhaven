@@ -67,10 +67,14 @@ describe('rail network', () => {
   it('a junction offers the straight and the branch, never a U-turn', () => {
     const t: TrackMap = new Map(); layPath(t, N, line([[5, 5], [15, 5]])); layPath(t, N, line([[10, 5], [10, 12]]));
     const net = buildNetwork(t, N); checkNetwork(t, net);
-    // a train heading east on (9,5) can go on east or turn south at (10,5), not west
-    const east = net.pieces.find(p => p.squares[0] === sq(9, 5))!;
+    // a train heading east on (8,5) can go on east or take the gentle turnout south, not west
+    const east = net.pieces.find(p => p.squares.length === 1 && p.squares[0] === sq(8, 5))!;
     const opts = nextSteps(net, { piece: east.id, dir: east.ta[0] > 0 ? 1 : -1 });
     expect(opts.length).toBe(2);
+    // the turnout starts a square before the junction and ends a square after it: a smooth radius-1.5 arc
+    const turnouts = net.pieces.filter(p => p.kind === 'wide' && p.squares.includes(sq(10, 5)));
+    expect(turnouts.length).toBe(2);
+    for (const p of turnouts) expect(p.squares).toContain(sq(10, 6));
   });
 
   it('double track runs as two lanes, with turnouts where it meets single track', () => {

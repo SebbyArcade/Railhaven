@@ -71,7 +71,7 @@ export class Tools {
     if (this.mode === 'train') {
       const ids = g.net.bySquare.get(i);
       if (!ids?.length) { toast('Put the train on your track'); return true; }
-      const p = g.net.pieces[ids[0]!]!;
+      const p = g.net.pieces[ids.find(id => g.net.pieces[id]!.squares.length === 1) ?? ids[0]!]!; // plain track rather than a turnout
       const t = placeTrain(g.net, g.s.nextId++, { piece: p.id, dir: 1 }, 3);
       if (t.trail.some(s => g.sys.holder.has(s.piece))) { toast('Another train is there'); g.s.nextId--; return true; }
       g.s.trains.push(t); g.sys.rebuildHolds(); this.selected = t.id;
