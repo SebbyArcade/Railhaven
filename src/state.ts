@@ -89,6 +89,12 @@ export interface GameState {
   /** money earned and spent, for the report */
   earned?: number;
   upkeep?: number;
+  /** rushes finished (for achievements) */
+  rushDone?: number;
+  /** train loads and ship loads delivered (for achievements) */
+  loads?: number; shipLoads?: number;
+  /** orders already counted toward the all-games orders achievement */
+  achOrd?: number;
 }
 
 /** The running game: saved state plus the world rebuilt from the seed. */

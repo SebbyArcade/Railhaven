@@ -1,4 +1,5 @@
 import type { Network } from '../track/network.ts';
+import { looks } from './looks.ts';
 import { bodyPoint, CAR_LEN, COUPLING, ENGINE_LEN, type Train, trainLength } from '../trains/train.ts';
 
 function vehicle(ctx: CanvasRenderingContext2D, net: Network, t: Train, from: number, len: number, draw: (l: number) => void) {
@@ -25,11 +26,11 @@ export function drawTrains(ctx: CanvasRenderingContext2D, net: Network, trains: 
       ctx.fillStyle = 'rgba(0,0,0,.28)'; ctx.fillRect(-l / 2 + 1, -3.2, l, 7.4);
       if (p.engine) {
         const fwd = t.engineAhead ? 1 : -1;
-        ctx.fillStyle = '#2f5d3a'; ctx.fillRect(-l / 2, -3.4, l, 6.8);              // boiler and cab
+        ctx.fillStyle = looks.paint.body; ctx.fillRect(-l / 2, -3.4, l, 6.8);              // boiler and cab
         ctx.fillStyle = '#1d1d1d'; ctx.fillRect(fwd > 0 ? l / 2 - 4 : -l / 2, -2.8, 4, 5.6); // smokebox
-        ctx.fillStyle = '#c0392b'; ctx.fillRect(fwd > 0 ? l / 2 - 0.8 : -l / 2, -3.4, 0.8, 6.8); // buffer beam
-        ctx.fillStyle = '#24452c'; ctx.fillRect(fwd > 0 ? -l / 2 : l / 2 - 5, -3.6, 5, 7.2); // cab roof
-        ctx.fillStyle = '#d9b44a'; ctx.fillRect(-1, -3.5, 1.2, 7); // brass band
+        ctx.fillStyle = looks.paint.beam; ctx.fillRect(fwd > 0 ? l / 2 - 0.8 : -l / 2, -3.4, 0.8, 6.8); // buffer beam
+        ctx.fillStyle = looks.paint.roof; ctx.fillRect(fwd > 0 ? -l / 2 : l / 2 - 5, -3.6, 5, 7.2); // cab roof
+        ctx.fillStyle = looks.paint.band; ctx.fillRect(-1, -3.5, 1.2, 7); // brass band
         ctx.fillStyle = '#111'; ctx.beginPath(); ctx.arc(fwd > 0 ? l / 2 - 5.5 : -l / 2 + 5.5, 0, 1.6, 0, 7); ctx.fill(); // chimney
       } else {
         ctx.fillStyle = WAGON_COLS[(t.id + p.k) % WAGON_COLS.length]!; ctx.fillRect(-l / 2, -3.2, l, 6.4);

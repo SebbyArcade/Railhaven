@@ -27,7 +27,14 @@ export function deserialize(json: string): GameState {
 
 export interface Storage { getItem(k: string): string | null; setItem(k: string, v: string): void }
 
-export function saveTo(store: Storage, g: Game) { prepareSave(g); store.setItem(SAVE_KEY, serialize(g.s)); }
+let afterSave: ((store: Storage, g: Game) => void) | null = null;
+/** Run after every save (the save slots keep their list of games up to date with it). */
+export const onSave = (f: typeof afterSave) => { afterSave = f; };
+
+export function saveTo(store: Storage, g: Game) { prepareSave(g); store.setItem(SAVE_KEY, serialize(g.s)); afterSave?.(store, g); }
+
+/** The game as save text, ready to go under SAVE_KEY. */
+export const saveJson = (g: Game) => { prepareSave(g); return serialize(g.s); };
 
 export function loadFrom(store: Storage): Game | null {
   const raw = store.getItem(SAVE_KEY);
