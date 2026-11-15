@@ -26,6 +26,7 @@ import { type Plan, shipPlan } from '../economy/shipping.ts';
 import { drawAlerts, drawShipArrow, drawTownBadges } from './orders.ts';
 import { stuckList } from '../ui/orders.ts';
 import { drawView, ViewCache } from './views.ts';
+import { shipPlace } from '../ships/ships.ts';
 
 /** Squares under a building (trees are cleared there). */
 function builtOn(g: Game, i: number): boolean {
@@ -125,6 +126,10 @@ export class Renderer {
     if (t.mode === 'rail' && !t.plan) { // show where track may start
       const a = this.g.s.sites[0]!, p = 0.5 + 0.5 * Math.sin(tm * 4);
       if (!this.g.track.size) box(a.y * n + a.x, `rgba(255,214,120,${0.15 + 0.2 * p})`, 'rgba(255,214,120,.9)');
+    }
+    if (t.card?.kind === 'ship') { // the open ship: a gold ring
+      const sh = this.g.s.ships?.find(x => x.id === t.card!.id);
+      if (sh) { const p = shipPlace(this.g, sh); ctx.strokeStyle = '#ffd27a'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc((p.x + 0.5) * TILE, (p.y + 0.5) * TILE, 16 + Math.sin(tm * 5), 0, 7); ctx.stroke(); }
     }
     if (t.selected !== null) {
       const tr = this.g.s.trains.find(x => x.id === t.selected);
