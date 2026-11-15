@@ -4,7 +4,7 @@ import { placeTrain } from '../trains/train.ts';
 import { type Building, GOODS, type Good, INDUSTRIES, isLinked, yardSquares } from '../buildings/industries.ts';
 import { hallOf } from '../buildings/stations.ts';
 import { shedSiding } from '../buildings/shed.ts';
-import { bldDist, destSquares, MIN_LOAD, payFor, railDist, type Ship, shipPlan, siteOf, TRAIN_CAP } from './shipping.ts';
+import { bldDist, bldOf, destName, destSquares, factoryRoom, MIN_LOAD, payFor, railDist, type Ship, shipPlan, siteOf, TRAIN_CAP } from './shipping.ts';
 import { deliverToTown, orderDone, reward, sizeName, stepOf } from './towns.ts';
 
 export const LOAD_TIME = 4;
@@ -64,36 +64,63 @@ function bestJob(g: Game, t: Train, plan: Map<number, Ship>): { b: Building; shi
   return best;
 }
 
-/** Send a loaded train to its town; if that town fell off the railway, to the nearest town that is still on it. */
+/** Send a loaded train to where it unloads; if that place fell off the railway, to the nearest town that is still on it. */
 function sendLoaded(g: Game, t: Train) {
   const j = t.job!, sq = destSquares(g, j.to);
   if (sq.length && g.sys.sendToArea(t, sq)) return;
+  const to = nearestTown(g, t);
+  if (to && g.sys.sendToArea(t, destSquares(g, to))) j.to = to;
+  else j.timer = 5; // no way anywhere yet: wait and try again
+}
+
+/** Railway level unlocks, in plain words (index = level). */
+export const UNLOCKS = ['', '🏭 Sawmill, Brickworks and Flour Mill', '🏭 Steel Mill and Refinery', '🏭 Textile Mill', '', '', '', '', '', ''];
+
+const pay = (g: Game, v: number) => { g.s.money += v; g.s.earned = (g.s.earned ?? 0) + v; };
+
+/**
+ * Unload: at a factory, as many as it has room for (paid half); at a town, fill the order first, then steady
+ * demand, then extra. Anything a factory has no room for stays on the train and goes on to the nearest town.
+ */
+function unload(g: Game, t: Train) {
+  const j = t.job!, c = t.cargo!, k = c.good as Good;
+  if (j.to.kind === 'bld') {
+    const f = bldOf(g, j.to.id)!, n = Math.min(c.n, Math.floor(factoryRoom(f, k)));
+    (f.inbuf ??= {})[k] = (f.inbuf[k] ?? 0) + n;
+    const v = payFor(k, n, c.d, 'factory'); pay(g, v);
+    t.lastPay = { pay: Math.round(v), at: g.s.t, n, good: k, to: j.to };
+    c.n -= n;
+    if (c.n > 0) { j.to = nearestTown(g, t) ?? j.to; j.phase = 'toDrop'; sendLoaded(g, t); return; }
+    t.cargo = undefined; endJob(t); return;
+  }
+  const town = siteOf(g, j.to.id)!;
+  const p = deliverToTown(g, town, k, c.n);
+  const v = payFor(k, p.order, c.d, 'order') + payFor(k, p.steady, c.d, 'steady') + payFor(k, p.surplus, c.d, 'extra');
+  pay(g, v);
+  t.lastPay = { pay: Math.round(v), at: g.s.t, n: c.n, good: k, to: j.to };
+  if (!town.filled && orderDone(g, town)) {
+    town.filled = true;
+    const r = reward(stepOf(town)); pay(g, r);
+    g.s.orders = (g.s.orders ?? 0) + 1;
+    news(g, `✅ ${town.name}'s order is filled! +$${r.toLocaleString('en-US')} · tap ⬆ to grow it into a ${sizeName(stepOf(town) + 1)}`);
+    const L = railLevel(g.s.orders);
+    if (L > (g.s.rlv ?? 0)) {
+      for (let l = (g.s.rlv ?? 0) + 1; l <= L; l++) { const b = 500 * l; pay(g, b); news(g, `⭐ Railway level ${l}! +$${b.toLocaleString('en-US')}${UNLOCKS[l] ? ' · new: ' + UNLOCKS[l] : ''}`); }
+      g.s.rlv = L;
+    }
+  }
+  t.cargo = undefined; endJob(t);
+}
+
+/** The nearest town on the railway from where the train stands. */
+function nearestTown(g: Game, t: Train): { kind: 'town'; id: number } | null {
   const at = headSquare(g, t);
   let to: Site | undefined, bd = Infinity;
   for (const s of g.s.sites) {
     if (s.kind !== 'town') continue; const h = hallOf(g.track, g.world.n, s); if (!h) continue;
     const d = railDist(g, 't' + s.id, h.squares)[at]!; if (d >= 0 && d < bd) { bd = d; to = s; }
   }
-  if (to && g.sys.sendToArea(t, hallOf(g.track, g.world.n, to)!.squares)) j.to = { kind: 'town', id: to.id };
-  else j.timer = 5; // no way anywhere yet: wait and try again
-}
-
-/** Unload at the town: pay for the goods and fill its order. */
-function unload(g: Game, t: Train) {
-  const j = t.job!, c = t.cargo!, town = siteOf(g, j.to.id)!, k = c.good as Good;
-  const p = deliverToTown(g, town, k, c.n);
-  const pay = payFor(k, p.order, c.d, 'order') + payFor(k, p.steady, c.d, 'steady') + payFor(k, p.surplus, c.d, 'extra');
-  g.s.money += pay; g.s.earned = (g.s.earned ?? 0) + pay;
-  t.lastPay = { pay: Math.round(pay), at: g.s.t, n: c.n, good: k, town: town.id };
-  if (!town.filled && orderDone(g, town)) {
-    town.filled = true;
-    const r = reward(stepOf(town)); g.s.money += r; g.s.earned += r;
-    g.s.orders = (g.s.orders ?? 0) + 1;
-    news(g, `✅ ${town.name}'s order is filled! +$${r.toLocaleString('en-US')} · tap ⬆ to grow it into a ${sizeName(stepOf(town) + 1)}`);
-    const L = railLevel(g.s.orders);
-    if (L > (g.s.rlv ?? 0)) { g.s.rlv = L; const b = 500 * L; g.s.money += b; g.s.earned += b; news(g, `⭐ Railway level ${L}! +$${b.toLocaleString('en-US')}`); }
-  }
-  t.cargo = undefined; endJob(t);
+  return to ? { kind: 'town', id: to.id } : null;
 }
 
 /** Goods trains run themselves: each idle train collects the best waiting load and takes it where the plan says. */
@@ -133,7 +160,7 @@ export function tickTrains(g: Game, dt: number) {
       if (destSquares(g, j.to).includes(headSquare(g, t))) { j.phase = 'unloading'; j.timer = LOAD_TIME; }
       else sendLoaded(g, t);
     } else if (j.phase === 'unloading') {
-      if (siteOf(g, j.to.id)) unload(g, t); else { j.phase = 'toDrop'; sendLoaded(g, t); }
+      if (j.to.kind === 'bld' ? bldOf(g, j.to.id) : siteOf(g, j.to.id)) unload(g, t); else { j.phase = 'toDrop'; sendLoaded(g, t); }
     }
   }
 }
@@ -142,10 +169,10 @@ export function tickTrains(g: Game, dt: number) {
 export function trainStatus(g: Game, t: Train): string {
   const j = t.job;
   if (!j) return t.v > 0 ? '🚂 On its way' : `💤 Waiting for a load (a building needs ${MIN_LOAD} ready)`;
-  const src = (g.s.buildings ?? []).find(b => b.id === j.src), town = siteOf(g, j.to.id), icon = GOODS[j.good as Good]?.icon ?? '';
+  const src = (g.s.buildings ?? []).find(b => b.id === j.src), where = destName(g, j.to), icon = GOODS[j.good as Good]?.icon ?? '';
   const name = src ? INDUSTRIES[src.kind].name : 'the yard';
   if (j.phase === 'toLoad') return `🚂 Going to the ${name} for ${icon}`;
   if (j.phase === 'loading') return `${icon} Loading at the ${name}`;
-  if (j.phase === 'toDrop') return `🚂 Taking ${t.cargo?.n ?? ''} ${icon} to ${town?.name ?? 'a town'}`;
-  return `${icon} Unloading at ${town?.name ?? 'a town'}`;
+  if (j.phase === 'toDrop') return `🚂 Taking ${t.cargo?.n ?? ''} ${icon} to ${where}`;
+  return `${icon} Unloading at ${where}`;
 }

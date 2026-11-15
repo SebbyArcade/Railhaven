@@ -49,5 +49,33 @@ await page.waitForTimeout(800); await page.screenshot({ path: 'shots/econ-shed.p
 // the farm and its fields up close
 await page.evaluate(() => { const g = window.railhaven.game, b = g.s.buildings[0]; g.s.camera.x = (b.x + 1.5) * 32; g.s.camera.y = (b.y + 2) * 32; g.s.camera.z = 3; });
 await page.waitForTimeout(800); await page.screenshot({ path: 'shots/econ-farm.png' });
+// a sawmill (Railway level 1) fed by the camp, and its card
+const fac = await page.evaluate(() => {
+  const R = window.railhaven, g = R.game, T = R.tools, n = g.world.n, a = g.s.sites[0];
+  g.s.rlv = 1; g.s.money += 10000;
+  const near = (s) => [...s].sort((p, q) => Math.hypot(p % n - a.x, (p / n | 0) - a.y) - Math.hypot(q % n - a.x, (q / n | 0) - a.y));
+  const rail = (path) => { T.mode = 'rail'; T.cancel(); T.dragStart(path[0]); for (const i of path.slice(1)) T.dragOver(i); const b = T.bar(); T.confirm(); T.mode = 'pan'; T.cancel(); return b && b.text; };
+  T.chooseBuild('sawmill'); T.updateGlow(a.x, a.y);
+  for (const i of near(T.glow).filter(i => Math.hypot(i % n - a.x, (i / n | 0) - a.y) > 3).slice(0, 60)) {
+    T.preview = null; T.tapSquare(i); const bb = T.bar(); if (!bb || bb.text.includes('⚠')) continue;
+    T.confirm(); break;
+  }
+  T.mode = 'pan'; T.buildKind = null;
+  const b = g.s.buildings.at(-1); if (b.kind !== 'sawmill') return 'no sawmill spot';
+  const ys = [b.x + b.y * n, b.horizontal ? b.x + 3 + b.y * n : b.x + (b.y + 3) * n];
+  let r = null;
+  for (const end of ys) { const st = b.horizontal ? (end === ys[0] ? -1 : 1) : (end === ys[0] ? -n : n);
+    const froms = [...g.track.keys()].filter(i => !ys.includes(i) && g.linked.has(i)).sort((p, q) => Math.hypot(p % n - end % n, (p / n | 0) - (end / n | 0)) - Math.hypot(q % n - end % n, (q / n | 0) - (end / n | 0)));
+    for (const from of froms.slice(0, 12)) { r = rail([from, end + st, end]); if (g.linked.has(end)) break; }
+    if (g.linked.has(ys[0])) break; }
+  R.step(240);
+  g.s.camera.x = (b.x + 2) * 32; g.s.camera.y = (b.y + 6) * 32; g.s.camera.z = 2.4;
+  R.openCard({ kind: 'bld', id: b.id });
+  return 'sawmill linked ' + g.linked.has(ys[0]) + ' stock ' + Math.round(b.stock) + ' in ' + JSON.stringify(b.inbuf);
+});
+console.log(fac);
+await page.waitForTimeout(1200); await page.screenshot({ path: 'shots/econ-factory.png' });
+await page.evaluate(() => { const R = window.railhaven; R.openCard(null); R.tools.mode = 'pan'; document.getElementById('buildBtn').click(); });
+await page.waitForTimeout(1200); await page.screenshot({ path: 'shots/econ-menu.png' });
 await browser.close();
 if (errors.length) { console.error(errors.join('\n')); process.exit(1); }

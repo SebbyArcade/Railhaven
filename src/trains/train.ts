@@ -36,10 +36,10 @@ export interface Train {
   area?: number[];
   /** what it carries and its job (goods trains) */
   cargo?: { good: string; n: number; d: number };
-  job?: { src: number; to: { kind: 'town'; id: number }; good: string; phase: 'toLoad' | 'loading' | 'toDrop' | 'unloading'; timer: number };
+  job?: { src: number; to: { kind: 'town' | 'bld'; id: number }; good: string; phase: 'toLoad' | 'loading' | 'toDrop' | 'unloading'; timer: number };
   /** seconds until an idle train looks for a load again, and what its last delivery paid */
   idle?: number;
-  lastPay?: { pay: number; at: number; n: number; good: string; town: number };
+  lastPay?: { pay: number; at: number; n: number; good: string; to: { kind: 'town' | 'bld'; id: number } };
   /** seconds to wait in a refuge (out of another train's way) before trying again */
   refuge?: number;
   /** head position when saved, to find the train again if the rails were rebuilt */

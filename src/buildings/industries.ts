@@ -22,7 +22,12 @@ export const GOODS = {
 } as const;
 export type Good = keyof typeof GOODS;
 
-/** Industries the player builds, what they make, and what they cost. */
+type KindInfo = { name: string; icon: string; makes: Good; price: number; rate: number; needs: string; in?: Partial<Record<Good, number>>; unlock?: number };
+
+/**
+ * What the player builds: industries that dig or grow raw goods, and factories (Railway level 1+) that turn one
+ * raw good into a product (the Steel Mill needs coal and iron). Factories stand on any open flat land.
+ */
 export const INDUSTRIES = {
   wood: { name: 'Lumber Camp', icon: '🪵', makes: 'wood', price: 600, rate: 1.1, needs: 'forest next to it' },
   farm: { name: 'Wheat Farm', icon: '🌾', makes: 'farm', price: 800, rate: 1.1, needs: 'open grass for fields' },
@@ -31,8 +36,22 @@ export const INDUSTRIES = {
   iron: { name: 'Iron Mine', icon: '🧲', makes: 'iron', price: 1500, rate: 1.1, needs: 'an iron deposit (outer islands)' },
   oil: { name: 'Oil Well', icon: '🛢', makes: 'oil', price: 2500, rate: 0.6, needs: 'an oil seep (outer islands)' },
   wool: { name: 'Sheep Farm', icon: '🐑', makes: 'wool', price: 900, rate: 1.1, needs: 'hills with pasture' },
-} as const satisfies Record<string, { name: string; icon: string; makes: Good; price: number; rate: number; needs: string }>;
+  sawmill: { name: 'Sawmill', icon: '🪚', makes: 'planks', price: 2500, rate: 0.6, needs: 'open flat land', in: { wood: 1 }, unlock: 1 },
+  brickworks: { name: 'Brickworks', icon: '🧱', makes: 'bricks', price: 2500, rate: 0.6, needs: 'open flat land', in: { stone: 1 }, unlock: 1 },
+  gristmill: { name: 'Flour Mill', icon: '🍞', makes: 'flour', price: 2500, rate: 0.6, needs: 'open flat land', in: { farm: 1 }, unlock: 1 },
+  mill: { name: 'Steel Mill', icon: '⚙️', makes: 'steel', price: 2500, rate: 0.6, needs: 'open flat land', in: { coal: 1, iron: 1 }, unlock: 2 },
+  refinery: { name: 'Refinery', icon: '⛽', makes: 'fuel', price: 2500, rate: 0.6, needs: 'open flat land', in: { oil: 1 }, unlock: 2 },
+  textile: { name: 'Textile Mill', icon: '🧵', makes: 'cloth', price: 2500, rate: 0.6, needs: 'open flat land', in: { wool: 1 }, unlock: 3 },
+} as const satisfies Record<string, KindInfo>;
 export type IndustryKind = keyof typeof INDUSTRIES;
+export const info = (k: IndustryKind): KindInfo => INDUSTRIES[k];
+export const isFactory = (k: IndustryKind) => !!info(k).in;
+/** goods a factory takes in */
+export const inputsOf = (k: IndustryKind) => Object.keys(info(k).in ?? {}) as Good[];
+/** input store per good, by level */
+export const bufOf = (b: Building) => 30 + 20 * b.lvl;
+/** Why this kind can't be built yet (Railway level), or '' */
+export const lockedText = (g: Game, k: IndustryKind) => (info(k).unlock ?? 0) > (g.s.rlv ?? 0) ? `🔒 Unlocks at Railway level ${info(k).unlock}` : '';
 const MINES = new Set<IndustryKind>(['stone', 'coal', 'iron', 'oil']);
 
 /**
@@ -50,6 +69,8 @@ export interface Building {
   side: 1 | -1;
   lvl: number;
   stock: number;
+  /** factories: raw goods waiting to be made into the product */
+  inbuf?: Partial<Record<Good, number>>;
   /** the deposit a mine stands on */
   dep?: number;
 }
@@ -188,7 +209,7 @@ const dist = (n: number, a: number, b: number) => Math.abs((a % n) - (b % n)) + 
 
 /** Build it: pay, lay the yard track, and add it. */
 export function build(g: Game, p: ReturnType<typeof placementsAt>[number]): Building | string {
-  const e = placeError(g, p); if (e) return e;
+  const e = lockedText(g, p.kind) || placeError(g, p); if (e) return e;
   const price = priceOf(g, p.kind);
   if (price > g.s.money) return `Need $${(price - g.s.money).toLocaleString('en-US')} more`;
   g.s.money -= price;
@@ -220,7 +241,7 @@ export function joinYardEnds(g: Game, b: Building): number {
 }
 
 /** Output per second, stock cap (by level). */
-export const outputOf = (g: Game, b: Building) => INDUSTRIES[b.kind].rate * (1 + 0.5 * (b.lvl - 1)) * shareAt(g, b);
+export const outputOf = (g: Game, b: Building) => isFactory(b.kind) ? 0.35 + 0.25 * b.lvl : INDUSTRIES[b.kind].rate * (1 + 0.5 * (b.lvl - 1)) * shareAt(g, b);
 export const capOf = (b: Building) => 80 + 40 * (b.lvl - 1);
 
 /** Why linking neighbour squares a and b would break a yard (joined from its long side), or ''. */

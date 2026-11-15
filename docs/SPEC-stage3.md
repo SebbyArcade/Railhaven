@@ -67,7 +67,8 @@ the old code. Where the rebuild simplifies a rule, it says so under **Rebuild no
 ## Factories
 
 - Sawmill, Brickworks, Gristmill (Railway level 1), Steel Mill, Refinery (level 2), Textile Mill (level 3),
-  Cannery (docks). First factory $2,500.
+  Cannery (docks). First factory $2,500 (every kind), +25% for each extra of the same kind.
+- The Steel Mill needs coal and iron (one of each per unit); every other factory takes one raw good.
 - Output `0.35 + 0.25 × level` per second while inputs last; input buffer `30 + 20 × level`; levels 1-3.
 - Factories are ordinary stops: they take raw goods (paid half) and ship products like an industry.
 
