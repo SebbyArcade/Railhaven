@@ -1,4 +1,5 @@
 import type { Game, Site } from '../state.ts';
+import { fallsMul } from '../world/explore.ts';
 import type { Train } from '../trains/train.ts';
 import { placeTrain } from '../trains/train.ts';
 import { type Building, GOODS, type Good, INDUSTRIES, isLinked, yardSquares } from '../buildings/industries.ts';
@@ -144,7 +145,7 @@ function unload(g: Game, t: Train) {
   t.lastPay = { pay: Math.round(v), at: g.s.t, n: c.n, good: k, to: j.to };
   if (!town.filled && orderDone(g, town)) {
     town.filled = true;
-    const r = reward(stepOf(town)); pay(g, r);
+    const r = Math.round(reward(stepOf(town)) * fallsMul(g, town.x, town.y)); pay(g, r);
     g.s.orders = (g.s.orders ?? 0) + 1;
     news(g, `✅ ${town.name}'s order is filled! +$${r.toLocaleString('en-US')} · tap ⬆ to grow it into a ${sizeName(stepOf(town) + 1)}`);
     const L = railLevel(g.s.orders);

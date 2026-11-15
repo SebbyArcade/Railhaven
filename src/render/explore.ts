@@ -61,6 +61,32 @@ function drawPoi(ctx: CanvasRenderingContext2D, p: Poi, tm: number, z: number) {
     for (const [u, v, r] of [[-4, 2, 4], [3, 2, 4], [0, -3, 3.5], [0, -7, 2.5]] as const) { ctx.fillStyle = '#9a9488'; ctx.beginPath(); ctx.arc(u, v, r, 0, 7); ctx.fill(); ctx.fillStyle = 'rgba(255,255,255,.2)'; ctx.beginPath(); ctx.arc(u - 1, v - 1, r * 0.5, 0, 7); ctx.fill(); }
     ctx.strokeStyle = '#5a4030'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(0, -9); ctx.lineTo(0, -20); ctx.stroke();
     const f = Math.sin(tm * 5) * 1.5; ctx.fillStyle = '#e8a33c'; ctx.beginPath(); ctx.moveTo(0, -20); ctx.lineTo(8, -18 + f * 0.3); ctx.lineTo(0, -15); ctx.fill();
+  } else if (p.kind === 'halt') { // a small abandoned station: platform, shed with a sagging roof, a few old rails
+    ctx.fillStyle = 'rgba(0,0,0,.22)'; ctx.fillRect(-12, 3, 26, 6);
+    ctx.strokeStyle = '#6e5a46'; ctx.lineWidth = 1; for (const v of [6, 9]) { ctx.beginPath(); ctx.moveTo(-14, v); ctx.lineTo(4, v + 0.6); ctx.stroke(); }
+    ctx.fillStyle = '#b8ad98'; ctx.fillRect(-12, -1, 22, 4);
+    ctx.fillStyle = '#8a6e52'; ctx.fillRect(-7, -9, 11, 8); ctx.fillStyle = '#5b4a3a'; ctx.beginPath(); ctx.moveTo(-9, -9); ctx.lineTo(-1, -13); ctx.lineTo(6, -8.5); ctx.fill();
+    ctx.fillStyle = '#2e2620'; ctx.fillRect(-4, -6, 2.5, 5); ctx.fillRect(0, -6.5, 2.5, 2.5);
+    ctx.fillStyle = '#6a8a4a'; ctx.beginPath(); ctx.arc(8, -2, 3, 0, 7); ctx.arc(-11, 1, 2.2, 0, 7); ctx.fill();
+  } else if (p.kind === 'falls') { // water tumbling over a rock ledge into a pool with spray
+    ctx.fillStyle = '#7d766b'; ctx.beginPath(); ctx.ellipse(0, -8, 12, 6, 0, 0, 7); ctx.fill();
+    ctx.fillStyle = '#5f8fb8'; ctx.beginPath(); ctx.ellipse(0, 7, 11, 4.5, 0, 0, 7); ctx.fill();
+    for (let k = -2; k <= 2; k++) { const ph = (tm * 2 + k * 0.3) % 1; ctx.strokeStyle = `rgba(230,244,255,${0.6 + 0.3 * Math.sin(tm * 6 + k)})`; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.moveTo(k * 2.2, -6); ctx.lineTo(k * 2.4, 5); ctx.stroke(); ctx.fillStyle = 'rgba(255,255,255,.7)'; ctx.beginPath(); ctx.arc(k * 2.4, -6 + ph * 11, 0.8, 0, 7); ctx.fill(); }
+    ctx.fillStyle = 'rgba(255,255,255,.45)'; ctx.beginPath(); ctx.arc(-3, 6, 2.5, 0, 7); ctx.arc(3, 6.5, 2, 0, 7); ctx.fill();
+  } else if (p.kind === 'ranger') { // a log hut with a smoking chimney among pines
+    ctx.fillStyle = 'rgba(0,0,0,.22)'; ctx.beginPath(); ctx.ellipse(1, 5, 10, 3, 0, 0, 7); ctx.fill();
+    ctx.fillStyle = '#7a5434'; ctx.fillRect(-7, -4, 13, 8); ctx.strokeStyle = '#5a3c22'; ctx.lineWidth = 0.6; for (let v = -2; v < 4; v += 2) { ctx.beginPath(); ctx.moveTo(-7, v); ctx.lineTo(6, v); ctx.stroke(); }
+    ctx.fillStyle = '#3f5a34'; ctx.beginPath(); ctx.moveTo(-9, -4); ctx.lineTo(-0.5, -11); ctx.lineTo(8, -4); ctx.fill();
+    ctx.fillStyle = '#4a4440'; ctx.fillRect(3, -11, 2.5, 5);
+    for (let k = 0; k < 3; k++) { const ph = (tm * 0.5 + k / 3) % 1; ctx.fillStyle = `rgba(220,220,220,${0.5 * (1 - ph)})`; ctx.beginPath(); ctx.arc(4 + ph * 5, -12 - ph * 10, 1.5 + ph * 3, 0, 7); ctx.fill(); }
+    ctx.fillStyle = '#2f4f2a'; for (const [u, v] of [[-12, 0], [11, -2]] as const) { ctx.beginPath(); ctx.moveTo(u, v - 9); ctx.lineTo(u + 4, v + 2); ctx.lineTo(u - 4, v + 2); ctx.fill(); }
+  } else if (p.kind === 'mill') { // an old stone windmill with turning sails
+    ctx.fillStyle = 'rgba(0,0,0,.22)'; ctx.beginPath(); ctx.ellipse(1, 5, 8, 3, 0, 0, 7); ctx.fill();
+    ctx.fillStyle = '#d8ccb0'; ctx.beginPath(); ctx.moveTo(-5, 4); ctx.lineTo(5, 4); ctx.lineTo(3.5, -10); ctx.lineTo(-3.5, -10); ctx.fill();
+    ctx.fillStyle = '#7a4a32'; ctx.beginPath(); ctx.moveTo(-4.5, -10); ctx.lineTo(0, -15); ctx.lineTo(4.5, -10); ctx.fill(); ctx.fillStyle = '#3a2a1e'; ctx.fillRect(-1.2, -1, 2.4, 5);
+    ctx.save(); ctx.translate(0, -10); ctx.rotate(tm * 0.8); ctx.fillStyle = '#efe6d0'; ctx.strokeStyle = '#6a5038'; ctx.lineWidth = 0.6;
+    for (let k = 0; k < 4; k++) { ctx.rotate(Math.PI / 2); ctx.fillRect(1, -1.5, 11, 3); ctx.strokeRect(1, -1.5, 11, 3); }
+    ctx.restore();
   } else {
     const bob = Math.sin(tm * 1.2) * 0.4; ctx.rotate(-0.5);
     ctx.fillStyle = 'rgba(255,255,255,.3)'; ctx.beginPath(); ctx.ellipse(0, 2 + bob, 14, 5, 0, 0, 7); ctx.fill();
