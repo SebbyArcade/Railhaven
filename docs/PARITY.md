@@ -52,7 +52,7 @@ that makes sense. Details for each line: `legacy/CHANGES.md` (search the version
 - [ ] Docks/landings, dock upgrades (berths, storage, cranes, warehouse), fishing boats, shellfish (done: docks and landings, reach by sea, 3 levels of reach, sea charting, landings start their own railway; fishing boats, bigger fleet, shellfish traps; dock card tiles with Back pages; to do: berths/storage/cranes, seafood in coastal orders)
 - [ ] Ships: buy at docks, roaming, sea lanes only over mapped water, storms, ferrying trains (done: cargo ships $3,000 bought at a dock, roam between docks with sea routes, wait for half a hold, goods for another island go train → dock → ship → landing → island trains; ship a train over to a landing; ship card (tap a ship); ships sail at half speed in storms; to do: ship upgrades and hold types, two-hop routes)
 - [ ] Island specialties (+50%), resources per island, regional capitals, trade orders, long-haul imports (done: iron and oil only on outer islands, landing crews survey their island, specialties +50% with ★ labels, coastal seafood orders; to do: regional capitals, trade orders, long-haul imports)
-- [ ] Landmarks (old halt, lookout, falls, lighthouse, ranger hut, ruins) with small perks; shipwrecks; maps to buy
+- [ ] Landmarks (old halt, lookout, falls, lighthouse, ranger hut, ruins) with small perks; shipwrecks; maps to buy (done: all landmarks incl. old halt $2,000, Silver Falls +10% rewards, ranger hut and old windmill +10%; to do: maps to buy)
 - [ ] Town parks/projects, town specialties
 - [x] Adaptive missions with Mira (main + 2 side missions, rewards, swap), acts by Railway level with opening cards, journal, islands page
 - [x] Guided lessons (9 steps with Mira, Show me, gold ring and pointing hand, skip)

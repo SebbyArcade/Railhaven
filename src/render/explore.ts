@@ -3,7 +3,7 @@ import { TILE } from '../world/terrain.ts';
 import { isRevealed } from '../world/fog.ts';
 import type { Tools } from '../ui/tools.ts';
 import { poisOf, POI, type Poi, scoutPlace, scoutStarts } from '../world/explore.ts';
-import { puff } from './art.ts';
+import { drawLandmark } from './landmarks.ts';
 
 /** Landmarks and wrecks that are out of the fog, scouts on their way, and in Scout mode the start rings and the route. */
 export function drawExplore(ctx: CanvasRenderingContext2D, g: Game, t: Tools | undefined, tm: number, vis: (x: number, y: number) => boolean, z: number) {
@@ -42,35 +42,13 @@ function marker(ctx: CanvasRenderingContext2D, X: number, Y: number, icon: strin
   ctx.font = `${Math.round(r * 1.2)}px system-ui`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(icon, X, Y + 0.5);
 }
 
-/** Small hand-made landmarks: tumbled columns, a striped lighthouse with a turning beam, a cairn and flag on a hill, a half-sunk hull. */
+/** A hand-made miniature landmark (see landmarks.ts), with a question flag until it is taken over. */
 function drawPoi(ctx: CanvasRenderingContext2D, p: Poi, tm: number, z: number) {
   const X = (p.x + 0.5) * TILE, Y = (p.y + 0.5) * TILE;
   ctx.save(); ctx.translate(X, Y);
-  if (p.kind === 'ruins') {
-    ctx.fillStyle = 'rgba(0,0,0,.25)'; ctx.fillRect(-11, 2, 24, 7);
-    ctx.fillStyle = '#cfc6b0'; ctx.fillRect(-12, 0, 24, 5);
-    for (const [u, h] of [[-9, 12], [-3, 7], [3, 14], [9, 5]] as const) { ctx.fillStyle = 'rgba(0,0,0,.2)'; ctx.fillRect(u - 1, 1 - h, 4, h); ctx.fillStyle = '#e8e0cc'; ctx.fillRect(u - 2, -h, 4, h); ctx.fillStyle = '#b8ae96'; ctx.fillRect(u - 2.5, -h - 1, 5, 1.5); }
-    ctx.fillStyle = '#e0d8c2'; ctx.fillRect(-14, 5, 6, 2.5); ctx.fillStyle = '#6a8a4a'; ctx.beginPath(); ctx.arc(12, 4, 3, 0, 7); ctx.fill();
-  } else if (p.kind === 'lighthouse') {
-    const a = tm * 1.2; ctx.fillStyle = 'rgba(255,240,170,.18)'; ctx.beginPath(); ctx.moveTo(0, -20); ctx.arc(0, -20, 60, a - 0.25, a + 0.25); ctx.closePath(); ctx.fill();
-    ctx.fillStyle = 'rgba(0,0,0,.25)'; ctx.beginPath(); ctx.ellipse(2, 4, 7, 3, 0, 0, 7); ctx.fill();
-    for (let k = 0; k < 4; k++) { ctx.fillStyle = k % 2 ? '#c0392b' : '#f4efe2'; ctx.beginPath(); ctx.moveTo(-5 + k * 0.6, 3 - k * 5); ctx.lineTo(5 - k * 0.6, 3 - k * 5); ctx.lineTo(4.4 - k * 0.6, -2 - k * 5); ctx.lineTo(-4.4 + k * 0.6, -2 - k * 5); ctx.fill(); }
-    ctx.fillStyle = '#ffe680'; ctx.fillRect(-2.5, -22, 5, 4); ctx.fillStyle = '#3a3a3a'; ctx.beginPath(); ctx.moveTo(-3.5, -22); ctx.lineTo(0, -26); ctx.lineTo(3.5, -22); ctx.fill();
-  } else if (p.kind === 'lookout') {
-    ctx.fillStyle = 'rgba(0,0,0,.25)'; ctx.beginPath(); ctx.ellipse(1, 4, 8, 3, 0, 0, 7); ctx.fill();
-    for (const [u, v, r] of [[-4, 2, 4], [3, 2, 4], [0, -3, 3.5], [0, -7, 2.5]] as const) { ctx.fillStyle = '#9a9488'; ctx.beginPath(); ctx.arc(u, v, r, 0, 7); ctx.fill(); ctx.fillStyle = 'rgba(255,255,255,.2)'; ctx.beginPath(); ctx.arc(u - 1, v - 1, r * 0.5, 0, 7); ctx.fill(); }
-    ctx.strokeStyle = '#5a4030'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(0, -9); ctx.lineTo(0, -20); ctx.stroke();
-    const f = Math.sin(tm * 5) * 1.5; ctx.fillStyle = '#e8a33c'; ctx.beginPath(); ctx.moveTo(0, -20); ctx.lineTo(8, -18 + f * 0.3); ctx.lineTo(0, -15); ctx.fill();
-  } else {
-    const bob = Math.sin(tm * 1.2) * 0.4; ctx.rotate(-0.5);
-    ctx.fillStyle = 'rgba(255,255,255,.3)'; ctx.beginPath(); ctx.ellipse(0, 2 + bob, 14, 5, 0, 0, 7); ctx.fill();
-    ctx.fillStyle = '#4a3424'; ctx.beginPath(); ctx.moveTo(-12, 0 + bob); ctx.lineTo(8, -2 + bob); ctx.quadraticCurveTo(14, 1 + bob, 8, 4 + bob); ctx.lineTo(-12, 3 + bob); ctx.fill();
-    ctx.strokeStyle = '#3a2a1e'; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(-2, 1 + bob); ctx.lineTo(1, -12 + bob); ctx.stroke();
-    ctx.strokeStyle = 'rgba(240,230,200,.7)'; ctx.lineWidth = 0.6; ctx.beginPath(); ctx.moveTo(1, -12 + bob); ctx.lineTo(7, -6 + bob); ctx.stroke();
-  }
+  drawLandmark(ctx, p, tm);
   ctx.restore();
   if (!p.got && p.kind !== 'wreck' && z >= 0.7) { // not yet taken over: a small question flag
-    ctx.font = '700 11px system-ui'; ctx.textAlign = 'center'; ctx.fillStyle = 'rgba(28,22,16,.75)'; ctx.beginPath(); ctx.arc(X + 12, Y - 14, 7, 0, 7); ctx.fill(); ctx.fillStyle = '#ffd27a'; ctx.textBaseline = 'middle'; ctx.fillText(POI[p.kind].icon, X + 12, Y - 13.5);
+    ctx.font = '700 11px system-ui'; ctx.textAlign = 'center'; ctx.fillStyle = 'rgba(28,22,16,.75)'; ctx.beginPath(); ctx.arc(X + 18, Y - 22, 7, 0, 7); ctx.fill(); ctx.fillStyle = '#ffd27a'; ctx.textBaseline = 'middle'; ctx.fillText(POI[p.kind].icon, X + 18, Y - 21.5);
   }
-  void puff;
 }

@@ -1,4 +1,5 @@
 import type { Game, Site } from '../state.ts';
+import { fallsMul } from '../world/explore.ts';
 import { bufOf, type Building, capOf, GOODS, type Good, INDUSTRIES, type IndustryKind, inputsOf, isFactory, isLinked, lockedText, outputOf, shareAt, forestOf, stumpsOf } from '../buildings/industries.ts';
 import { factoryState } from '../economy/production.ts';
 import { FOUND_PRICE, orderDone, orderOf, reward, sizeName, steadyGoods, stepOf, townLinked, upgradePrice } from '../economy/towns.ts';
@@ -68,7 +69,7 @@ function townCard(g: Game, t: Site): string {
     const p = upgradePrice(L), can = p <= g.s.money;
     h += `<button class="act" data-act="upgrade" data-id="${t.id}" ${can ? '' : 'disabled'}>⬆ Grow into a ${sizeName(L + 1)} · ${fmtMoney(p)}</button>`;
     if (!can) h += `<small class="why">Need ${fmtMoney(p - g.s.money)} more: deliveries keep paying</small>`;
-  } else h += `<div class="gift">🎁 ${fmtMoney(reward(L))} when the order is filled</div>`;
+  } else { const fm = fallsMul(g, t.x, t.y); h += `<div class="gift">🎁 ${fmtMoney(Math.round(reward(L) * fm))} when the order is filled${fm > 1 ? ' (💧 Silver Falls +10%)' : ''}</div>`; }
   const st = steadyGoods(t, g);
   if (st.length) h += `<h3>🛒 Keeps buying</h3><div class="chips">${st.map(k => `<span class="chip2">${GOODS[k].icon} ${GOODS[k].name}</span>`).join('')}</div>`;
   const coming = g.s.trains.filter(x => x.job && sameDest(x.job.to, { kind: 'town', id: t.id })).length;

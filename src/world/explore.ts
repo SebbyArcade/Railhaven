@@ -17,14 +17,19 @@ import { townLinked } from '../economy/towns.ts';
 
 // ---- landmarks
 
-export type PoiKind = 'ruins' | 'lighthouse' | 'lookout' | 'wreck';
+export type PoiKind = 'ruins' | 'lighthouse' | 'lookout' | 'wreck' | 'halt' | 'falls' | 'ranger' | 'mill';
 export interface Poi { id: number; kind: PoiKind; x: number; y: number; seen?: boolean; got?: boolean; pay?: number }
 export const POI: Record<PoiKind, { icon: string; name: string; perk: string }> = {
   ruins: { icon: '🏛', name: 'Old ruins', perk: 'industries within 6 squares make 10% more' },
   lighthouse: { icon: '🗼', name: 'Lighthouse', perk: 'ships within 10 squares sail 20% faster' },
   lookout: { icon: '⛰', name: 'Lookout hill', perk: 'uncovers the land 10 squares around' },
   wreck: { icon: '⚓', name: 'Shipwreck', perk: 'a ship or scout boat passing by salvages it' },
+  halt: { icon: '🏚', name: 'Old halt', perk: 'its old rails and fittings are salvaged: +$2,000' },
+  falls: { icon: '💧', name: 'Silver Falls', perk: 'tourists come: town orders within 12 squares pay 10% bigger rewards' },
+  ranger: { icon: '🌲', name: 'Ranger hut', perk: 'lumber camps within 8 squares make 10% more' },
+  mill: { icon: '🌾', name: 'Old windmill', perk: 'wheat farms within 8 squares make 10% more' },
 };
+export const HALT_PAY = 2000, FALLS_R = 12, FALLS_BONUS = 1.1, KIND_R = 8, KIND_BONUS = 1.1;
 export const CLAIM_R = 2, RUINS_R = 6, RUINS_BONUS = 1.1, LIGHT_R = 10, LIGHT_BONUS = 1.2, LOOKOUT_R = 10;
 
 /** Place the landmarks for a map (deterministic from the seed). */
@@ -57,7 +62,37 @@ export function makePois(g: Game): Poi[] {
   return out;
 }
 
-export const poisOf = (g: Game) => (g.s.pois ??= makePois(g));
+/** The landmarks added later (old halt, falls, ranger hut, old windmill): own random stream, so maps made before keep theirs. */
+export function morePois(g: Game, have: Poi[]): Poi[] {
+  const w = g.world, n = w.n, rng = new Rng(g.s.seed * 53 + 11), out: Poi[] = [];
+  const all = () => [...have, ...out];
+  const busy = (x: number, y: number) => g.s.sites.some(s => Math.abs(s.x - x) <= 3 && Math.abs(s.y - y) <= 3) || all().some(p => Math.abs(p.x - x) <= 4 && Math.abs(p.y - y) <= 4);
+  const lake = (i: number) => [i + 1, i - 1, i + n, i - n].some(j => w.terr[j] === T.Water && !w.ocean[j]);
+  let id = Math.max(0, ...have.map(p => p.id));
+  w.islands.forEach((isl, k) => {
+    if (!isl.name) return;
+    const sq: number[] = []; for (let i = 0; i < n * n; i++) if (w.islandOf[i] === k) sq.push(i);
+    const pick = (ok: (i: number) => boolean, kind: PoiKind) => {
+      for (let t = 0; t < 300; t++) {
+        const i = sq[rng.int(sq.length)]!, x = i % n, y = (i / n) | 0;
+        if (x < 2 || y < 2 || x >= n - 2 || y >= n - 2 || !ok(i) || busy(x, y)) continue;
+        if (k === w.home && Math.hypot(x - w.cx, y - w.cy) < 12) continue;
+        out.push({ id: ++id, kind, x, y }); return;
+      }
+    };
+    if (rng.next() < 0.7) pick(i => w.terr[i] === T.Grass, 'halt');
+    if (rng.next() < 0.6) pick(i => w.terr[i] === T.Hills || (w.terr[i] !== T.Water && w.terr[i] !== T.Mountain && lake(i)), 'falls');
+    if (rng.next() < 0.7) pick(i => w.terr[i] === T.Forest, 'ranger');
+    if (rng.next() < 0.6) pick(i => w.terr[i] === T.Grass, 'mill');
+  });
+  return out;
+}
+
+export const poisOf = (g: Game) => {
+  if (!g.s.pois) g.s.pois = makePois(g);
+  if (!g.s.poiV) { g.s.poiV = 2; g.s.pois.push(...morePois(g, g.s.pois)); } // older games get the new landmarks too
+  return g.s.pois;
+};
 
 const news = (g: Game, s: string) => (g.news ??= []).push(s);
 
@@ -72,6 +107,7 @@ export function checkPois(g: Game) {
     if (!near) continue;
     p.got = true;
     if (p.kind === 'lookout') reveal(g, p.x, p.y, LOOKOUT_R);
+    if (p.kind === 'halt') { g.s.money += HALT_PAY; g.s.earned = (g.s.earned ?? 0) + HALT_PAY; }
     news(g, `${POI[p.kind].icon} ${POI[p.kind].name} is yours: ${POI[p.kind].perk}`);
   }
 }
@@ -91,6 +127,17 @@ export function salvageAt(g: Game, x: number, y: number): number {
 /** Output bonus from old ruins near a building (taken over ones only). */
 export function ruinsMul(g: Game, x: number, y: number): number {
   return (g.s.pois ?? []).some(p => p.kind === 'ruins' && p.got && Math.hypot(p.x - x, p.y - y) <= RUINS_R) ? RUINS_BONUS : 1;
+}
+
+/** Output bonus from a ranger hut (lumber camps) or old windmill (wheat farms) that is yours. */
+export function kindMul(g: Game, kind: string, x: number, y: number): number {
+  const k = kind === 'wood' ? 'ranger' : kind === 'farm' ? 'mill' : null; if (!k) return 1;
+  return (g.s.pois ?? []).some(p => p.kind === k && p.got && Math.hypot(p.x - x, p.y - y) <= KIND_R) ? KIND_BONUS : 1;
+}
+
+/** Reward bonus for a town near Silver Falls that is yours. */
+export function fallsMul(g: Game, x: number, y: number): number {
+  return (g.s.pois ?? []).some(p => p.kind === 'falls' && p.got && Math.hypot(p.x - x, p.y - y) <= FALLS_R) ? FALLS_BONUS : 1;
 }
 
 /** Speed bonus for a ship at (x, y) from a lighthouse that is yours. */
