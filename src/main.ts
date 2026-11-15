@@ -1,3 +1,4 @@
+import { destName } from './economy/shipping.ts';
 import { breaksChanged, newGame, trackChanged } from './game.ts';
 import { BREAK_TEXT, breakRail, tickBreaks } from './track/breaks.ts';
 import { hallAt, hallsOf } from './buildings/stations.ts';
@@ -126,6 +127,12 @@ cardEl.onclick = e => {
     openCard({ kind, id } as Card); return;
   }
   if (b.dataset.act === 'view') { setView((b.dataset.v || null) as MapView | null); closeCard(); return; }
+  if (b.dataset.act === 'pin') { // 📌 choose where a building sends its goods ('' = automatic)
+    const t = game.s.buildings?.find(x => x.id === +b.dataset.id!); if (!t) return;
+    if (b.dataset.kind) { t.pin = { kind: b.dataset.kind as 'town' | 'bld', id: +b.dataset.to! }; toast(`📌 The ${info(t.kind).name} now sends to ${destName(game, t.pin)}`); }
+    else { delete t.pin; toast('🔄 It sends automatically again'); }
+    openCard({ kind: 'bld', id: t.id }); return;
+  }
   if (b.dataset.act === 'full') { const d = document.documentElement; if (document.fullscreenElement) void document.exitFullscreen?.(); else d.requestFullscreen?.().catch(() => toast('Full screen works when the game is opened in Chrome')); return; }
   if (b.dataset.act === 'copycode') { void saveCode(game).then(async c => { myCode = c; renderCard(); try { await navigator.clipboard.writeText(c); toast('📋 Code copied: paste it in 🗺 Game on the other side'); } catch { toast('Press on the code below, Select all, then Copy'); } }); return; }
   if (b.dataset.act === 'copystats') { const t = cardEl.querySelector<HTMLTextAreaElement>('#stats'); if (t) { t.value = gameReport(game); void navigator.clipboard.writeText(t.value).then(() => toast('📋 Report copied: paste it in the chat'), () => { t.select(); toast('Press on the report, Select all, then Copy'); }); } return; }

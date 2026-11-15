@@ -89,6 +89,8 @@ export interface Building {
   landed?: Partial<Record<Good, number>>;
   /** docks: fishing level (0 = no boats; 1 boats, 2 bigger fleet, 3 shellfish traps too) */
   fish?: number;
+  /** where the player pinned its goods to go (else the plan picks) */
+  pin?: { kind: 'town' | 'bld'; id: number };
   /** docks: goods waiting for a ship to another dock */
   outq?: import('../ships/ships.ts').SeaLoad[];
 }

@@ -39,7 +39,7 @@ that makes sense. Details for each line: `legacy/CHANGES.md` (search the version
 - [ ] 2x4 yards with in/out loading tracks, more tracks by level, building art grows by level (done: yards with two loading tracks, art per kind; to do: more tracks by level)
 - [ ] Factories (Sawmill, Brickworks, Gristmill, Steel Mill, Refinery, Cannery, Textile Mill...), 1 raw → 1 product, unlock by Railway level (done: all, Cannery fish → canned fish at Railway level 2)
 - [x] Towns: order ladder Hamlet → Village → Town → City → Metropolis → Megacity → endless; tap to upgrade; steady buying after orders (specialties come with islands)
-- [ ] Shipping plan: each building ships to the nearest place that needs it, arrows on the map, pins (done: plan shared nearest-first with factories, arrow from an open building card; to do: pins)
+- [ ] Shipping plan: each building ships to the nearest place that needs it, arrows on the map, pins (done: plan shared nearest-first with factories, arrow from an open building card, 📌 pins)
 - [x] Pay per unit grows with distance (PAY .41), no passive income, train upkeep
 - [ ] Railway level from orders filled (to level 10), unlocks (done: levels, bonus, factory unlocks; to do: the later unlocks)
 - [ ] Engine shed: buy trains (price curve, done), fleet upgrades (done: wagons, engines, repairs; to do with islands: tenders, wagon types, per island)

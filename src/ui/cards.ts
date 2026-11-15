@@ -2,7 +2,7 @@ import type { Game, Site } from '../state.ts';
 import { bufOf, type Building, capOf, GOODS, type Good, INDUSTRIES, type IndustryKind, inputsOf, isFactory, isLinked, lockedText, outputOf, shareAt } from '../buildings/industries.ts';
 import { factoryState } from '../economy/production.ts';
 import { FOUND_PRICE, orderDone, orderOf, reward, sizeName, steadyGoods, stepOf, townLinked, upgradePrice } from '../economy/towns.ts';
-import { type Dest, destName, type Ship, shipPlan, siteOf } from '../economy/shipping.ts';
+import { type Dest, destinationsOf, destName, type Ship, shipPlan, siteOf } from '../economy/shipping.ts';
 import { FERRY_FEE, trainPrice, trainStatus } from '../economy/dispatch.ts';
 import { dockRange, islandName, islandOfB, seaDist } from '../ships/docks.ts';
 import { lanesFrom, SHIP_CAP, SHIP_HOLD, SHIP_PRICE, SHIP_SPEED, waitingAt } from '../ships/ships.ts';
@@ -204,8 +204,21 @@ function buildingCard(g: Game, b: Building, page?: string): string {
   h += `<div class="row"><b class="ico">📦</b><div class="grow"><div class="line"><span>${G.name} ready</span><span>${Math.floor(b.stock)} / ${cap}</span></div>${bar(b.stock / cap, b.stock >= cap ? '#e0584a' : '#5cc46a')}${b.stock >= cap ? '<small>Full: it stops making more until a train collects</small>' : ''}</div></div>`;
   const ship = plan.get(b.id);
   const why = (w: Ship['why']) => w === 'order' ? '📋 For its order (full pay)' : w === 'factory' ? '🏭 To make into a product (half pay)' : w === 'steady' ? '🛒 It keeps buying this (part pay)' : '💸 No town needs it now: sold cheap';
-  if (ship) h += `<div class="row"><b class="ico">➡</b><div class="grow"><div class="line"><span>Sends to <b>${esc(destName(g, ship.to))}</b></span><span>${ship.d} squares</span></div><small>${why(ship.why)}</small></div></div>`;
+  const pinned = b.pin && ship && sameDest(ship.to, b.pin);
+  if (page === 'pin') { // choose where its goods go
+    h = `<div class="head"><b class="big">📌</b><div><h2>Where should the ${esc(d.name)} send ${G.icon} ${G.name.toLowerCase()}?</h2></div></div>`;
+    h += `<button class="act${b.pin ? ' alt' : ''}" data-act="pin" data-id="${b.id}" data-kind="" data-to="">🔄 Automatic${b.pin ? '' : ' ✓'}<br><small>the nearest place that needs it most</small></button>`;
+    const ds = destinationsOf(g, b);
+    if (!ds.length) h += `<div class="note">No town or factory on its railway yet</div>`;
+    for (const x of ds.slice(0, 12)) {
+      const on = !!b.pin && sameDest(b.pin, x.to);
+      h += `<div class="row${on ? ' ok' : ''}"><b class="ico">${x.to.kind === 'town' ? '🏘' : '🏭'}</b><div class="grow"><div class="line"><span>${esc(x.to.kind === 'bld' ? 'the ' + placeName(g, g.s.buildings!.find(o => o.id === x.to.id)!) : destName(g, x.to))}</span><span>${x.d} squares</span></div><small>${why(x.why)}</small></div><button class="mini${on ? ' on' : ''}" data-act="pin" data-id="${b.id}" data-kind="${x.to.kind}" data-to="${x.to.id}">${on ? '📌 Pinned' : '📌 Send here'}</button></div>`;
+    }
+    return h + `<small class="why">A pinned building keeps sending there, even when somewhere else needs it more.</small><button class="act back" data-act="page" data-page="">‹ Back</button>`;
+  }
+  if (ship) h += `<div class="row"><b class="ico">${pinned ? '📌' : '➡'}</b><div class="grow"><div class="line"><span>Sends to <b>${esc(destName(g, ship.to))}</b></span><span>${ship.d} squares</span></div><small>${why(ship.why)}${pinned ? ' · 📌 you chose this' : ''}</small></div><button class="mini" data-act="page" data-page="pin">📌 Choose</button></div>`;
   else if (linked) h += `<div class="warn">🏘 No town on the railway yet to take it</div>`;
+  if (b.pin && !pinned) h += `<div class="warn">📌 It is pinned to ${esc(destName(g, b.pin as Dest))}, which its trains can't reach now: it sends automatically meanwhile</div>`;
   const tr = g.s.trains.filter(t => t.job?.src === b.id || (t.job && sameDest(t.job.to, { kind: 'bld', id: b.id })));
   h += `<div class="note">🚂 ${tr.length ? `${tr.length} train${tr.length > 1 ? 's' : ''} on this` : g.s.trains.length ? `Trains collect when ${Math.round(trainCap(g) * 0.75)} are ready` : 'Buy a train at the engine shed (🚂 Train)'}</div>`;
   // grow it, sell what's piled up, or take it down
