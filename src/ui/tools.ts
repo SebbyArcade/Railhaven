@@ -5,7 +5,7 @@ import { MAX_SCOUTS, scoutCost, scoutStarts, scoutStepError, sendScout } from '.
 import { trackChanged } from '../game.ts';
 import { type BuiltStroke, buildPlan, extendPlan, isAnchor, type PaintPlan, planCost, planError, startPlan, undoStroke } from '../track/paint.ts';
 import { removeSquare } from '../track/edit.ts';
-import { TRACK_COST } from '../track/rules.ts';
+import { BRIDGE_UPKEEP, TRACK_COST } from '../track/rules.ts';
 import { buyTrain, trainPrice } from '../economy/dispatch.ts';
 import { bodyPoint, trainLength } from '../trains/train.ts';
 import { fmtMoney, toast } from './hud.ts';
@@ -333,8 +333,8 @@ export class Tools {
   bar(): { text: string; ok: string; can: boolean; turn?: boolean; near?: boolean } | null {
     const g = this.g();
     if (this.mode === 'rail' && this.plan && this.plan.path.length > 1) {
-      const e = planError(g, this.plan), n = this.plan.path.filter(i => !g.track.has(i)).length;
-      return { text: e || `${n} new square${n === 1 ? '' : 's'} · ${fmtMoney(planCost(g, this.plan))}${harmText(harmOf(g, this.plan.path.filter(i => !g.track.has(i))))}`, ok: '✓ Build', can: !e };
+      const e = planError(g, this.plan), n = this.plan.path.filter(i => !g.track.has(i)).length, wet = this.plan.path.filter(i => !g.track.has(i) && g.world.terr[i] === 0).length;
+      return { text: e || `${n} new square${n === 1 ? '' : 's'} · ${fmtMoney(planCost(g, this.plan))}${wet ? ` · 🌉 then ${fmtMoney(wet * BRIDGE_UPKEEP)}/min upkeep` : ''}${harmText(harmOf(g, this.plan.path.filter(i => !g.track.has(i))))}`, ok: '✓ Build', can: !e };
     }
     if (this.mode === 'double' && this.dbl.size) {
       const add = [...this.dbl].filter(i => g.track.has(i) && !g.track.get(i)!.dbl), c = add.length * TRACK_COST.double;

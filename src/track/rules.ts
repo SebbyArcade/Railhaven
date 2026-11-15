@@ -4,6 +4,15 @@ import { T } from '../world/terrain.ts';
 
 /** Track prices carried over from the old game: grass and forest $5, hills $15, tunnels $250 (after the Foundry). Bridges by distance from land. */
 export const TRACK_COST = { flat: 5, hills: 15, tunnel: 250, bridge: [0, 500, 1500, 3500], double: 10 };
+/** Bridges cost this much a minute for each square over water, to keep up (the old game's rule). */
+export const BRIDGE_UPKEEP = 25;
+const bridgeCache = new WeakMap<object, number>();
+/** Track squares standing on water (bridges). Recounted whenever the rail network is rebuilt. */
+export function bridgeSquares(g: Game): number {
+  const c = bridgeCache.get(g.net); if (c !== undefined) return c;
+  let n = 0; for (const i of g.track.keys()) if (g.world.terr[i] === T.Water) n++;
+  bridgeCache.set(g.net, n); return n;
+}
 /** A bridge may reach at most this many squares out from land, and be at most this long. */
 export const BRIDGE_MAX_FROM_LAND = 3;
 export const BRIDGE_MAX_LEN = 8;
