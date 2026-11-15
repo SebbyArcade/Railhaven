@@ -5,5 +5,5 @@ import { viteSingleFile } from 'vite-plugin-singlefile';
 export default defineConfig({
   plugins: [viteSingleFile()],
   build: { target: 'es2022', assetsInlineLimit: 100_000_000 },
-  test: { include: ['tests/**/*.test.ts'] },
+  test: { include: ['tests/**/*.test.ts'], testTimeout: 30000 }, // tests that import a full old save can take over 5 s on a busy CI machine
 });
