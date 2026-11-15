@@ -437,7 +437,7 @@ export function nearestSpot(g: Game, kind: IndustryKind, cx: number, cy: number,
 
 /** Why there is nowhere to build this kind yet, and what to do. */
 export const noSpotText = (kind: IndustryKind) => MINES.has(kind)
-  ? `No ${INDUSTRIES[kind].needs.replace(/^an? /, '').replace(/ at the foot of mountains| \((outer islands|far seas)\)/g, '')} uncovered yet: lay track toward the mountains to uncover more land`
+  ? `No ${INDUSTRIES[kind].needs.replace(/^an? /, '').replace(/ at the foot of mountains| \((outer islands|far seas)\)/g, '')} found yet: it must be found first. Lay track toward the mountains or 🔭 Scout into the fog to uncover more land`
   : `No room for a ${INDUSTRIES[kind].name} on uncovered land: it needs ${INDUSTRIES[kind].needs}`;
 
 /** "Ashford's park" / "Ashford's Clock Tower", for refusals. */

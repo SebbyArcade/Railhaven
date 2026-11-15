@@ -12,13 +12,12 @@ import { trackFromSave, trackToSave } from './track/state.ts';
 import type { TrackMap } from './track/types.ts';
 import { TrainSystem } from './trains/train.ts';
 import { placeShed } from './buildings/shed.ts';
-import { bestPlacement, type Building, nearestSpot, linkedSquares, tracksOf, yardLanes, yardSquares } from './buildings/industries.ts';
+import { type Building, linkedSquares, tracksOf, yardLanes, yardSquares } from './buildings/industries.ts';
 import { blockedPieces } from './track/breaks.ts';
 import { networkKey, relocate, snapshot } from './trains/relocate.ts';
 
 export const START_MONEY = 12000;
 export const START_REVEAL = 9;
-export const START_DEPOSIT_REVEAL = 4;
 
 /** Rebuild the world from the seed and apply saved terrain edits. */
 export function buildWorld(s: GameState) {
@@ -76,31 +75,13 @@ export function newGame(seed = Math.floor(Math.random() * 1e6), mapV = MAP_VERSI
     track: [], trains: [], netKey: '', nextId: 1,
   };
   const g = assemble(s);
-  reveal(g, world.cx, world.cy, START_REVEAL);
-  revealFirstDeposits(g);
+  reveal(g, world.cx, world.cy, START_REVEAL); // deposits in the fog stay hidden until the player finds them
   return g;
 }
 
 export function loadGame(s: GameState): Game {
   const g = assemble(s);
-  revealFirstDeposits(g); // older saves started with every deposit in the fog
   return g;
-}
-
-/** The nearest stone outcrop and coal seam are uncovered (if none of that kind is yet), so the first quarry and mine can be built. */
-function revealFirstDeposits(g: Game) {
-  const { cx, cy } = g.world;
-  for (const res of ['stone', 'coal'] as const) {
-    const deps = g.s.sites.filter(s => s.kind === 'dep' && s.res === res && !s.hidden);
-    if (nearestSpot(g, res, cx, cy)) continue; // one is already uncovered and a mine fits
-    // the nearest one where a mine actually fits (try uncovering it; put the fog back if it doesn't fit)
-    for (const d of deps.sort((p, q) => Math.hypot(p.x - cx, p.y - cy) - Math.hypot(q.x - cx, q.y - cy))) {
-      const fog = g.s.fog.slice();
-      reveal(g, d.x, d.y, START_DEPOSIT_REVEAL);
-      if (bestPlacement(g, res, d.x, d.y).place) break;
-      g.s.fog = fog;
-    }
-  }
 }
 
 /** Before saving: write the live track and where every train stands into the state. */

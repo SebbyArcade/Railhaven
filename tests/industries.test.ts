@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { newGame, trackChanged } from '../src/game.ts';
-import { bestPlacement, build, isLinked, nearestSpot, placeError, priceOf, yardSquares } from '../src/buildings/industries.ts';
+import { newGame, START_REVEAL, trackChanged } from '../src/game.ts';
+import { isRevealed, reveal } from '../src/world/fog.ts';
+import { bestPlacement, build, isLinked, noSpotText, placeError, priceOf, yardSquares } from '../src/buildings/industries.ts';
 import { buildPlan, extendPlan, startPlan } from '../src/track/paint.ts';
 import { tickProduction } from '../src/economy/production.ts';
 
@@ -46,11 +47,18 @@ describe('industries and yards', () => {
     tickProduction(g, 10); expect(b.stock).toBeGreaterThan(0);
   });
 
-  it('a stone quarry and a coal mine can be built at the start on every seed', () => {
+  it('deposits in the fog stay hidden at the start, but a quarry and a coal mine fit somewhere on the home island', () => {
     for (const seed of [4242, 1, 77, 123456, 999]) {
-      const g = newGame(seed), a = g.s.sites[0]!;
-      for (const k of ['stone', 'coal'] as const) expect(nearestSpot(g, k, a.x, a.y), `${k} on seed ${seed}`).not.toBeNull();
+      const g = newGame(seed), a = g.s.sites[0]!, n = g.world.n, home = g.world.islandOf[a.y * n + a.x];
+      // only the land around Ashford is uncovered: no far-off patch revealed for a deposit
+      for (let i = 0; i < n * n; i++) if (isRevealed(g, i)) expect(Math.hypot(i % n - a.x, ((i / n) | 0) - a.y), `seed ${seed}`).toBeLessThanOrEqual(START_REVEAL + 1);
+      for (const k of ['stone', 'coal'] as const) {
+        const deps = g.s.sites.filter(s => s.kind === 'dep' && s.res === k && !s.hidden && g.world.islandOf[s.y * n + s.x] === home);
+        const fits = deps.some(d => { const fog = g.s.fog.slice(); reveal(g, d.x, d.y, 4); const ok = !!bestPlacement(g, k, d.x, d.y).place; g.s.fog = fog; return ok; });
+        expect(fits, `${k} on seed ${seed}`).toBe(true);
+      }
     }
+    expect(noSpotText('stone')).toMatch(/must be found/);
   });
 
   it('a yard placed with its end against existing track joins it', () => {
