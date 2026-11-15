@@ -18,6 +18,7 @@ import { buyFleet, FLEET, type FleetKey, fleetLvl, refundOf, removeBuilding, rus
 import { foundTown, sizeName, tickTowns, upgradeTown } from './economy/towns.ts';
 import { buyTrainAt, tickTrains } from './economy/dispatch.ts';
 import { buyShip } from './ships/ships.ts';
+import { buyFishing, FISHING } from './economy/upgrades.ts';
 import { checkStuck } from './economy/nofail.ts';
 
 const canvas = document.getElementById('c') as HTMLCanvasElement;
@@ -89,6 +90,8 @@ cardEl.onclick = e => {
   const b = (e.target as HTMLElement).closest('button'); if (!b) return;
   if (b.dataset.act === 'close') { closeCard(); return; }
   const bld = game.s.buildings?.find(x => x.id === +(b.dataset.id ?? -1));
+  if (b.dataset.act === 'page' && tools.card) { openCard({ ...tools.card, page: b.dataset.page || undefined } as Card); return; }
+  if (b.dataset.act === 'fish' && bld) { const why = buyFishing(game, bld); toast(why || `🎣 ${FISHING[(bld.fish ?? 1) - 1]!.name} at the dock`); renderCard(); return; }
   if (b.dataset.act === 'ship' && bld) { const s = buyShip(game, bld); toast(typeof s === 'string' ? s : '🚢 A cargo ship is ready at the dock: it sails where goods wait'); renderCard(); return; }
   if (b.dataset.act === 'trainat' && bld) { const t = buyTrainAt(game, bld); if (typeof t === 'string') toast(t); else { toast(`🚂 Train ${t.id} came over by boat and is looking for a load`); } renderCard(); return; }
   if (b.dataset.act === 'lvl' && bld) { const why = upgradeBuilding(game, bld); toast(why || `⬆ ${info(bld.kind).name} is now level ${bld.lvl}`); if (!why && bld.kind === 'dock') trackChanged(game); renderCard(); return; }

@@ -17,6 +17,9 @@ export const isDock = (b: Building) => b.kind === 'dock';
 /** The island a building stands on (its yard's land mass). */
 export const islandOfB = (g: Game, b: Building) => g.world.islandOf[yardSquares(g.world.n, b)[0]!]!;
 
+/** An island's name in plain words (small islets have no name of their own). */
+export const islandName = (g: Game, k: number) => k === g.world.home ? 'Ashford Isle' : g.world.islands[k]?.name ?? 'Small island';
+
 /** Squares of water sailed from this dock's pier to every water square (-1 = can't reach). Cached per dock and level. */
 export function seaDist(g: Game, b: Building): Int32Array {
   const key = `${b.id}:${b.x},${b.y},${b.horizontal},${b.side}`;

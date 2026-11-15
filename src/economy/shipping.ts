@@ -100,7 +100,7 @@ export function shipPlan(g: Game): Plan {
     if (!left.has(kk)) {
       let r = 0;
       if (why === 'need') r = p.f ? factoryRoom(p.f, k) : orderOf(g, p.t!)[k] ? townRoom(g, p.t!, k).order : 0;
-      else r = p.t && steadyGoods(p.t).includes(k) ? Math.max(townRoom(g, p.t, k).steady, 1) : 0;
+      else r = p.t && steadyGoods(p.t, g).includes(k) ? Math.max(townRoom(g, p.t, k).steady, 1) : 0;
       left.set(kk, r - (why === 'need' ? way.get(key(p.to, k)) ?? 0 : 0));
     }
     return left.get(kk)!;

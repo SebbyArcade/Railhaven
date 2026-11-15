@@ -25,6 +25,25 @@ export function upgradeBuilding(g: Game, b: Building): string {
   return '';
 }
 
+// ---- fishing (docks)
+
+/** Dock fishing levels: boats, a bigger fleet, then shellfish traps as well (the old game's prices). */
+export const FISHING = [
+  { icon: '🎣', name: 'Fishing boats', price: 3000, text: 'boats catch 🐟 30 a minute off the dock' },
+  { icon: '⛵', name: 'Bigger fleet', price: 6000, text: '🐟 48 a minute' },
+  { icon: '🦞', name: 'Shellfish traps', price: 12000, text: 'adds 🦞 18 a minute' },
+];
+/** Catch per second at a fishing level. */
+export const catchOf = (lvl: number): { fish: number; shellfish: number } => ({ fish: lvl >= 2 ? 0.8 : lvl >= 1 ? 0.5 : 0, shellfish: lvl >= 3 ? 0.3 : 0 });
+
+export function buyFishing(g: Game, b: Building): string {
+  const l = b.fish ?? 0, f = FISHING[l];
+  if (!f) return 'Fishing is at its top level';
+  if (g.s.money < f.price) return `Need $${(f.price - Math.floor(g.s.money)).toLocaleString('en-US')} more`;
+  g.s.money -= f.price; b.fish = l + 1; b.paid = (b.paid ?? 0) + f.price;
+  return '';
+}
+
 // ---- selling stock (only when the player chooses)
 
 export const SELL_SHARE = 0.75, SELL_PRICE = 0.6;

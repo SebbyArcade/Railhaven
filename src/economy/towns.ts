@@ -52,9 +52,21 @@ export function orderProgress(g: Game, t: Site): number {
 }
 export const orderDone = (g: Game, t: Site) => orderProgress(g, t) >= 1;
 
-/** Goods of steps already climbed: the town keeps buying these (steady demand). */
-export function steadyGoods(t: Site): Good[] {
-  return [...new Set(LADDER.slice(0, Math.min(stepOf(t), LADDER.length)).flatMap(o => Object.keys(o) as Good[]))];
+/** Goods of steps already climbed: the town keeps buying these (steady demand). Towns by the sea also buy fish, and shellfish from Town size. */
+export function steadyGoods(t: Site, g?: Game): Good[] {
+  const out = [...new Set(LADDER.slice(0, Math.min(stepOf(t), LADDER.length)).flatMap(o => Object.keys(o) as Good[]))];
+  if (g && isCoastal(g, t)) { out.push('fish'); if (stepOf(t) >= 2) out.push('shellfish'); }
+  return out;
+}
+
+/** A town with the open sea within 4 squares. */
+export function isCoastal(g: Game, t: Site): boolean {
+  const c = (g.coast ??= new Map()), hit = c.get(t.id); if (hit !== undefined) return hit;
+  const n = g.world.n; let yes = false;
+  for (let dy = -4; dy <= 4 && !yes; dy++) for (let dx = -4; dx <= 4 && !yes; dx++) {
+    const x = t.x + dx, y = t.y + dy; if (x >= 0 && y >= 0 && x < n && y < n && g.world.ocean[y * n + x]) yes = true;
+  }
+  c.set(t.id, yes); return yes;
 }
 
 /** Is the town on the railway: its station hall joined to Ashford? */
@@ -66,9 +78,9 @@ export function townLinked(g: Game, t: Site): boolean {
 /** How many units of a good the town takes right now, split into open-order and steady parts. */
 export function townRoom(g: Game, t: Site, k: Good): { order: number; steady: number } {
   const o = orderOf(g, t), left = o[k] ? Math.max(0, o[k]! - (t.got?.[k] ?? 0)) : 0;
-  return { order: left, steady: steadyGoods(t).includes(k) ? Math.floor(t.steady?.[k] ?? 0) : 0 };
+  return { order: left, steady: steadyGoods(t, g).includes(k) ? Math.floor(t.steady?.[k] ?? 0) : 0 };
 }
-export const townWants = (g: Game, t: Site, k: Good) => { const r = townRoom(g, t, k); return r.order + r.steady > 0 || steadyGoods(t).includes(k) || !!orderOf(g, t)[k]; };
+export const townWants = (g: Game, t: Site, k: Good) => { const r = townRoom(g, t, k); return r.order + r.steady > 0 || steadyGoods(t, g).includes(k) || !!orderOf(g, t)[k]; };
 
 /** Unload goods at a town: fills the order first, then steady demand, the rest is surplus. Returns the units in each part. */
 export function deliverToTown(g: Game, t: Site, k: Good, n: number) {
@@ -83,7 +95,7 @@ export function tickTowns(g: Game, dt: number) {
   for (const t of g.s.sites) {
     if (t.kind !== 'town' || !townLinked(g, t)) continue;
     const cap = steadyRate(t.pop ?? 0);
-    for (const k of steadyGoods(t)) (t.steady ??= {})[k] = Math.min(cap, (t.steady[k] ?? 0) + dt * cap / 60);
+    for (const k of steadyGoods(t, g)) (t.steady ??= {})[k] = Math.min(cap, (t.steady[k] ?? 0) + dt * cap / 60);
     const L = stepOf(t), target = sizeFloor(L) + (sizeCap(L) - sizeFloor(L)) * orderProgress(g, t);
     if ((t.pop ?? 0) < target) t.pop = Math.min(target, (t.pop ?? 0) + dt * Math.max(0.5, target * 0.01));
   }

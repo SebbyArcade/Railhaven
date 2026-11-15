@@ -85,6 +85,8 @@ export interface Game {
   linked?: Set<number>;
   /** rail distances from buildings and towns (cleared when the track changes) */
   dist?: Map<string, Int32Array>;
+  /** towns with the sea nearby (cache) */
+  coast?: Map<number, boolean>;
   /** squares sailed from each dock (cache) */
   seaCache?: Map<string, Int32Array>;
   /** squares already built on (cached; rebuilt when the network or buildings change) */

@@ -108,7 +108,7 @@ function sendLoaded(g: Game, t: Train) {
 }
 
 /** Railway level unlocks, in plain words (index = level). */
-export const UNLOCKS = ['', '🏭 Sawmill, Brickworks and Flour Mill', '🏭 Steel Mill and Refinery', '🏭 Textile Mill', '', '', '', '', '', ''];
+export const UNLOCKS = ['', '🏭 Sawmill, Brickworks and Flour Mill', '🏭 Steel Mill, Refinery and Cannery', '🏭 Textile Mill', '', '', '', '', '', ''];
 
 const pay = (g: Game, v: number) => { g.s.money += v; g.s.earned = (g.s.earned ?? 0) + v; };
 

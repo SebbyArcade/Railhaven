@@ -51,6 +51,10 @@
   #card .note.big2 { font-size: 15px; }
   #card .act { width: 100%; margin-top: 8px; background: #2f8f8a; color: #fff; border: 0; border-radius: 12px; padding: 10px; font-size: 15px; font-weight: 700; }
   #card .act:disabled { background: #555; color: #bbb; }
+  #card .tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 8px; }
+  #card .tile { background: #3a2a1a; border: 1px solid #8a6a3e; border-radius: 12px; padding: 9px 8px; color: #fff; text-align: left; display: flex; flex-direction: column; gap: 2px; font-size: 15px; }
+  #card .tile small { color: #e8d8b8; font-size: 12px; } #card .tile.alert { border-color: #e0584a; background: #4a2418; }
+  #card .act.back { background: #5a4630; }
   #card .pair { display: flex; gap: 6px; } #card .pair .act { font-size: 13px; padding: 9px 6px; }
   #card .act.alt { background: #b8862e; } #card .act.warnb { background: #a8402e; }
   #card .act.sure { background: #e0402a; animation: pulse 0.8s infinite alternate; }
