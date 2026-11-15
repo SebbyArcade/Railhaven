@@ -62,7 +62,7 @@ export function parkFree(g: Game, x: number, y: number): boolean {
   if (g.world.terr[i] !== T.Grass || !isRevealed(g, i) || takenSquares(g).has(i) || parkAt(g, i)) return false;
   if (g.s.sites.some(s => s.x === x && s.y === y)) return false;
   // keep clear of station halls and the station building beside them
-  for (const h of hallsOf(g.track, n, g.s.sites)) for (const q of h.squares) if (Math.abs(q % n - x) <= 1 && Math.abs(((q / n) | 0) - y) <= 1) return false;
+  for (const h of hallsOf(g.track, n, g.s.sites, g.world.terr)) for (const q of h.squares) if (Math.abs(q % n - x) <= 1 && Math.abs(((q / n) | 0) - y) <= 1) return false;
   return true;
 }
 

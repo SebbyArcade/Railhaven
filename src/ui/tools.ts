@@ -419,7 +419,7 @@ export function cutText(g: Game, i: number): string {
   const track: typeof g.track = new Map([...g.track].map(([k, v]) => [k, { ...v }])), was = g.linked ?? new Set<number>(); // a copy: removing a square edits its neighbours
   removeSquare(track, g.world.n, i);
   const after = linkedSquares({ ...g, track } as Game), n = g.world.n, names: string[] = [];
-  for (const t of g.s.sites) if (t.kind === 'town' && townLinked(g, t)) { const h = hallOf(track, n, t); if (!h || !after.has(h.squares[1])) names.push(t.name ?? 'a town'); }
+  for (const t of g.s.sites) if (t.kind === 'town' && townLinked(g, t)) { const h = hallOf(track, n, t, g.world.terr); if (!h || !after.has(h.squares[1])) names.push(t.name ?? 'a town'); }
   for (const b of g.s.buildings ?? []) { const y = yardSquares(n, b)[0]!; if (was.has(y) && !after.has(y)) names.push(`the ${placeName(g, b)}`); }
   if (!names.length) return '';
   return names.length <= 3 ? names.join(names.length === 2 ? ' and ' : ', ') : `${names.slice(0, 2).join(', ')} and ${names.length - 2} more`;

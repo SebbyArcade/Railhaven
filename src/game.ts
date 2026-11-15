@@ -31,8 +31,8 @@ export function buildWorld(s: GameState) {
   return world;
 }
 
-function makeNetwork(track: TrackMap, n: number, sites: Site[], buildings: Building[] = []): Network {
-  const halls = hallsOf(track, n, sites), dbl = doubleSquares(track, halls), still = new Set<number>(), lanes = new Map<number, number[]>();
+function makeNetwork(track: TrackMap, n: number, sites: Site[], buildings: Building[], terr: Uint8Array): Network {
+  const halls = hallsOf(track, n, sites, terr), dbl = doubleSquares(track, halls), still = new Set<number>(), lanes = new Map<number, number[]>();
   for (const h of halls) for (const i of [...h.squares, ...h.approaches]) still.add(i);
   for (const b of buildings) { // yards: two loading tracks, the turnouts on the square past each end
     const sq = yardSquares(n, b), along = b.horizontal ? 0b0101 : 0b1010, step = b.horizontal ? 1 : n;
@@ -48,7 +48,7 @@ function assemble(s: GameState): Game {
   s.trains ??= []; s.nextId ??= 1;
   const g = { s, world, track } as Game;
   g.linked = linkedSquares(g); placeShed(g); g.linked = linkedSquares(g); // the shed lays its siding first
-  const net = makeNetwork(track, world.n, s.sites, s.buildings);
+  const net = makeNetwork(track, world.n, s.sites, s.buildings ?? [], world.terr);
   g.net = net; g.sys = new TrainSystem(net, s.trains); g.sys.speedOf = t => trainSpeedMul(g, t);
   g.sys.onMidReverse = (_t, sq) => { const r = (g.revs ??= new Map()).get(sq); g.revs.set(sq, { n: (r?.n ?? 0) + 1, at: g.s.t }); };
   if (s.netKey !== networkKey(net)) {
@@ -62,13 +62,14 @@ function assemble(s: GameState): Game {
   return g;
 }
 
-export function newGame(seed = Math.floor(Math.random() * 1e6)): Game {
-  const world = generateWorld(seed, MAP_N, MAP_VERSION);
+/** A new game. mapV picks the map maker version: the latest for new games, 1 for saves imported from the old game (its exact maps). */
+export function newGame(seed = Math.floor(Math.random() * 1e6), mapV = MAP_VERSION): Game {
+  const world = generateWorld(seed, MAP_N, mapV);
   const { sites, mountains } = generateSites(world);
   const terrainEdits: Record<number, number> = {};
   for (const i of mountains) terrainEdits[i] = world.terr[i]!;
   const s: GameState = {
-    version: 1, mapV: MAP_VERSION, seed, t: 0, money: START_MONEY, fog: emptyFog(world.n), sites, terrainEdits,
+    version: 1, ...(mapV > 1 ? { mapV } : {}), seed, t: 0, money: START_MONEY, fog: emptyFog(world.n), sites, terrainEdits,
     camera: { x: world.cx * TILE + TILE / 2, y: world.cy * TILE + TILE / 2, z: 1.8 },
     track: [], trains: [], netKey: '', nextId: 1,
   };
@@ -125,7 +126,7 @@ export function trackChanged(g: Game) {
   g.linked = linkedSquares(g);
   const moved = placeShed(g); // may move the shed and its siding: before the rails are rebuilt
   if (moved.length) { g.linked = linkedSquares(g); g.terrainDirty?.(moved); }
-  g.net = makeNetwork(g.track, g.world.n, g.s.sites, g.s.buildings);
+  g.net = makeNetwork(g.track, g.world.n, g.s.sites, g.s.buildings ?? [], g.world.terr);
   g.dist = new Map();
   g.sys.setNetwork(g.net);
   for (const b of linkedDocks(g)) if (chartSea(g, b)) { (g.news ??= []).push(`⚓ The ${isHomeDock(g, b) ? 'dock' : 'landing'} charts the sea around it: new shores are out of the fog`); }
@@ -142,7 +143,7 @@ export function trackChanged(g: Game) {
 /** Pieces wholly inside station halls and yards, where trains may use either lane. */
 function platformPieces(g: Game): Set<number> {
   const n = g.world.n, sq = new Set<number>();
-  for (const h of hallsOf(g.track, n, g.s.sites)) for (const i of h.squares) sq.add(i);
+  for (const h of hallsOf(g.track, n, g.s.sites, g.world.terr)) for (const i of h.squares) sq.add(i);
   for (const b of g.s.buildings ?? []) for (const i of yardSquares(n, b)) sq.add(i);
   return new Set(g.net.pieces.filter(p => p.squares.every(i => sq.has(i))).map(p => p.id));
 }

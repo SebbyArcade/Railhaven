@@ -49,7 +49,7 @@ export const bldOf = (g: Game, id: number): Building | undefined => g.s.building
 /** Where a train stops to unload: the town's station hall, or the factory's yard. */
 export const destSquares = (g: Game, to: Dest): number[] => {
   if (to.kind === 'bld') { const b = bldOf(g, to.id); return b ? yardSquares(g.world.n, b) : []; }
-  const t = siteOf(g, to.id); const h = t && hallOf(g.track, g.world.n, t); return h ? h.squares : [];
+  const t = siteOf(g, to.id); const h = t && hallOf(g.track, g.world.n, t, g.world.terr); return h ? h.squares : [];
 };
 export const destName = (g: Game, to: Dest) => to.kind === 'bld' ? `the ${INDUSTRIES[bldOf(g, to.id)?.kind ?? 'sawmill'].name}` : siteOf(g, to.id)?.name ?? 'a town';
 export const goodOf = (b: Building): Good => INDUSTRIES[b.kind].makes;
@@ -88,7 +88,7 @@ export function shipPlan(g: Game): Plan {
     else for (const k of Object.keys(b.landed ?? {}) as Good[]) if ((b.landed![k] ?? 0) > 0) srcs.push({ b, k, sk: dockKey(b.id, k) });
   }
   const targets: Targets = (from, k, d0, dist, push) => {
-    for (const t of towns) { const h = hallOf(g.track, n, t)!, d = dist[h.squares[1]]!; if (d >= 0) push({ to: { kind: 'town', id: t.id }, d: d + d0, t }); }
+    for (const t of towns) { const h = hallOf(g.track, n, t, g.world.terr)!, d = dist[h.squares[1]]!; if (d >= 0) push({ to: { kind: 'town', id: t.id }, d: d + d0, t }); }
     for (const f of facs) if (f !== from && inputsOf(f.kind).includes(k)) { const d = dist[yardSquares(n, f)[1]!]!; if (d >= 0) push({ to: { kind: 'bld', id: f.id }, d: d + d0, f }); }
   };
   const pairs: Pair[] = [];
@@ -176,7 +176,7 @@ export function destinationsOf(g: Game, b: Building): { to: Dest; d: number; why
   const n = g.world.n, k = goodOf(b), dist = bldDist(g, b), out: { to: Dest; d: number; why: Why }[] = [];
   for (const t of g.s.sites) {
     if (t.kind !== 'town' || !townLinked(g, t)) continue;
-    const h = hallOf(g.track, n, t); const d = h ? dist[h.squares[1]!]! : -1; if (d < 0) continue;
+    const h = hallOf(g.track, n, t, g.world.terr); const d = h ? dist[h.squares[1]!]! : -1; if (d < 0) continue;
     const why: Why = orderOf(g, t)[k] && townRoom(g, t, k).order > 0 ? 'order' : steadyGoods(t, g).includes(k) ? 'steady' : 'extra';
     out.push({ to: { kind: 'town', id: t.id }, d, why });
   }

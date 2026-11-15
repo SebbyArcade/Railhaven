@@ -19,7 +19,7 @@ for (let y = 2; y < n - 2; y++) for (let x = 2; x < n - 2; x++) {
   }
 }
 const nearTown = (l: number[]) => l.some(i => g.s.sites.some(t => (t.kind === 'town' || t.kind === 'plot') && Math.abs(t.x - i % n) <= 3 && Math.abs(t.y - ((i / n) | 0)) <= 3));
-const line = lines.filter(l => !nearTown(l) && w.islandOf[l[0]!] !== w.home && w.islandOf[l.at(-1)!] !== w.home).sort((p, q) => q.length - p.length)[0]!, st = line[1]! - line[0]!;
+const line = lines.filter(l => (process.env.NEARTOWN ? nearTown(l) : !nearTown(l)) && w.islandOf[l[0]!] !== w.home && w.islandOf[l.at(-1)!] !== w.home).sort((p, q) => q.length - p.length)[0]!, st = line[1]! - line[0]!;
 // run the track a few squares inland on both sides, over land only
 const path = [...line];
 for (let k = 0; k < 4; k++) { const i = path[0]! - st; if (!w.terr[i] || w.terr[i] === 4) break; path.unshift(i); }

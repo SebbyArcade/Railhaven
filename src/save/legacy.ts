@@ -46,7 +46,7 @@ const fmt = (v: number) => '$' + Math.round(v).toLocaleString('en-US');
 export interface ImportResult { g: Game; report: string[] }
 
 export function importLegacy(o: any): ImportResult {
-  const base = newGame(o.seed), n = base.world.n, report: string[] = [];
+  const base = newGame(o.seed, 1), n = base.world.n, report: string[] = [];
   if (o.track.some((i: number) => i >= n * n)) throw new Error('This save is from a map of another size and cannot be brought over');
   // places: towns (Ashford first), settlement sites, deposits; a mine's own deposit comes back under it
   let id = 1;
@@ -104,7 +104,7 @@ export function importLegacy(o: any): ImportResult {
   }
   for (const i of sq) for (let d = 0; d < 2; d++) {
     const j = nb(i, d); if (!sq.has(j)) continue;
-    if (stationLinkError(tmap, n, sites, i, j)) { tmap.get(i)!.links &= ~(1 << d); tmap.get(j)!.links &= ~(1 << ((d + 2) % 4)); }
+    if (stationLinkError(tmap, n, sites, i, j, base.world.terr)) { tmap.get(i)!.links &= ~(1 << d); tmap.get(j)!.links &= ~(1 << ((d + 2) % 4)); }
   }
   for (const [i, t] of tmap) if (!t.links) tmap.delete(i);
 

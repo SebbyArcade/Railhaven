@@ -194,7 +194,7 @@ function nearestTown(g: Game, t: Train): { kind: 'town'; id: number } | null {
   const at = headSquare(g, t);
   let to: Site | undefined, bd = Infinity;
   for (const s of g.s.sites) {
-    if (s.kind !== 'town') continue; const h = hallOf(g.track, g.world.n, s); if (!h) continue;
+    if (s.kind !== 'town') continue; const h = hallOf(g.track, g.world.n, s, g.world.terr); if (!h) continue;
     const d = railDist(g, 't' + s.id, h.squares)[at]!; if (d >= 0 && d < bd) { bd = d; to = s; }
   }
   return to ? { kind: 'town', id: to.id } : null;

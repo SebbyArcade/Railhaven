@@ -33,7 +33,7 @@ export function blockedPieces(g: Game): Set<number> {
 export function breakRail(g: Game, at?: number): Break | null {
   const n = g.world.n, busy = new Map<number, number>(), sys = g.sys;
   const off = new Set<number>();
-  for (const h of hallsOf(g.track, n, g.s.sites)) for (const i of [...h.squares, ...h.approaches]) off.add(i);
+  for (const h of hallsOf(g.track, n, g.s.sites, g.world.terr)) for (const i of [...h.squares, ...h.approaches]) off.add(i);
   for (const b of g.s.breaks ?? []) off.add(b.square);
   // no break under a train or on a stretch a train has already signalled
   for (const [p] of sys.holder) for (const q of g.net.pieces[p]!.squares) off.add(q);

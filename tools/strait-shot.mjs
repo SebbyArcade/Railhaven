@@ -17,6 +17,6 @@ await page.evaluate(() => { const r = window.railhaven; r.openCard({ kind: 'town
 await page.waitForTimeout(600); await page.screenshot({ path: 'shots/strait-card.png' });
 await page.click('[data-act="project"][data-k="bridgeworks"]'); await page.waitForTimeout(400);
 const p = await page.evaluate(() => { const r = window.railhaven, g = r.game, p = g.s.parks.find(q => q.k === 'bridgeworks'); r.openCard(null); g.s.camera.x = (p.x + 0.5) * 32; g.s.camera.y = (p.y + 1.5) * 32; g.s.camera.z = 3.2; return p; });
-await page.waitForTimeout(1200); await page.screenshot({ path: 'shots/strait-works.png' });
+await page.waitForTimeout(1200); await page.screenshot({ path: 'shots/strait-works.png' }); await page.screenshot({ path: 'shots/strait-works-close.png', clip: { x: 100, y: 200, width: 220, height: 200 } });
 console.log(JSON.stringify({ cam, p }), errors.join('\n') || 'no page errors');
 await browser.close();

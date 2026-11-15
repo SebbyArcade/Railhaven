@@ -91,7 +91,7 @@ export function isCoastal(g: Game, t: Site): boolean {
 
 /** Is the town on the railway: its station hall joined to Ashford? */
 export function townLinked(g: Game, t: Site): boolean {
-  const h = hallOf(g.track, g.world.n, t);
+  const h = hallOf(g.track, g.world.n, t, g.world.terr);
   return !!h && !!g.linked?.has(h.squares[1]);
 }
 
