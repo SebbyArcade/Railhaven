@@ -66,8 +66,9 @@ function buildFor(k: Good): boolean {
   const kind = (Object.keys(INDUSTRIES) as IndustryKind[]).find(m => INDUSTRIES[m].makes === k && !isFactory(m)) ??
     (Object.keys(INDUSTRIES) as IndustryKind[]).find(m => INDUSTRIES[m].makes === k);
   if (!kind || lockedText(g, kind) || priceOf(g, kind) + 800 > g.s.money) return false;
-  const cx = ash.x, cy = ash.y;
-  for (let r = 5; r < 26; r++) for (let a = 0; a < 16; a++) {
+  // near Ashford first, then near each town on the railway (Ashford has no mountains close by, so mines go farther out)
+  const centres = [ash, ...g.s.sites.filter(t => t.kind === 'town' && t !== ash && townLinked(g, t))];
+  for (const { x: cx, y: cy } of centres) for (let r = 5; r < 26; r++) for (let a = 0; a < 16; a++) {
     const x = Math.round(cx + Math.cos(a * 0.39) * r), y = Math.round(cy + Math.sin(a * 0.39) * r);
     const p = bestPlacement(g, kind, x, y); if (!p.place) continue;
     const b = build(g, p.place); if (typeof b === 'string') continue;
@@ -116,9 +117,9 @@ function think() {
   const want = Math.max(1, Math.ceil((g.s.buildings ?? []).filter(b => isLinked(g, b)).length * 1.2));
   if (g.s.trains.length < want && g.s.money > trainPrice(g) + 300) { const t = buyTrain(g); if (typeof t !== 'string') log.push(`  bought train ${t.id}`); return; }
   // link the nearest unlinked town, found a town on a settlement site
-  if (g.s.money > 4000) {
+  if (g.s.money > +(process.env.LINKAT ?? 4000)) {
     const towns = g.s.sites.filter(t => t.kind === 'town' && !townLinked(g, t)).sort((a, b) => Math.hypot(a.x - ash.x, a.y - ash.y) - Math.hypot(b.x - ash.x, b.y - ash.y));
-    if (towns[0] && Math.hypot(towns[0].x - ash.x, towns[0].y - ash.y) < 40 && linkTown(towns[0])) { log.push(`  linked ${towns[0].name}`); return; }
+    for (const t of towns.slice(0, 4)) if (Math.hypot(t.x - ash.x, t.y - ash.y) < 40 && linkTown(t)) { log.push(`  linked ${t.name}`); return; } // the nearest one it can reach (some sit behind mountains or water)
   }
   if (g.s.money > FOUND_PRICE + 5000) {
     const p = g.s.sites.find(s => s.kind === 'plot' && Math.hypot(s.x - ash.x, s.y - ash.y) < 30);
@@ -140,6 +141,7 @@ for (let s = 0; s < minutes * 60; s++) {
   if (s % 300 === 299) log.push(`min ${Math.round((s + 1) / 60)}: $${Math.round(g.s.money)} earned $${Math.round(g.s.earned ?? 0)} orders ${g.s.orders ?? 0} level ${g.s.rlv ?? 0} towns ${g.s.sites.filter(t => t.kind === 'town' && townLinked(g, t)).length} trains ${g.s.trains.length} buildings ${(g.s.buildings ?? []).length}`);
 }
 const idle = g.s.trains.filter(t => !t.job).length;
+if (process.env.BOTTOWNS) for (const t of g.s.sites) if (t.kind === 'town' && (t === ash || townLinked(g, t))) log.push(`  ${t.name} step ${stepOf(t)} order ${JSON.stringify(orderOf(g, t))} got ${JSON.stringify(t.got ?? {})}`);
 const ms = g.s.ms;
 if (ms) log.push(`missions done ${ms.done.length} ($${ms.done.reduce((v, d) => v + d.reward, 0)}): ${ms.done.map(d => `${d.min}m ${d.title}`).join(' · ')}\n  now: ${[ms.main, ...ms.side].filter(Boolean).map(m => m!.title).join(' | ')}`);
 console.log(log.join('\n'));
