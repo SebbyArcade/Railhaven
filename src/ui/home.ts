@@ -21,7 +21,7 @@ export function lastPlayed(at: number, now = Date.now()) {
 const pic = (m: SlotMeta) => m.pic ? `<img class="spic" src="${m.pic}" alt="">` : `<b class="spic">🗺</b>`;
 const chips = (m: SlotMeta) => `<span class="chip2">⭐ Railway level ${m.rlv}</span><span class="chip2">💰 ${fmtMoney(m.money)}</span><span class="chip2">🏘 ${m.towns} town${m.towns === 1 ? '' : 's'}</span><span class="chip2">📋 ${m.orders} order${m.orders === 1 ? '' : 's'}</span>`;
 
-export function homeHtml(page: string | undefined, ix: SlotIndex, slotId = 0, delArmed = false, p?: Profile, g?: Game): string {
+export function homeHtml(page: string | undefined, ix: SlotIndex, slotId = 0, delArmed = false, p?: Profile, g?: Game, app = { online: false, installed: false }): string {
   const back = (to = '') => `<button class="act back" data-act="page" data-page="${to}">‹ Back</button>`;
   const cur = ix.list.find(m => m.id === ix.active);
   if (page === 'games') {
@@ -102,6 +102,7 @@ export function homeHtml(page: string | undefined, ix: SlotIndex, slotId = 0, de
   return `<div class="title"><b>🚂</b><h1>Railhaven</h1><span>rails across the islands</span></div>`
     + (cur ? `<button class="slot cont" data-act="close">${pic(cur)}<span class="grow"><span class="sname">▶ Continue</span><span class="sname2">${esc(cur.name)}</span><small>⭐ Railway level ${cur.rlv} · 💰 ${fmtMoney(cur.money)} · ${played(cur.t)}</small></span></button>`
       : `<button class="act" data-act="newgame">🗺 Start a new game</button>`)
+    + (app.online && !app.installed ? `<button class="slot install" data-act="install"><b class="spic">📲</b><span class="grow"><span class="sname">Add to home screen</span><small>an app icon on your phone · full screen · plays offline</small></span></button>` : '')
     + `<div class="tiles"><button class="tile" data-act="page" data-page="games">🗂 Your games<small>${ix.list.length} of ${MAX_SLOTS} · switch or start a new one</small></button>`
     + `<button class="tile" data-act="page" data-page="medals">🏅 Achievements<small>${p ? `${MEDALS.filter(m => p.medals[m.id]).length} of ${MEDALS.length} medals · ✨ ${xpOf(p)} XP` : 'medals and XP'}</small></button>`
     + `<button class="tile" data-act="page" data-page="settings">⚙ Settings<small>sound, Move my game, report</small></button>`
