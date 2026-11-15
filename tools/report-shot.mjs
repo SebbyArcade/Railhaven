@@ -1,0 +1,26 @@
+// 🗺 Game → 📊 Game report, and the Orders board after a few game minutes. Usage: node tools/report-shot.mjs save.json
+import { chromium } from 'playwright';
+import { existsSync, readFileSync, mkdirSync } from 'node:fs';
+import { resolve } from 'node:path';
+mkdirSync('shots', { recursive: true });
+const [file] = process.argv.slice(2);
+const browser = await chromium.launch({ executablePath: existsSync('/opt/pw-browsers/chromium') ? '/opt/pw-browsers/chromium' : undefined });
+const ctx = await browser.newContext({ viewport: { width: 412, height: 860 }, deviceScaleFactor: 2, hasTouch: true, permissions: ['clipboard-read', 'clipboard-write'] });
+const page = await ctx.newPage();
+const errors = []; page.on('pageerror', e => errors.push(String(e)));
+await page.addInitScript(s => { localStorage.setItem('railhaven2', s); }, readFileSync(file, 'utf8'));
+await page.goto('file://' + resolve('dist/index.html'));
+await page.waitForTimeout(1500);
+await page.evaluate(() => { window.railhaven.openCard(null); window.railhaven.step(300); });
+await page.click('#newGame'); await page.waitForTimeout(300);
+await page.click('#card button[data-page="stats"]'); await page.waitForTimeout(500);
+await page.screenshot({ path: 'shots/report.png' });
+await page.click('#card button[data-act="copystats"]'); await page.waitForTimeout(500);
+const clip = await page.evaluate(() => navigator.clipboard.readText().catch(e => 'ERR ' + e));
+await page.click('#card button[data-act="close"]'); await page.waitForTimeout(300);
+await page.click('#hud [data-orders]'); await page.waitForTimeout(1200);
+await page.screenshot({ path: 'shots/orders-bn.png' });
+console.log(clip.split('\n').slice(0, 6).join('\n'));
+console.log(clip.split('NEEDS YOU')[1]);
+console.log(errors.join('\n') || 'no page errors');
+await browser.close();

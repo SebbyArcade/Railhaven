@@ -62,6 +62,6 @@ that makes sense. Details for each line: `legacy/CHANGES.md` (search the version
 - [x] Move my game: export/import codes and files (🗺 Game → 📤 Move my game; RAILHAVEN3 codes, save files)
 - [ ] Cards: town (status + tiles), industry, factory, dock, train, ship; Orders board; Stuck list; alerts (❗) (done: town, industry, factory, dock, train cards, order badges over towns, 📋 Orders board with a ⚠ Needs you list, ❗ over stuck buildings on the map; to do: ship card)
 - [ ] Map views: Problems, Demand, Resources, Fuel range, Exploration (done: 👁 Map with Problems, Demand, Resources, Exploration, edge arrows and 📍 Go to search; to do: Fuel range, which comes with tenders)
-- [ ] Hints (💡), Recommended build, discovery cards, toasts queue, game report
+- [ ] Hints (💡), Recommended build, discovery cards, toasts queue, game report (done: 🎯 mission pill with Go plays the 💡 hint's part, 🐢 bottlenecks in Needs you, 📊 Game report to copy, toasts queue; to do: Recommended build, discovery cards)
 - [ ] Miniature art at today's level: towns (street grid, gardens, station buildings), industries, factories, docks, shed, trains (steam + cargo wagons), ships, people, smoke
 - [x] Pause when hidden / idle, full-screen button, side sheet on wide screens

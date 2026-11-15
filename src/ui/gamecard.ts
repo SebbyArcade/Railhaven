@@ -1,5 +1,5 @@
 /** The 🗺 Game card: start a new map, or bring a game over from the old Railhaven (its save file, a pasted code, or this browser's old save). */
-export function gameHtml(page: string | undefined, hasOld: boolean, report: string[] | null, code: string | null = null): string {
+export function gameHtml(page: string | undefined, hasOld: boolean, report: string[] | null, code: string | null = null, stats: string | null = null): string {
   const back = `<button class="act back" data-act="page" data-page="">‹ Back</button>`;
   if (page === 'report' && report) {
     return `<div class="head"><b class="big">🚂</b><div><h2>Your game is here</h2><span class="chip2">from the old Railhaven</span></div></div>`
@@ -13,6 +13,11 @@ export function gameHtml(page: string | undefined, hasOld: boolean, report: stri
       + (code ? `<textarea id="myCode" rows="3" readonly style="width:100%;box-sizing:border-box;border-radius:10px;background:#15110c;color:#f3e6c8;border:1px solid #8a6a3e;padding:6px;font-size:11px">${code}</textarea><div class="note">If copying didn't work, press on the code, Select all, then Copy.</div>` : '')
       + `<div class="note">On the other side: 🗺 Game → 📋 Paste a code, or 📂 Load a save file.</div>` + back;
   }
+  if (page === 'stats' && stats) {
+    return `<div class="head"><b class="big">📊</b><div><h2>Game report</h2><span class="chip2">paste it in the chat when something feels off</span></div></div>`
+      + `<button class="act" data-act="copystats">📋 Copy the report</button>`
+      + `<textarea id="stats" rows="14" readonly style="width:100%;box-sizing:border-box;border-radius:10px;background:#15110c;color:#f3e6c8;border:1px solid #8a6a3e;padding:6px;font-size:11px">${stats.replace(/[&<>]/g, c => `&#${c.charCodeAt(0)};`)}</textarea>` + back;
+  }
   if (page === 'paste') {
     return `<div class="head"><b class="big">📋</b><div><h2>Paste a save code</h2><span class="chip2">a code from 📤 Move my game, here or in the old game</span></div></div>`
       + `<textarea id="pasteCode" rows="4" placeholder="RAILHAVEN3:… or RAILHAVEN2:…" style="width:100%;box-sizing:border-box;border-radius:10px;background:#15110c;color:#f3e6c8;border:1px solid #8a6a3e;padding:6px;font-size:12px"></textarea>`
@@ -20,7 +25,7 @@ export function gameHtml(page: string | undefined, hasOld: boolean, report: stri
   }
   return `<div class="head"><b class="big">🗺</b><div><h2>Game</h2><span class="chip2">your game saves by itself</span></div></div>`
     + (hasOld ? `<div class="gift">🚂 This browser has a game from the old Railhaven. <button class="act" data-act="loadold">📥 Bring it over</button></div>` : '')
-    + `<div class="tiles"><button class="tile" data-act="page" data-page="move">📤 Move my game<small>to Chrome or the Claude app</small></button><button class="tile" data-act="loadfile">📂 Load a save file<small>from here or the old game</small></button><button class="tile" data-act="page" data-page="paste">📋 Paste a code<small>from here or the old game</small></button></div>`
+    + `<div class="tiles"><button class="tile" data-act="page" data-page="move">📤 Move my game<small>to Chrome or the Claude app</small></button><button class="tile" data-act="loadfile">📂 Load a save file<small>from here or the old game</small></button><button class="tile" data-act="page" data-page="paste">📋 Paste a code<small>from here or the old game</small></button><button class="tile" data-act="page" data-page="stats">📊 Game report<small>to copy into the chat</small></button></div>`
     + `<div class="note">Loading a game replaces the one you are playing now.</div>`
     + `<button class="act alt" data-act="full">⛶ Full screen</button>`
     + `<button class="act warnb" data-act="newmap">🗺 Start a new map</button>`;
