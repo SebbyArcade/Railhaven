@@ -1,3 +1,4 @@
+import { hasProject, PARK_PRICE, type ParkKind, parkFree, parkSpot, parksOf, projectOf } from '../buildings/parks.ts';
 import type { Game, GameState, Resource, Site } from '../state.ts';
 import { loadGame, newGame, trackChanged } from '../game.ts';
 import { build, growsTracks, stripError, capOf, type Building, footprint, INDUSTRIES, type IndustryKind, isFactory, isLinked, placeError, placementsAt, priceOf, buildingSquares, yardSquares, type Good } from '../buildings/industries.ts';
@@ -189,6 +190,22 @@ export function importLegacy(o: any): ImportResult {
   }
   if (wantS - ships > 0) refund += (wantS - ships) * SHIP_PRICE;
   if (wantS) report.push(`🚢 ${ships} cargo ships${wantS - ships > 0 ? ` · ${wantS - ships} without a sea route here: ${fmt((wantS - ships) * SHIP_PRICE)} paid back` : ''}`);
+
+  // town parks and projects: on the same square if it is still free, else the best free square near the town
+  const oldParks: any[] = Array.isArray(o.parks) ? o.parks : [];
+  if (oldParks.length) {
+    let put = 0, back = 0;
+    for (const op of oldParks) {
+      const town = sites.find(s => s.kind === 'town' && s.name === oldSites[op.t]?.name), k: ParkKind = op.pj && projectOf(op.pj) ? op.pj : 'park';
+      const price = projectOf(k)?.price ?? PARK_PRICE[town ? parksOf(g, town).length : 0] ?? PARK_PRICE[0]!;
+      if (!town || (k === 'park' ? parksOf(g, town).length >= PARK_PRICE.length : hasProject(g, town, k))) { back += price; continue; }
+      const at = parkFree(g, op.x, op.y) ? { x: op.x, y: op.y } : parkSpot(g, town);
+      if (!at) { back += price; continue; }
+      (g.s.parks ??= []).push({ town: town.id, ...at, k }); g.taken = undefined; put++;
+    }
+    refund += back;
+    report.push(`🌳 ${put} of ${oldParks.length} town parks and projects back in their towns${back ? ` · ${oldParks.length - put} had no room: ${fmt(back)} paid back` : ''}`);
+  }
 
   g.s.money = (o.money ?? 0) + refund;
   g.news = []; // what the rebuild noticed while laying it all out (landmarks seen, seas charted) is old news

@@ -202,12 +202,13 @@ export const harmText = (h: { b: Building; lost: number }[]) => h.length ? ` · 
 
 /** Squares already used by track, buildings, towns and the shed. */
 export function takenSquares(g: Game, except?: Building): Set<number> {
-  const key = `${g.track.size}/${g.s.buildings?.length ?? 0}/${(g.s.buildings ?? []).reduce((a, b) => a + tracksOf(b), 0)}/${g.s.shed?.x},${g.s.shed?.y}/${g.s.sites.filter(s => s.kind === 'town').length}`;
+  const key = `${g.track.size}/${g.s.buildings?.length ?? 0}/${(g.s.buildings ?? []).reduce((a, b) => a + tracksOf(b), 0)}/${g.s.shed?.x},${g.s.shed?.y}/${g.s.sites.filter(s => s.kind === 'town').length}/${g.s.parks?.length ?? 0}`;
   if (!except && g.taken?.key === key && g.taken.net === g.net) return g.taken.set;
   const n = g.world.n, out = new Set<number>(g.track.keys());
   for (const b of g.s.buildings ?? []) if (b !== except) for (const i of footprint(n, b)) out.add(i);
   for (const s of g.s.sites) if (s.kind === 'town') for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) out.add((s.y + dy) * n + s.x + dx);
   if (g.s.shed) out.add(g.s.shed.y * n + g.s.shed.x);
+  for (const p of g.s.parks ?? []) out.add(p.y * n + p.x);
   if (!except) g.taken = { key, net: g.net, set: out };
   return out;
 }
@@ -257,6 +258,7 @@ function squareError(g: Game, b: Pick<Building, 'x' | 'y' | 'horizontal' | 'side
   if (taken) for (const o of g.s.buildings ?? []) if (footprint(n, o).includes(i)) return `The ${INDUSTRIES[o.kind].name} is in the way (red squares): move the outline to open land`;
   if (taken) for (const s of g.s.sites) if (s.kind === 'town' && Math.abs(s.x - x) <= 1 && Math.abs(s.y - y) <= 1) return `Too close to ${s.name}: towns keep the squares around them free`;
   if (g.s.shed && g.s.shed.x === x && g.s.shed.y === y) return 'The engine shed is in the way: move the outline off it';
+  if (taken) { const p = (g.s.parks ?? []).find(q => q.x === x && q.y === y); if (p) return `${parkName(g, p)} is in the way: move the outline to open land`; }
   const tr = g.track.get(i);
   if (tr) {
     if (inRow) return 'Your track runs under the green building row: slide the outline so only the blue row sits on your line';
@@ -407,3 +409,9 @@ export function nearestSpot(g: Game, kind: IndustryKind, cx: number, cy: number,
 export const noSpotText = (kind: IndustryKind) => MINES.has(kind)
   ? `No ${INDUSTRIES[kind].needs.replace(/^an? /, '').replace(/ at the foot of mountains| \(outer islands\)/, '')} uncovered yet: lay track toward the mountains to uncover more land`
   : `No room for a ${INDUSTRIES[kind].name} on uncovered land: it needs ${INDUSTRIES[kind].needs}`;
+
+/** "Ashford's park" / "Ashford's Clock Tower", for refusals. */
+export function parkName(g: Game, p: { town: number; k: string }): string {
+  const t = g.s.sites.find(s => s.id === p.town)?.name ?? 'a town';
+  return `${t}'s ${{ park: 'park', clock: 'Clock Tower', market: 'Market Hall', tram: 'Tram Line', theatre: 'Grand Theatre' }[p.k] ?? 'park'}`;
+}

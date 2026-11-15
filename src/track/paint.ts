@@ -3,7 +3,7 @@ import type { Game } from '../state.ts';
 import { bridgeJoinsIslands, squareCost } from './rules.ts';
 import { layPath } from './edit.ts';
 import { stationLinkError } from '../buildings/stations.ts';
-import { joinYardEnds, yardSquares, yardLinkError } from '../buildings/industries.ts';
+import { joinYardEnds, parkName, yardSquares, yardLinkError } from '../buildings/industries.ts';
 import type { TrackMap, TrackSquare } from './types.ts';
 import { reveal } from '../world/fog.ts';
 
@@ -62,6 +62,7 @@ export function planCost(g: Game, p: PaintPlan): number {
 /** Why a stroke can't be built, or ''. */
 export function planError(g: Game, p: PaintPlan): string {
   if (p.path.length < 2) return 'Drag or tap next to the track to add squares';
+  for (const i of p.path) { const pk = !g.track.has(i) && (g.s.parks ?? []).find(q => q.y * g.world.n + q.x === i); if (pk) return `${parkName(g, pk)} is on this square: lay the track around it`; }
   const cost = planCost(g, p);
   for (let k = 1; k < p.path.length; k++) {
     const e = stationLinkError(withPath(g, p.path.slice(0, k)), g.world.n, g.s.sites, p.path[k - 1]!, p.path[k]!) || yardLinkError(g, p.path[k - 1]!, p.path[k]!);

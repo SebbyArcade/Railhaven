@@ -3,6 +3,7 @@ import { type Good, INDUSTRIES } from '../buildings/industries.ts';
 import { hallOf } from '../buildings/stations.ts';
 import { reveal } from '../world/fog.ts';
 import { islandSpec } from '../world/specialty.ts';
+import { orderMul } from '../buildings/parks.ts';
 
 /** The order ladder: one order per step; filling it lets the town grow one size. */
 export const LADDER: Partial<Record<Good, number>>[] = [
@@ -31,6 +32,16 @@ export const stepOf = (t: Site) => t.lvl ?? 0;
 
 /** The current order: fixed for the first five steps, then the goods the railway makes, a quarter bigger each step. */
 export function orderOf(g: Game, t: Site): Partial<Record<Good, number>> {
+  const m = orderMul(g, t), o0 = orderOfFull(g, t);
+  if (m >= 1) return o0;
+  // 🌳 parks and a 🚋 Tram Line make the order smaller
+  const o: Partial<Record<Good, number>> = {};
+  for (const k of Object.keys(o0) as Good[]) o[k] = Math.max(5, Math.round(o0[k]! * m / 5) * 5);
+  return o;
+}
+
+/** The order before parks make it smaller. */
+export function orderOfFull(g: Game, t: Site): Partial<Record<Good, number>> {
   const o = orderBase(g, t);
   if (!t.sea0) return o;
   // towns by the sea with a fishing dock on their island order seafood too (more on a fishing island)
