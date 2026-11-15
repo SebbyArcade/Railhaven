@@ -57,6 +57,9 @@ export interface GameState {
   /** broken rails being repaired, and when the next one may happen */
   breaks?: Break[];
   nextBreak?: number;
+  /** a storm drifting over the map, and when the next storm, breakdown and fire may come */
+  storm?: import('./world/events.ts').Storm;
+  nextEvent?: { storm: number; breakdown: number; fire: number };
   /** industries and factories the player built */
   buildings?: Building[];
   /** orders filled so far (Railway level comes from this) and the level reached */

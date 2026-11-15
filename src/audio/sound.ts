@@ -216,6 +216,11 @@ export class Sound {
         gap = 0.62 - 0.46 * h.rate;
         break;
       }
+      case 'fire':
+        for (let i = 0; i < 4; i++) this.burst(now + rnd(0, 0.3), rnd(0.02, 0.06), rnd(0.15, 0.35) * v, p + rnd(-0.1, 0.1), 'highpass', rnd(1500, 4000)); // crackle
+        this.burst(now, 0.5, 0.1 * v, p, 'lowpass', 600); // the roar
+        if (h.moving) this.burst(now, 0.45, 0.1 * v, p, 'bandpass', 5000, 0.5); // water from the hoses
+        gap = rnd(0.3, 0.5); break;
       case 'load': this.burst(now, 0.18, 0.2 * v, p, 'lowpass', 700); this.ping(now, 220, 0.12, 0.06 * v, p); gap = rnd(0.6, 1.4); break;
       case 'repair': this.ping(now, 1900, 0.12, 0.09 * v, p, 'triangle'); this.ping(now + 0.01, 2850, 0.18, 0.05 * v, p); this.burst(now, 0.05, 0.12 * v, p, 'highpass', 3000); gap = Math.random() < 0.3 ? 1.4 : rnd(0.32, 0.5); break;
       case 'ship':
