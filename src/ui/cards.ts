@@ -3,7 +3,7 @@ import type { Game, Site } from '../state.ts';
 import { fallsMul, POI, POI_RARITY, poisOf, RARITY } from '../world/explore.ts';
 import { buildingSquares, yardSquares, bufOf, growsTracks, stripError, tracksOf, type Building, capOf, GOODS, type Good, INDUSTRIES, type IndustryKind, inputsOf, isFactory, isLinked, lockedText, outputOf, shareAt, forestOf, stumpsOf } from '../buildings/industries.ts';
 import { factoryState } from '../economy/production.ts';
-import { hasProject, nextParkPrice, orderMul, PARK_PRICE, parkSpot, parksOf, payMul, PROJECTS, projectsOf } from '../buildings/parks.ts';
+import { hasProject, nextParkPrice, orderMul, PARK_PRICE, parkSpot, parksOf, payMul, projectsFor, projectsOf } from '../buildings/parks.ts';
 import { FOUND_PRICE, orderDone, orderOf, reward, sizeName, steadyGoods, stepOf, townLinked, upgradePrice } from '../economy/towns.ts';
 import { type Dest, destinationsOf, destName, type Ship, shipPlan, siteOf } from '../economy/shipping.ts';
 import { FERRY_FEE, trainPrice, trainStatus } from '../economy/dispatch.ts';
@@ -84,7 +84,7 @@ function townCard(g: Game, t: Site, page?: string): string {
     const np = parksOf(g, t).length, pj = projectsOf(g, t).length, om = orderMul(g, t), pm = payMul(g, t);
     if (om < 1 || pm > 1) h += `<div class="gift">${om < 1 ? `🌳 Orders ${Math.round((1 - om) * 100)}% smaller` : ''}${om < 1 && pm > 1 ? ' · ' : ''}${pm > 1 ? `🏛 Deliveries pay ${Math.round((pm - 1) * 100)}% more` : ''}</div>`;
     const tile = (pg: string, icon: string, title: string, sub: string) => `<button class="tile" data-act="page" data-page="${pg}"><b>${icon} ${title}</b><small>${sub}</small></button>`;
-    h += `<div class="tiles">` + tile('parks', '🌳', 'Parks', `${np} / ${PARK_PRICE.length}${np ? ` · orders −${np * 5}%` : ''}`) + tile('projects', '🏛', 'Town projects', `${pj} / ${PROJECTS.length}`) + `</div>`;
+    h += `<div class="tiles">` + tile('parks', '🌳', 'Parks', `${np} / ${PARK_PRICE.length}${np ? ` · orders −${np * 5}%` : ''}`) + tile('projects', '🏛', 'Town projects', `${pj} / ${projectsFor(g, t).length}`) + `</div>`;
   }
   return h;
 }
@@ -104,10 +104,11 @@ function townPage(g: Game, t: Site, page: string): string {
   }
   h += `<h3>🏛 Town projects</h3><div class="note">Big projects for a growing town. Each adds a building to ${name}'s streets and a lasting bonus here.</div>`;
   const room = !!parkSpot(g, t);
-  for (const P of PROJECTS) {
-    const has = hasProject(g, t, P.k), lock = stepOf(t) < P.size;
-    h += `<div class="row${has ? ' done' : ''}"><b class="ico">${P.icon}</b><div class="grow"><div class="line"><span>${P.name}</span><span>${has ? '✅ Built' : lock ? `🔒 ${sizeName(P.size)}` : fmtMoney(P.price)}</span></div><small>${P.text}</small>`;
+  for (const P of projectsFor(g, t)) {
+    const has = hasProject(g, t, P.k), rl = !!P.rlv && (g.s.rlv ?? 0) < P.rlv, lock = stepOf(t) < P.size || rl;
+    h += `<div class="row${has ? ' done' : ''}"><b class="ico">${P.icon}</b><div class="grow"><div class="line"><span>${P.name}</span><span>${has ? '✅ Built' : rl ? `🔒 Railway level ${P.rlv}` : lock ? `🔒 ${sizeName(P.size)}` : fmtMoney(P.price)}</span></div><small>${P.text}</small>`;
     if (!has && !lock) h += room ? `<button class="mini" data-act="project" data-id="${t.id}" data-k="${P.k}" ${g.s.money >= P.price ? '' : 'disabled'}>🏗 Build · ${fmtMoney(P.price)}</button>` : `<small class="why">No free grass near ${name} for it</small>`;
+    else if (rl) h += `<small class="why">Unlocks at Railway level ${P.rlv}: fill more town orders</small>`;
     else if (lock) h += `<small class="why">Unlocks when ${name} grows into a ${sizeName(P.size)}</small>`;
     h += `</div></div>`;
   }

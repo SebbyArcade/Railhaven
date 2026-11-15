@@ -32,6 +32,9 @@ export class TerrainCache {
     }
   }
 
+  /** Draw one square's terrain again, straight onto the map (over the track and trains: a tunnel's hillside). */
+  drawSquareAt(ctx: CanvasRenderingContext2D, x: number, y: number) { drawSquare(ctx, this.art, x, y, x * TILE, y * TILE, true); }
+
   setSeason(se: number) { if (se !== this.season) { this.season = this.art.se = se; this.invalidate(); } }
 
   private bake(cx: number, cy: number): Canvasish {
