@@ -1,0 +1,41 @@
+name: Publish the game
+# Builds main and publishes it to Firebase Hosting (the game's web address, https://<project>.web.app).
+# One-time setup: add the repository secret FIREBASE_SERVICE_ACCOUNT (the Firebase service account key, the whole JSON).
+# Until it is added this workflow skips publishing, so it never fails.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: hosting
+  cancel-in-progress: true
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    env:
+      SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+    steps:
+      - id: cfg
+        run: |
+          if [ -z "$SA" ]; then echo "No FIREBASE_SERVICE_ACCOUNT secret yet: skipping publish"; echo "skip=1" >> "$GITHUB_OUTPUT"; exit 0; fi
+          echo "project=$(echo "$SA" | jq -r .project_id)" >> "$GITHUB_OUTPUT"
+      - if: steps.cfg.outputs.skip != '1'
+        uses: actions/checkout@v4
+      - if: steps.cfg.outputs.skip != '1'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - if: steps.cfg.outputs.skip != '1'
+        run: npm ci && npm run build
+        env:
+          VITE_APP_URL: https://${{ steps.cfg.outputs.project }}.web.app/
+      - if: steps.cfg.outputs.skip != '1'
+        uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: ${{ secrets.GITHUB_TOKEN }}
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          projectId: ${{ steps.cfg.outputs.project }}
+          channelId: live
