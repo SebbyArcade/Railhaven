@@ -1,5 +1,5 @@
-/** The game's own web address (GitHub Pages). */
-export const APP_URL = 'https://sebbyarcade.github.io/Railhaven/';
+/** The game's own web address (Firebase Hosting), set when the publish workflow builds it; empty in other builds. */
+export const APP_URL: string = (import.meta as any).env?.VITE_APP_URL ?? '';
 
 /** ⚙ Settings on the home screen (and its pages): start a new map, or bring a game over from the old Railhaven (its save file, a pasted code, or this browser's old save). */
 export function gameHtml(page: string | undefined, hasOld: boolean, report: string[] | null, code: string | null = null, stats: string | null = null, snd = { music: true, sfx: true }, app = { online: false, installed: false, offer: false }): string {
@@ -25,7 +25,7 @@ export function gameHtml(page: string | undefined, hasOld: boolean, report: stri
     return `<div class="head"><b class="big">📲</b><div><h2>Install the game</h2><span class="chip2">an icon on your home screen</span></div></div>`
       + (app.installed ? `<div class="note">✅ Railhaven is installed on this phone. Open it from its icon.</div>`
         : app.online ? (app.offer ? `<button class="act" data-act="install">📲 Install Railhaven</button>` : `<div class="note">In Chrome, open the ⋮ menu and tap <b>Install app</b> or <b>Add to home screen</b>.</div>`)
-        : `<div class="row"><span class="ico">🌐</span><div class="grow"><b>Open the game's web address in Chrome</b><small><a href="${APP_URL}" target="_blank" rel="noopener" style="color:#ffd27a">${APP_URL.replace('https://', '')}</a></small></div></div>`
+        : `<div class="row"><span class="ico">🌐</span><div class="grow"><b>Open the game's web address in Chrome</b><small>${APP_URL ? `<a href="${APP_URL}" target="_blank" rel="noopener" style="color:#ffd27a">${APP_URL.replace('https://', '')}</a>` : 'the address Claude gave you (it ends in web.app)'}</small></div></div>`
           + `<div class="row"><span class="ico">📲</span><div class="grow"><b>Tap Install</b><small>in the game's ⚙ Settings, or Chrome's ⋮ menu → Install app</small></div></div>`)
       + `<div class="row"><span class="ico">⛶</span><div class="grow"><b>Full screen, no browser bars</b><small>it opens like an app</small></div></div>`
       + `<div class="row"><span class="ico">✈</span><div class="grow"><b>Plays offline</b><small>after the first visit, no connection needed</small></div></div>`
