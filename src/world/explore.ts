@@ -29,6 +29,9 @@ export const POI: Record<PoiKind, { icon: string; name: string; perk: string }> 
   ranger: { icon: '🌲', name: 'Ranger hut', perk: 'lumber camps within 8 squares make 10% more' },
   mill: { icon: '🌾', name: 'Old windmill', perk: 'wheat farms within 8 squares make 10% more' },
 };
+/** how special a find is, for its discovery card: 0 interesting, 1 rare, 2 legendary */
+export const POI_RARITY: Record<PoiKind, 0 | 1 | 2> = { ruins: 0, ranger: 0, mill: 0, lookout: 1, halt: 1, lighthouse: 1, wreck: 1, falls: 2 };
+export const RARITY = [{ icon: '⚪', name: 'Interesting find', col: '#d8d2c4' }, { icon: '🔵', name: 'Rare find', col: '#6fb4ff' }, { icon: '🟣', name: 'Legendary find', col: '#c58bff' }] as const;
 export const HALT_PAY = 2000, FALLS_R = 12, FALLS_BONUS = 1.1, KIND_R = 8, KIND_BONUS = 1.1;
 export const CLAIM_R = 2, RUINS_R = 6, RUINS_BONUS = 1.1, LIGHT_R = 10, LIGHT_BONUS = 1.2, LOOKOUT_R = 10;
 
@@ -100,7 +103,7 @@ const news = (g: Game, s: string) => (g.news ??= []).push(s);
 export function checkPois(g: Game) {
   const n = g.world.n;
   for (const p of poisOf(g)) {
-    if (!p.seen && isRevealed(g, p.y * n + p.x)) { p.seen = true; if (p.kind !== 'wreck') news(g, `${POI[p.kind].icon} ${POI[p.kind].name} found: reach it with track to take it over (${POI[p.kind].perk})`); else news(g, `⚓ A shipwreck lies off the coast: a ship or scout boat passing by can salvage it`); }
+    if (!p.seen && isRevealed(g, p.y * n + p.x)) { p.seen = true; (g.found ??= []).push(p.id); if (p.kind !== 'wreck') news(g, `${POI[p.kind].icon} ${POI[p.kind].name} found: reach it with track to take it over (${POI[p.kind].perk})`); else news(g, `⚓ A shipwreck lies off the coast: a ship or scout boat passing by can salvage it`); }
     if (p.got || p.kind === 'wreck' || !p.seen) continue;
     let near = false;
     for (let dy = -CLAIM_R; dy <= CLAIM_R && !near; dy++) for (let dx = -CLAIM_R; dx <= CLAIM_R && !near; dx++) if (g.linked?.has((p.y + dy) * n + p.x + dx)) near = true;

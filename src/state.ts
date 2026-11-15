@@ -121,6 +121,8 @@ export interface Game {
   taken?: { key: string; net: Network; set: Set<number> };
   /** things to tell the player (the UI shows and clears them) */
   news?: string[];
+  /** landmarks just spotted, waiting for their discovery card (not saved) */
+  found?: number[];
   /** set by the renderer: squares whose baked terrain must be redrawn (track hides trees) */
   terrainDirty?: (squares: number[]) => void;
   /** forest squares already redrawn as saplings */

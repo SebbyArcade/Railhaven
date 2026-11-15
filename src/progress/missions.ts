@@ -299,3 +299,11 @@ export function swapMission(g: Game, which: number): string {
 }
 
 export const missionsOf = (g: Game) => { const M = msOf(g); return [M.main, ...M.side].filter((m): m is Mission => !!m); };
+
+/** ⭐ The build to suggest at the top of the Build menu: a build mission first, else the best build idea. */
+export function recommendedBuild(g: Game): { k: IndustryKind; why: string; mission: boolean } | null {
+  const m = missionsOf(g).find(x => x.ty === 'build' && x.k);
+  if (m && !lockedText(g, m.k!)) return { k: m.k!, why: m.why || m.how, mission: true };
+  const c = candidates(g).filter(x => x.ty === 'build' && x.k && !lockedText(g, x.k)).sort((a, b) => b.pr - a.pr)[0];
+  return c ? { k: c.k!, why: c.why ?? '', mission: false } : null;
+}
