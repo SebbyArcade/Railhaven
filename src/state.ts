@@ -59,6 +59,12 @@ export interface GameState {
   buildings?: Building[];
   /** orders filled so far (Railway level comes from this) and the level reached */
   orders?: number;
+  /** game time of the last no-fail top-up */
+  rescueAt?: number;
+  /** Engine shed fleet upgrade levels */
+  fleet?: Partial<Record<'wag' | 'eng' | 'rep', number>>;
+  /** goods being rushed (at most three) */
+  rush?: { to: { kind: 'town' | 'bld'; id: number }; good: import('./buildings/industries.ts').Good; left: number }[];
   rlv?: number;
   /** money earned and spent, for the report */
   earned?: number;
