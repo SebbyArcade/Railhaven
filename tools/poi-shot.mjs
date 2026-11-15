@@ -9,7 +9,7 @@ await page.goto('file://' + resolve('dist/index.html') + '?new&seed=4242');
 await page.waitForTimeout(1200);
 await page.addStyleTag({ content: 'body > *:not(canvas) { display: none !important; }' });
 const kinds = await page.evaluate(() => { const g = window.railhaven.game; g.s.tut = undefined; window.railhaven.openCard(null); return [...new Set(g.s.pois.map(p => p.kind))]; });
-for (const k of ['halt', 'falls', 'ranger', 'mill', 'ruins', 'lighthouse']) {
+for (const k of ['halt', 'falls', 'ranger', 'mill', 'ruins', 'lighthouse', 'lookout', 'wreck']) {
   const ok = await page.evaluate(k => {
     const g = window.railhaven.game, n = g.world.n, p = g.s.pois.find(p => p.kind === k); if (!p) return false; p.seen = true;
     for (let dy = -4; dy <= 4; dy++) for (let dx = -4; dx <= 4; dx++) { const i = (p.y + dy) * n + p.x + dx; g.s.fog[i >> 3] |= 1 << (i & 7); }
