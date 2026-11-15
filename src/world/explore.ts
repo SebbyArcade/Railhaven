@@ -152,9 +152,9 @@ export function lightMul(g: Game, x: number, y: number): number {
 
 export const SCOUT_CAP = { land: 36, sea: 50 }, SCOUT_SPEED = 2, SCOUT_R = 3, MAX_SCOUTS = 2;
 export interface Scout { id: number; path: number[]; pos: number; boat: boolean; paid: number }
-
+/** A route of n squares: 20 per square plus a little more for each square farther out (twice the old game, Sébastien found scouting too cheap); boats cost half again. */
 /** A route of n squares: 10 per square plus a little more for each square farther out; boats cost half again. */
-export const scoutCost = (n: number, boat: boolean) => Math.round((10 * n + n * (n + 1)) * (boat ? 1.5 : 1));
+export const scoutCost = (n: number, boat: boolean) => Math.round(2 * (10 * n + n * (n + 1)) * (boat ? 1.5 : 1)); // twice the old game's price (Sébastien found scouting too cheap)
 
 /** Where scouts can set out from: towns on the railway (on foot) and docks on the railway (by boat). */
 export function scoutStarts(g: Game): { sq: number; boat: boolean; name: string }[] {

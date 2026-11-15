@@ -135,6 +135,37 @@ function drawPark(ctx: Ctx, g: Game, p: Park, zoom: number, tm: number) {
     }
     if (zoom > 1.2) person(ctx, u + 4, y + TILE - 4, '#4a4440');
   }
+  else if (p.k === 'bridgeworks') {
+    // 🌉 the bridge works: a little stone railway viaduct over a pond, with rails and a wagon of stone on it, and the
+    // masons' brick workshop behind with cut stone blocks stacked by the door. It should read as "they build bridges here".
+    cottage(ctx, u - 5, y + 8, 15, 11, { wall: '#b5523b', roof: '#5a4a42', walls: 'brick', storeys: 1, door: true });
+    for (let k = 0; k < 3; k++) for (let j = 0; j <= (k === 1 ? 1 : 0); j++) { // cut stone blocks
+      ctx.fillStyle = 'rgba(0,0,0,.22)'; ctx.fillRect(u + 5 + k * 3.4 + 0.5, y + 10 - j * 2.4 + 0.5, 3, 2.2);
+      ctx.fillStyle = j ? '#d8d0c0' : '#c4baa8'; ctx.fillRect(u + 5 + k * 3.4, y + 10 - j * 2.4, 3, 2.2);
+    }
+    // the pond under the viaduct
+    const py = y + 25;
+    ctx.fillStyle = '#4f8fbf'; ctx.beginPath(); ctx.ellipse(u, py, 14, 5.5, 0, 0, 7); ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,.35)'; ctx.lineWidth = 0.5; ctx.beginPath(); ctx.moveTo(u - 8, py + 4); ctx.lineTo(u - 4, py + 4); ctx.moveTo(u + 3, py + 5); ctx.lineTo(u + 7, py + 5); ctx.stroke();
+    // the viaduct: a stone deck on three arches
+    const bx = x + 2.5, bw = TILE - 5, deck = py - 7;
+    ctx.fillStyle = 'rgba(0,0,0,.25)'; ctx.fillRect(bx + 1, deck + 1, bw, 9);
+    ctx.fillStyle = '#cbbfa6'; ctx.fillRect(bx, deck, bw, 8.5);
+    ctx.fillStyle = '#4f8fbf'; // water seen through the arches
+    for (let k = 0; k < 3; k++) { const ax = bx + 2.2 + k * (bw - 4.4) / 3 + (bw - 4.4) / 6; ctx.beginPath(); ctx.moveTo(ax - 3.2, deck + 8.5); ctx.lineTo(ax - 3.2, deck + 6); ctx.arc(ax, deck + 6, 3.2, Math.PI, 0); ctx.lineTo(ax + 3.2, deck + 8.5); ctx.fill(); }
+    ctx.strokeStyle = 'rgba(90,76,58,.55)'; ctx.lineWidth = 0.35; ctx.beginPath(); // stone courses
+    for (const yy of [deck + 1.6, deck + 3]) { ctx.moveTo(bx, yy); ctx.lineTo(bx + bw, yy); }
+    ctx.stroke();
+    ctx.fillStyle = '#9a8f7a'; ctx.fillRect(bx, deck - 0.6, bw, 0.9); // parapet edge
+    // rails on top, with sleepers, and a small wagon carrying stone
+    ctx.fillStyle = '#6b4a2e'; for (let k = 0; k < 9; k++) ctx.fillRect(bx + 1 + k * (bw - 2) / 8 - 0.5, deck - 2.6, 1, 2.6);
+    ctx.fillStyle = '#5a5654'; ctx.fillRect(bx, deck - 2.3, bw, 0.5); ctx.fillRect(bx, deck - 0.9, bw, 0.5);
+    const wx = bx + 5 + ((Math.sin(tm * 0.4 + p.x) + 1) / 2) * (bw - 14); // the wagon rolls slowly to and fro
+    ctx.fillStyle = 'rgba(0,0,0,.25)'; ctx.fillRect(wx + 0.6, deck - 5.4, 6, 3.4);
+    ctx.fillStyle = '#7a4a2a'; ctx.fillRect(wx, deck - 6, 6, 3.2);
+    ctx.fillStyle = '#d8d0c0'; ctx.fillRect(wx + 0.8, deck - 7.2, 2, 1.4); ctx.fillRect(wx + 3.2, deck - 7.4, 2, 1.6);
+    if (zoom > 1.2) { person(ctx, u - 9, y + 15, '#3a5a8a'); person(ctx, u + 8, y + 15.5, '#8a5a2a'); }
+  }
   if (zoom > 1.6) { fence(ctx, x + 2, y + TILE - 2, x + 9, y + TILE - 2); fence(ctx, x + TILE - 9, y + TILE - 2, x + TILE - 2, y + TILE - 2); }
   void pine;
 }

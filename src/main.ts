@@ -111,7 +111,7 @@ attachInput(canvas, () => game.s.camera, () => view, () => game.world.n * 32, {
     const br = game.s.breaks?.find(b => b.square === i);
     if (br) { const s = Math.ceil(br.crewAt - game.s.t); toast(`${BREAK_TEXT[br.kind]}: trains go round or wait. ${s > 0 ? `Repair crew arrives in ${s} s` : `Repair crew at work, ${Math.ceil(br.doneAt - game.s.t)} s left`}`); return; }
     if (game.s.shed && game.s.shed.x === x && game.s.shed.y === y) { openCard({ kind: 'shed', id: 0 }); return; }
-    const site = hallAt(hallsOf(game.track, n, game.s.sites), i)?.town ?? game.s.sites.find(s => Math.abs(s.x - x) <= 1 && Math.abs(s.y - y) <= 1);
+    const site = hallAt(hallsOf(game.track, n, game.s.sites, game.world.terr), i)?.town ?? game.s.sites.find(s => Math.abs(s.x - x) <= 1 && Math.abs(s.y - y) <= 1);
     const bld = game.s.buildings?.find(b => footprint(n, b).includes(i));
     if (bld) { openCard({ kind: 'bld', id: bld.id }); return; }
     if (site?.kind === 'town') { openCard({ kind: 'town', id: site.id }); return; }

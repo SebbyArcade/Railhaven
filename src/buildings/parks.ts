@@ -10,7 +10,7 @@ import { hallsOf } from './stations.ts';
  * and gives a small lasting bonus to that town only. Parks make its orders smaller; projects make deliveries there
  * pay more (the Tram Line makes orders smaller instead). Nothing here earns money by itself.
  */
-export type ParkKind = 'park' | 'clock' | 'market' | 'tram' | 'theatre' | 'foundry';
+export type ParkKind = 'park' | 'clock' | 'market' | 'tram' | 'theatre' | 'foundry' | 'bridgeworks';
 export interface Park { town: number; x: number; y: number; k: ParkKind }
 
 /** up to 3 parks per town, each making its orders 5% smaller */
@@ -22,6 +22,8 @@ export interface Project { k: Exclude<ParkKind, 'park'>; icon: string; name: str
 export const PROJECTS: Project[] = [
   // the old game's Ashford landmark: it casts the iron for tunnel linings, so track can cross mountains
   { k: 'foundry', icon: '⛰', name: 'Foundry', price: 6000, size: 0, ashford: true, rlv: 2, text: 'Tunnels: track can cross mountains ($250 a square)' },
+  // the old game's 🌉 Bridge Works: here it builds strait bridges, so sister islands a few squares apart can be joined by rail
+  { k: 'bridgeworks', icon: '🌉', name: 'Bridge Works', price: 18000, size: 0, ashford: true, rlv: 6, text: 'Strait bridges: track may cross up to 3 squares of sea to a nearby island ($4,000 a square)' },
   { k: 'clock', icon: '🕰', name: 'Clock Tower', price: 15000, size: 2, pay: 0.10, text: 'Deliveries to this town pay 10% more' },
   { k: 'market', icon: '🛒', name: 'Market Hall', price: 30000, size: 3, pay: 0.15, text: 'Deliveries to this town pay 15% more' },
   { k: 'tram', icon: '🚋', name: 'Tram Line', price: 50000, size: 3, order: 0.05, text: 'Its orders are 5% smaller' },
@@ -60,7 +62,7 @@ export function parkFree(g: Game, x: number, y: number): boolean {
   if (g.world.terr[i] !== T.Grass || !isRevealed(g, i) || takenSquares(g).has(i) || parkAt(g, i)) return false;
   if (g.s.sites.some(s => s.x === x && s.y === y)) return false;
   // keep clear of station halls and the station building beside them
-  for (const h of hallsOf(g.track, n, g.s.sites)) for (const q of h.squares) if (Math.abs(q % n - x) <= 1 && Math.abs(((q / n) | 0) - y) <= 1) return false;
+  for (const h of hallsOf(g.track, n, g.s.sites, g.world.terr)) for (const q of h.squares) if (Math.abs(q % n - x) <= 1 && Math.abs(((q / n) | 0) - y) <= 1) return false;
   return true;
 }
 

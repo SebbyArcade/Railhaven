@@ -7,9 +7,14 @@ import { drawLandmark } from './landmarks.ts';
 import { rumours } from '../world/maps.ts';
 
 /** Landmarks and wrecks that are out of the fog, scouts on their way, and in Scout mode the start rings and the route. */
-export function drawExplore(ctx: CanvasRenderingContext2D, g: Game, t: Tools | undefined, tm: number, vis: (x: number, y: number) => boolean, z: number) {
+export function drawExplore(ctx: CanvasRenderingContext2D, g: Game, _t: Tools | undefined, tm: number, vis: (x: number, y: number) => boolean, z: number) {
   const n = g.world.n;
   for (const p of poisOf(g)) if (p.seen && !(p.kind === 'wreck' && p.got) && vis(p.x, p.y) && isRevealed(g, p.y * n + p.x)) drawPoi(ctx, p, tm, z);
+}
+
+/** Scouts on their way and the route being drawn: over the fog, since that is where they go. */
+export function drawScouting(ctx: CanvasRenderingContext2D, g: Game, t: Tools | undefined, tm: number, z: number) {
+  const n = g.world.n;
   for (const s of g.s.scouts ?? []) {
     // the route still ahead, dotted, and the walker or boat
     ctx.strokeStyle = 'rgba(255,240,200,.55)'; ctx.lineWidth = 1.5; ctx.setLineDash([3, 4]); ctx.beginPath();

@@ -73,9 +73,17 @@ export const ashford = (g: Game) => g.s.sites[0]!;
 const towns = (g: Game) => g.s.sites.filter(s => s.kind === 'town');
 const islandAt = (g: Game, s: { x: number; y: number }) => g.world.islandOf[s.y * g.world.n + s.x]!;
 
-/** Islands your railway reaches: Ashford Isle, and every island with a landing on the railway. */
+/** named islands the railway's track stands on (a 🌉 strait bridge carries it onto a sister island), per linked-track set */
+const railIsl = new WeakMap<Set<number>, number[]>();
+/** Islands your railway reaches: Ashford Isle, every island with a landing on the railway, and every named island its track runs onto. */
 export function reachedIslands(g: Game): Set<number> {
-  const out = new Set([g.world.home]); for (const b of linkedDocks(g)) out.add(islandOfB(g, b)); return out;
+  const out = new Set([g.world.home]); for (const b of linkedDocks(g)) out.add(islandOfB(g, b));
+  if (g.linked) {
+    let r = railIsl.get(g.linked);
+    if (!r) { const s = new Set<number>(); for (const i of g.linked) { const k = g.world.islandOf[i]!; if (k >= 0 && g.world.islands[k]?.name) s.add(k); } railIsl.set(g.linked, (r = [...s])); }
+    for (const k of r) out.add(k);
+  }
+  return out;
 }
 
 /** Order goods a town still needs. */

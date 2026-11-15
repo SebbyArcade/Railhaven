@@ -61,7 +61,7 @@ function townCard(g: Game, t: Site, page?: string): string {
   const L = stepOf(t), o = orderOf(g, t), linked = townLinked(g, t), plan = shipPlan(g);
   let h = `<div class="head"><b class="big">🏘</b><div><h2>${esc(t.name ?? 'Town')}</h2><span class="chip2">${sizeName(L)}</span> <span class="chip2">👥 ${Math.floor(t.pop ?? 0)}</span></div></div>`;
   if (page === 'parks' || page === 'projects') return h + townPage(g, t, page);
-  if (!linked) h += `<div class="warn">🔌 Not on the railway yet: ${hallOf(g.track, g.world.n, t) ? 'join your line to either end of its station' : 'lay track straight across its square, past it beside it, or ending right beside it'} (🛤 Rails shows where with arrows)</div>`;
+  if (!linked) h += `<div class="warn">🔌 Not on the railway yet: ${hallOf(g.track, g.world.n, t, g.world.terr) ? 'join your line to either end of its station' : 'lay track straight across its square, past it beside it, or ending right beside it'} (🛤 Rails shows where with arrows)</div>`;
   const done = orderDone(g, t);
   h += `<h3>📋 ${done ? 'Order filled!' : `Wants these to grow into a ${sizeName(L + 1)}`}</h3>`;
   for (const k of Object.keys(o) as Good[]) {

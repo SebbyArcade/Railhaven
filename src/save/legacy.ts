@@ -46,7 +46,7 @@ const fmt = (v: number) => '$' + Math.round(v).toLocaleString('en-US');
 export interface ImportResult { g: Game; report: string[] }
 
 export function importLegacy(o: any): ImportResult {
-  const base = newGame(o.seed), n = base.world.n, report: string[] = [];
+  const base = newGame(o.seed, 1), n = base.world.n, report: string[] = [];
   if (o.track.some((i: number) => i >= n * n)) throw new Error('This save is from a map of another size and cannot be brought over');
   // places: towns (Ashford first), settlement sites, deposits; a mine's own deposit comes back under it
   let id = 1;
@@ -104,7 +104,7 @@ export function importLegacy(o: any): ImportResult {
   }
   for (const i of sq) for (let d = 0; d < 2; d++) {
     const j = nb(i, d); if (!sq.has(j)) continue;
-    if (stationLinkError(tmap, n, sites, i, j)) { tmap.get(i)!.links &= ~(1 << d); tmap.get(j)!.links &= ~(1 << ((d + 2) % 4)); }
+    if (stationLinkError(tmap, n, sites, i, j, base.world.terr)) { tmap.get(i)!.links &= ~(1 << d); tmap.get(j)!.links &= ~(1 << ((d + 2) % 4)); }
   }
   for (const [i, t] of tmap) if (!t.links) tmap.delete(i);
 
@@ -212,6 +212,12 @@ export function importLegacy(o: any): ImportResult {
     const at = parkSpot(g, sites[0]!);
     if (at) { (g.s.parks ??= []).push({ town: sites[0]!.id, ...at, k: 'foundry' }); g.taken = undefined; report.push('⛰ The Foundry stands in Ashford again: track can tunnel through mountains'); }
     else { refund += projectOf('foundry')!.price; report.push(`⛰ No room near Ashford for the Foundry: ${fmt(projectOf('foundry')!.price)} paid back`); }
+  }
+  // the old 🌉 Bridge Works landmark (it made water track cheaper): it stands again and now builds strait bridges
+  if (o.lm?.viaduct && !hasProject(g, sites[0]!, 'bridgeworks')) {
+    const at = parkSpot(g, sites[0]!);
+    if (at) { (g.s.parks ??= []).push({ town: sites[0]!.id, ...at, k: 'bridgeworks' }); g.taken = undefined; report.push('🌉 The Bridge Works stands in Ashford again: it now builds strait bridges to islands up to 3 squares away'); }
+    else { refund += projectOf('bridgeworks')!.price; report.push(`🌉 No room near Ashford for the Bridge Works: ${fmt(projectOf('bridgeworks')!.price)} paid back`); }
   }
   g.s.money = (o.money ?? 0) + refund;
   g.news = []; // what the rebuild noticed while laying it all out (landmarks seen, seas charted) is old news

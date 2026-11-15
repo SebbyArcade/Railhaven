@@ -264,7 +264,7 @@ function squareError(g: Game, b: Pick<Building, 'x' | 'y' | 'horizontal' | 'side
   const tr = g.track.get(i);
   if (tr) {
     if (inRow) return 'Your track runs under the green building row: slide the outline so only the blue row sits on your line';
-    if (hallAt(hallsOf(g.track, n, g.s.sites), i)) return 'A station is in the way: move the outline off the platforms';
+    if (hallAt(hallsOf(g.track, n, g.s.sites, g.world.terr), i)) return 'A station is in the way: move the outline off the platforms';
     if (tr.links & ~alongMask(b.horizontal)) return 'Your track crosses the blue loading track: turn the outline so the blue row runs along your rails';
   }
   const s = g.s.sites.find(o => o.x === x && o.y === y);
@@ -333,7 +333,7 @@ export function joinYardEnds(g: Game, b: Building): number {
   let joined = 0;
   [[sq[0]!, sq[0]! - step, out[0]!], [sq.at(-1)!, sq.at(-1)! + step, out[1]!]].forEach(([end, next, d]) => {
     const o = g.track.get(next!); if (!o) return;
-    if (stationLinkError(g.track, n, g.s.sites, end!, next!) || yardLinkError(g, end!, next!)) return;
+    if (stationLinkError(g.track, n, g.s.sites, end!, next!, g.world.terr) || yardLinkError(g, end!, next!)) return;
     g.track.get(end!)!.links |= 1 << d!; o.links |= 1 << ((d! + 2) % 4); joined++;
   });
   return joined;
