@@ -34,6 +34,8 @@ export class Tools {
   /** the open card (town, building or train), shown on the map too */
   card: Card | null = null;
   flash: { square: number; until: number } | null = null;
+  /** lesson ring: the square to tap next */
+  ring: number | null = null;
   /** the last stroke built, while it can still be undone */
   lastStroke: BuiltStroke | null = null;
   /** Build mode: the kind chosen, squares that glow, and the spot being previewed */

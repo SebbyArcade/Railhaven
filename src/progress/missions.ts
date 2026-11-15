@@ -5,6 +5,7 @@ import { orderOf, sizeName, stepOf, townLinked } from '../economy/towns.ts';
 import { islandName, islandOfB, linkedDocks } from '../ships/docks.ts';
 import { islandSpec, SPEC_TEXT } from '../world/specialty.ts';
 import { isRevealed } from '../world/fog.ts';
+import { lessonOn, tickLessons } from './lessons.ts';
 
 /**
  * Missions with Mira the dispatcher (the old game's final design, v258+). One main mission and two side missions,
@@ -268,6 +269,7 @@ const news = (g: Game, s: string) => (g.news ??= []).push(s);
 export function tickMissions(g: Game) {
   const M = msOf(g), act = actOf(g);
   if (M.act !== act) { M.act = act; M.actLine = pick(g, ACTS[act - 1]!.intro, act * 5 + 1); M.actNew = true; }
+  if (lessonOn(g)) { tickLessons(g); return; } // missions start after the lessons
   const finish = (m: Mission, main: boolean): boolean => {
     const p = progress(g, m); if (!p) return true;
     if (p.v < p.of) return false;

@@ -6,6 +6,7 @@ const browser = await chromium.launch({ executablePath: existsSync('/opt/pw-brow
 const page = await browser.newPage({ viewport: { width: 412, height: 860 }, deviceScaleFactor: 2, hasTouch: true });
 const errors = []; page.on('pageerror', e => errors.push(String(e)));
 await page.goto('file://' + resolve('dist/index.html') + '?new&seed=4242');
+await page.evaluate(() => { window.railhaven.game.s.tut = 99; }); // skip the lessons
 await page.waitForTimeout(2500);
 await page.screenshot({ path: 'shots/story-act.png' });
 await page.click('#card button[data-act="close"]'); await page.waitForTimeout(1200);

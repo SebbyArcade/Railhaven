@@ -66,6 +66,18 @@
   #mission { position: fixed; top: calc(max(8px, env(safe-area-inset-top)) + 34px); left: 8px; max-width: min(92vw, 440px); display: none; align-items: center; gap: 6px; background: rgba(40,28,14,.92); border: 1px solid #e8a33c; border-radius: 14px; padding: 3px 4px 3px 10px; font-size: 13px; font-weight: 600; color: #ffe9c4; box-sizing: border-box; }
   #mission .mtext { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } #mission b { color: #ffd27a; }
   #mission button { background: #2f8f8a; color: #fff; border: 0; border-radius: 10px; padding: 5px 10px; font-size: 13px; font-weight: 700; flex: none; }
+  #mission.lesson { max-width: min(96vw, 460px); padding: 8px 10px; border-width: 2px; }
+  #mission .les { display: flex; gap: 8px; align-items: flex-start; } #mission .lic { font-size: 28px; line-height: 1; }
+  #mission .lbody { flex: 1; font-weight: 500; font-size: 13px; line-height: 1.35; } #mission .lbody .cap { letter-spacing: 1px; opacity: .75; font-size: 11px; display: block; }
+  #mission .lt { display: block; font-size: 15px; color: #ffe2a8; } #mission .lbody i { display: block; opacity: .85; font-size: 12px; margin: 1px 0 3px; }
+  #mission .lbtn { display: flex; gap: 10px; align-items: center; margin-top: 6px; } #mission .lbtn button { background: #ffd27a; color: #2a1c08; }
+  #mission .lbtn button.skip { background: none; color: #e8d8b8; text-decoration: underline; font-weight: 500; font-size: 12px; padding: 4px; }
+  #mission .nice { color: #7fd36b; font-weight: 800; }
+  .tutHi { outline: 4px solid #ffd27a !important; box-shadow: 0 0 16px 4px #ffd27acc !important; }
+  #tutPtr { position: fixed; z-index: 25; pointer-events: none; text-align: center; transform: translateX(-50%); font-weight: 800; color: #ffd27a; text-shadow: 0 1px 3px #000, 0 0 8px #000; font-size: 13px; display: none; white-space: nowrap; }
+  #tutPtr span { display: block; font-size: 34px; line-height: 1; animation: tutB .8s ease-in-out infinite; }
+  @keyframes tutB { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(9px); } }
+  #tutPtr.up span { animation-name: tutU; } @keyframes tutU { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-9px); } }
   #card .mira { font-style: italic; color: #f0dcb0; font-size: 13px; margin: 2px 0 6px; }
   #card .row.main { border-left-color: #e8a33c; background: #33240f; } #card .row.side { border-left-color: #6a9ad0; align-items: center; } #card .row.ok { border-left-color: #5cc46a; }
   #card small.say { font-style: italic; color: #f0dcb0; }
@@ -77,6 +89,7 @@
 <canvas id="c"></canvas>
 <div id="hud"></div>
 <div id="mission"></div>
+<div id="tutPtr"></div>
 <div id="toast"></div>
 <div id="hint"></div>
 <button id="undo">↶ Undo</button>

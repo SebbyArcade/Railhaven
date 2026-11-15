@@ -97,6 +97,10 @@ export class Renderer {
     for (const i of t.dbl) box(i, 'rgba(120,190,255,.25)', 'rgba(150,210,255,.9)');
     if (t.removeAt !== null) box(t.removeAt, 'rgba(255,90,70,.3)', 'rgba(255,120,100,.95)');
     if (t.flash && performance.now() < t.flash.until) box(t.flash.square, 'rgba(255,60,40,.35)', 'rgba(255,80,60,1)');
+    if (t.ring !== null) { // the lesson's gold ring
+      const p = 0.5 + 0.5 * Math.sin(tm * 5), x = (t.ring % n + 0.5) * TILE, y = (((t.ring / n) | 0) + 0.5) * TILE;
+      ctx.strokeStyle = `rgba(255,210,122,${0.6 + 0.4 * p})`; ctx.lineWidth = 3 + 2 * p; ctx.beginPath(); ctx.arc(x, y, TILE * (0.7 + 0.15 * p), 0, 7); ctx.stroke();
+    }
     if (t.mode === 'build') {
       const p = 0.5 + 0.5 * Math.sin(tm * 3.5);
       for (const i of t.glow) { const x = (i % n) * TILE, y = ((i / n) | 0) * TILE; ctx.fillStyle = `rgba(255,214,120,${0.1 + 0.14 * p})`; ctx.fillRect(x + 3, y + 3, TILE - 6, TILE - 6); }
