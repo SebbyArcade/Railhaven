@@ -13,6 +13,8 @@ export const LADDER: Partial<Record<Good, number>>[] = [
   { farm: 150, flour: 60, planks: 60, bricks: 60, steel: 40 },
   { flour: 150, bricks: 120, steel: 100, fuel: 80 },
 ];
+/** Big-city order sizes (at Megacity) for goods past the ladder: the dear new products come in smaller amounts. */
+const NEW_BASE: Partial<Record<Good, number>> = { glass: 60, tools: 40, furniture: 40, gold: 40, gems: 40, jewellery: 20, cocoa: 50, chocolate: 40, rubber: 50, tyres: 30 };
 export const SIZE_NAMES = ['Hamlet', 'Village', 'Town', 'City', 'Metropolis', 'Megacity'];
 /** reward for filling the order of each step, and the price of tapping ⬆ Upgrade after it */
 export const reward = (L: number) => L < 5 ? [600, 1500, 3000, 6000, 12500][L]! : Math.round(12500 * (1 + 0.25 * (L - 4)) / 100) * 100;
@@ -55,7 +57,7 @@ function orderBase(g: Game, t: Site): Partial<Record<Good, number>> {
   const made = madeGoods(g), base = LADDER[LADDER.length - 1]!;
   if (made.length < 2) return { farm: Math.round(150 * Math.pow(1.25, L - 4) / 5) * 5 };
   const o: Partial<Record<Good, number>> = {};
-  for (let k = 0; k < Math.min(3, made.length); k++) { const good = made[(L * 2 + k) % made.length]!; o[good] = Math.round((base[good] ?? LADDER[3]![good] ?? 60) * Math.pow(1.25, L - 4) / 5) * 5; }
+  for (let k = 0; k < Math.min(3, made.length); k++) { const good = made[(L * 2 + k) % made.length]!; o[good] = Math.round((base[good] ?? LADDER[3]![good] ?? NEW_BASE[good] ?? 60) * Math.pow(1.25, L - 4) / 5) * 5; }
   return o;
 }
 

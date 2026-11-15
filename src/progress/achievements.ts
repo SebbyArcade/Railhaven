@@ -41,7 +41,7 @@ const linkedTowns = (g: Game) => towns(g).filter(t => t !== ashford(g) && townLi
 const biggest = (g: Game) => Math.max(0, ...towns(g).filter(t => (t.pop ?? 0) > 0).map(t => stepOf(t)));
 const blds = (g: Game) => g.s.buildings ?? [];
 const has = (b: boolean): [number, number] => [b ? 1 : 0, 1];
-const PRODUCTS = ['planks', 'bricks', 'flour', 'steel', 'fuel', 'cloth', 'cans'];
+const PRODUCTS = ['planks', 'bricks', 'flour', 'steel', 'fuel', 'cloth', 'cans', 'glass', 'tools', 'furniture', 'jewellery', 'chocolate', 'tyres'];
 const islandAt = (g: Game, s: { x: number; y: number }) => g.world.islandOf[s.y * g.world.n + s.x]!;
 const newIslands = (g: Game) => reachedIslands(g).size - 1;
 const islandsWithTowns = (g: Game) => new Set(linkedTowns(g).map(t => islandAt(g, t)).filter(k => k !== g.world.home)).size;

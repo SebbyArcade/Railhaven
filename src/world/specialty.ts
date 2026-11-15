@@ -12,6 +12,7 @@ export const SPEC_BONUS = 1.5;
 export const SPEC_TEXT: Record<Specialty, string> = {
   wood: '🪵 Timber island', farm: '🌾 Farm island', stone: '🪨 Stone island', coal: '⚫ Coal island',
   iron: '🧲 Iron island', oil: '🛢 Oil island', fish: '🐟 Fishing island',
+  gold: '🪙 Gold island', gems: '💎 Gem island', cocoa: '🫘 Cocoa island', rubber: '🌿 Rubber island',
 };
 
 export function islandSpec(g: Game, k: number): Specialty | null {

@@ -25,10 +25,22 @@ export const GOODS = {
   fuel: { name: 'Fuel', icon: '⛽', value: 45 },
   cloth: { name: 'Cloth', icon: '🧵', value: 24 },
   cans: { name: 'Canned fish', icon: '🥫', value: 22 },
+  // two-goods factories at home
+  glass: { name: 'Glass', icon: '🪟', value: 24 },
+  tools: { name: 'Tools', icon: '🔨', value: 70 },
+  furniture: { name: 'Furniture', icon: '🪑', value: 65 },
+  // 🗺 the far seas: one new chain with each expedition
+  gold: { name: 'Gold', icon: '🪙', value: 20 },
+  gems: { name: 'Gems', icon: '💎', value: 24 },
+  jewellery: { name: 'Jewellery', icon: '💍', value: 110 },
+  cocoa: { name: 'Cocoa', icon: '🫘', value: 15 },
+  chocolate: { name: 'Chocolate', icon: '🍫', value: 60 },
+  rubber: { name: 'Rubber', icon: '🌿', value: 15 },
+  tyres: { name: 'Tyres', icon: '🛞', value: 85 },
 } as const;
 export type Good = keyof typeof GOODS;
 
-type KindInfo = { name: string; icon: string; makes: Good; price: number; rate: number; needs: string; in?: Partial<Record<Good, number>>; unlock?: number };
+type KindInfo = { name: string; icon: string; makes: Good; price: number; rate: number; needs: string; in?: Partial<Record<Good, number>>; unlock?: number; /** 🗺 found only past the edge of the sea: needs this many expeditions */ ring?: number };
 
 /**
  * What the player builds: industries that dig or grow raw goods, and factories (Railway level 1+) that turn one
@@ -50,6 +62,18 @@ export const INDUSTRIES = {
   refinery: { name: 'Refinery', icon: '⛽', makes: 'fuel', price: 2500, rate: 0.6, needs: 'open flat land', in: { oil: 1 }, unlock: 2 },
   textile: { name: 'Textile Mill', icon: '🧵', makes: 'cloth', price: 2500, rate: 0.6, needs: 'open flat land', in: { wool: 1 }, unlock: 3 },
   cannery: { name: 'Cannery', icon: '🥫', makes: 'cans', price: 2500, rate: 0.6, needs: 'open flat land', in: { fish: 1 }, unlock: 2 },
+  // factories that need two goods, both made at home
+  glassworks: { name: 'Glassworks', icon: '🪟', makes: 'glass', price: 4000, rate: 0.6, needs: 'open flat land', in: { stone: 1, coal: 1 }, unlock: 3 },
+  toolworks: { name: 'Toolworks', icon: '🔨', makes: 'tools', price: 6000, rate: 0.6, needs: 'open flat land', in: { steel: 1, planks: 1 }, unlock: 4 },
+  furniture: { name: 'Furniture Works', icon: '🪑', makes: 'furniture', price: 6000, rate: 0.6, needs: 'open flat land', in: { planks: 1, cloth: 1 }, unlock: 5 },
+  // 🗺 the far seas: each expedition ring brings one new chain
+  gold: { name: 'Gold Mine', icon: '🪙', makes: 'gold', price: 3000, rate: 0.8, needs: 'a gold seam at the foot of mountains (far seas)', ring: 1 },
+  gems: { name: 'Gem Mine', icon: '💎', makes: 'gems', price: 3500, rate: 0.7, needs: 'a gem vein at the foot of mountains (far seas)', ring: 1 },
+  jeweller: { name: 'Jeweller', icon: '💍', makes: 'jewellery', price: 8000, rate: 0.5, needs: 'open flat land', in: { gold: 1, gems: 1 }, ring: 1 },
+  cocoa: { name: 'Cocoa Grove', icon: '🫘', makes: 'cocoa', price: 2500, rate: 1, needs: 'a wild cocoa grove (far seas)', ring: 2 },
+  chocolate: { name: 'Chocolate Factory', icon: '🍫', makes: 'chocolate', price: 7000, rate: 0.6, needs: 'open flat land', in: { cocoa: 1, flour: 1 }, ring: 2 },
+  rubber: { name: 'Rubber Grove', icon: '🌿', makes: 'rubber', price: 2500, rate: 1, needs: 'a wild rubber grove (far seas)', ring: 3 },
+  tyreworks: { name: 'Tyre Works', icon: '🛞', makes: 'tyres', price: 8000, rate: 0.6, needs: 'open flat land', in: { rubber: 1, steel: 1 }, ring: 3 },
 } as const satisfies Record<string, KindInfo>;
 export type IndustryKind = keyof typeof INDUSTRIES;
 export const info = (k: IndustryKind): KindInfo => INDUSTRIES[k];
@@ -59,8 +83,12 @@ export const inputsOf = (k: IndustryKind) => Object.keys(info(k).in ?? {}) as Go
 /** input store per good, by level */
 export const bufOf = (b: Building) => 30 + 20 * b.lvl;
 /** Why this kind can't be built yet (Railway level), or '' */
-export const lockedText = (g: Game, k: IndustryKind) => (info(k).unlock ?? 0) > (g.s.rlv ?? 0) ? `🔒 Unlocks at Railway level ${info(k).unlock}` : '';
-export const MINES = new Set<IndustryKind>(['stone', 'coal', 'iron', 'oil']);
+export const lockedText = (g: Game, k: IndustryKind) => (info(k).ring ?? 0) > (g.s.rings ?? 0)
+  ? `🔒 Found past the edge of the sea: send ${info(k).ring === 1 ? 'an' : info(k).ring} 🗺 expedition${info(k).ring === 1 ? '' : 's'} from a level 3 dock`
+  : (info(k).unlock ?? 0) > (g.s.rlv ?? 0) ? `🔒 Unlocks at Railway level ${info(k).unlock}` : '';
+export const MINES = new Set<IndustryKind>(['stone', 'coal', 'iron', 'oil', 'gold', 'gems', 'cocoa', 'rubber']);
+/** Deposits found only on the far seas (expedition islands), by the ring that brings them. */
+export const FAR_RES = { gold: 1, gems: 1, cocoa: 2, rubber: 3 } as const;
 
 /**
  * A building and its yard. The yard is a row of four track squares (two loading tracks, entered at the ends);
@@ -409,7 +437,7 @@ export function nearestSpot(g: Game, kind: IndustryKind, cx: number, cy: number,
 
 /** Why there is nowhere to build this kind yet, and what to do. */
 export const noSpotText = (kind: IndustryKind) => MINES.has(kind)
-  ? `No ${INDUSTRIES[kind].needs.replace(/^an? /, '').replace(/ at the foot of mountains| \(outer islands\)/, '')} uncovered yet: lay track toward the mountains to uncover more land`
+  ? `No ${INDUSTRIES[kind].needs.replace(/^an? /, '').replace(/ at the foot of mountains| \((outer islands|far seas)\)/g, '')} uncovered yet: lay track toward the mountains to uncover more land`
   : `No room for a ${INDUSTRIES[kind].name} on uncovered land: it needs ${INDUSTRIES[kind].needs}`;
 
 /** "Ashford's park" / "Ashford's Clock Tower", for refusals. */

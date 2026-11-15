@@ -412,10 +412,12 @@ function updateLesson() {
 const menu = $('buildMenu');
 let menuOpen = false;
 function renderMenu() {
-  const kinds = (Object.keys(INDUSTRIES) as IndustryKind[]).filter(k => k !== 'iron' && k !== 'oil' || game.s.sites.some(s => s.kind === 'dep' && s.res === k && !s.hidden));
+  // deposits found far out (iron, oil, the far-sea chains) show once one is uncovered; far-sea factories once their expedition went
+  const far = (k: IndustryKind) => !!info(k).ring && !isFactory(k) || k === 'iron' || k === 'oil';
+  const kinds = (Object.keys(INDUSTRIES) as IndustryKind[]).filter(k => far(k) ? game.s.sites.some(s => s.kind === 'dep' && s.res === k && !s.hidden) : (info(k).ring ?? 0) <= (game.s.rings ?? 0));
   const tile = (k: IndustryKind) => {
     const d = info(k), p = priceOf(game, k), lock = lockedText(game, k);
-    return `<button data-k="${k}" class="${tools.buildKind === k ? 'on' : ''}${lock ? ' locked' : ''}"><b>${d.icon}</b>${d.name}<small>${lock ? '🔒 Level ' + d.unlock : fmtMoney(p)}</small></button>`;
+    return `<button data-k="${k}" class="${tools.buildKind === k ? 'on' : ''}${lock ? ' locked' : ''}"><b>${d.icon}</b>${d.name}<small>${lock ? (d.ring && d.ring > (game.s.rings ?? 0) ? '🔒 🗺 Expedition' : '🔒 Level ' + d.unlock) : fmtMoney(p)}</small></button>`;
   };
   const r = recommendedBuild(game);
   menu.innerHTML = (r ? `<button data-k="${r.k}" class="rec"><b>${info(r.k).icon}</b><span style="font-size:11px;font-weight:800;color:#ffd24a;letter-spacing:.05em">⭐ RECOMMENDED NEXT BUILD${r.mission ? ' · YOUR MISSION' : ''}</span><br>${info(r.k).name} · ${fmtMoney(priceOf(game, r.k))}<small>${r.why}</small></button>` : '')
