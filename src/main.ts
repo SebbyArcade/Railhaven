@@ -35,7 +35,7 @@ import { gameReport } from './ui/report.ts';
 import { SEASONS, seasonOf } from './world/season.ts';
 import { buyFleet, FLEET, type FleetKey, fleetLvl, refundOf, removeBuilding, rushOf, sellOffer, sellStock, toggleRush, upgradeBuilding } from './economy/upgrades.ts';
 import { foundTown, sizeName, tickTowns, upgradeTown } from './economy/towns.ts';
-import { buyTrainAt, sellTrain, shipTrainTo, tickTrains, trainRefund } from './economy/dispatch.ts';
+import { buyTrainAt, buyTrainFor, fleetByIsland, sellTrain, shipTrainTo, tickTrains, trainRefund, trainToSell } from './economy/dispatch.ts';
 import { moneyTip, type Tip } from './economy/advice.ts';
 import { buyShip, buyShipUp, SHIP_UP, type ShipUpKey, shipPlace, shipUpLvl } from './ships/ships.ts';
 import { POI, poisOf } from './world/explore.ts';
@@ -223,6 +223,19 @@ cardEl.onclick = e => {
       await saveFile(text, 'railhaven-bug-report.txt', '🐞 Saved railhaven-bug-report.txt (and copied): attach it in the chat and say what went wrong');
     });
     return;
+  }
+  if (b.dataset.act === 'buyon') { // 🚂 Your trains: one more train for this island
+    const isl = +b.dataset.isl!, p = fleetByIsland(game).find(f => f.island === isl)?.price ?? 0, t = buyTrainFor(game, isl);
+    if (typeof t === 'string') { toast(t); return; }
+    toast(`🚂 Train ${t.id} bought for ${fmtMoney(p)}: it looks for a load by itself`); renderCard(); return;
+  }
+  if (b.dataset.act === 'sellon') { // 🚂 Your trains: sell one train on this island (one with no work first)
+    const isl = +b.dataset.isl!, t = trainToSell(game, isl); if (!t) { toast('No train here to sell'); return; }
+    if (!sellArmed || sellArmed.id !== -1 - isl || performance.now() > sellArmed.until) { sellArmed = { id: -1 - isl, until: performance.now() + 4000 }; b.innerHTML = `⚠ Tap again: sell Train ${t.id} · +${fmtMoney(trainRefund(game))}`; b.classList.add('sure'); return; }
+    sellArmed = null; const v = trainRefund(game), why = sellTrain(game, t);
+    if (why === 'later') { toast(`💰 Train ${t.id} is sold: it goes once it has delivered its load`); renderCard(); return; }
+    if (why) { toast(why); return; }
+    toast(`💰 Train ${t.id} sold · +${fmtMoney(v)}`); renderCard(); return;
   }
   if (b.dataset.act === 'selltrain') {
     const t = game.s.trains.find(x => x.id === +b.dataset.id!); if (!t) return;
@@ -481,7 +494,15 @@ $('buildBtn').onclick = () => {
   tools.mode = 'pan'; tools.cancel(); menuOpen = true; renderMenu();
 };
 // toolbar: tapping a tool again closes it
-for (const b of document.querySelectorAll<HTMLButtonElement>('#bar [data-mode]')) b.onclick = () => { menuOpen = false; tools.setMode(b.dataset.mode as Mode); };
+for (const b of document.querySelectorAll<HTMLButtonElement>('#bar [data-mode]')) b.onclick = () => {
+  menuOpen = false;
+  // 🚂 Train: your trains island by island (Buy 1 / Sell 1). The very first train is bought from the shed bar, as the lesson shows
+  if (b.dataset.mode === 'train' && game.s.trains.length && game.s.shed) {
+    if (tools.card?.kind === 'fleet') { closeCard(); return; }
+    tools.setMode('pan'); openCard({ kind: 'fleet', id: 0 }); return;
+  }
+  tools.setMode(b.dataset.mode as Mode);
+};
 let newArmed = 0;
 // 🗺 Game: a new map, or a game brought over from the old Railhaven
 const OLD_KEY = 'railhaven90';
@@ -530,7 +551,7 @@ $('near').onclick = () => { if (tools.nearestFit() && tools.preview) { const c =
 $('cancel').onclick = () => { tools.cancel(); if (tools.mode === 'train') tools.mode = 'pan'; }; // the Buy train bar shows for as long as Train is on, so ✕ turns Train off
 
 function updateUi() {
-  for (const b of document.querySelectorAll<HTMLButtonElement>('#bar [data-mode]')) b.classList.toggle('on', b.dataset.mode === tools.mode);
+  for (const b of document.querySelectorAll<HTMLButtonElement>('#bar [data-mode]')) b.classList.toggle('on', b.dataset.mode === tools.mode || (b.dataset.mode === 'train' && tools.card?.kind === 'fleet'));
   $('buildBtn').classList.toggle('on', tools.mode === 'build' || menuOpen);
   $('mapBtn').classList.toggle('on', tools.card?.kind === 'map' || !!tools.view);
   menu.style.display = menuOpen ? 'grid' : 'none';

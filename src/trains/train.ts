@@ -7,6 +7,8 @@ import type { NodeKey, Step } from '../track/types.ts';
 export const ENGINE_LEN = 15, CAR_LEN = 12, COUPLING = 2;
 /** trains stop this far before a red signal, so they never touch */
 export const SIGNAL_GAP = 8;
+/** Double track is one-way per lane, like a road: the other lane costs this much, so trains take it only when there is no other way at all. */
+export const WRONG_LANE = 50000;
 /** seconds stuck before looking for another way, and seconds to wait aside before trying again */
 export const UNSTICK_AFTER = 4, REFUGE_WAIT = 4;
 export const V_MAX = 70, ACCEL = 40, DECEL = 60, REVERSE_PAUSE = 0.45;
@@ -44,6 +46,8 @@ export interface Train {
   /** seconds until an idle train looks for a load again, and what its last delivery paid */
   idle?: number;
   lastPay?: { pay: number; at: number; n: number; good: string; to: { kind: 'town' | 'bld'; id: number } };
+  /** the trip (by destination) for which it already looked for a free platform on arrival */
+  platTry?: number;
   /** seconds to wait in a refuge (out of another train's way) before trying again */
   refuge?: number;
   /** seconds a goods train with a job has stood still on its way (held up by other trains); 0 once it moves */
@@ -94,6 +98,9 @@ export class TrainSystem {
   blocked = new Set<number>();
   /** platform and yard tracks: either lane is fine there (keep-left is for the open line) */
   anyLane = new Set<number>();
+  /** the short stretches just outside stations and yards (their throats): a train that turned back on a platform may
+   *  run on the other lane there to reach its own (it clears the whole way first, so it never meets one nose to nose) */
+  throat = new Set<number>();
   /** told when a train reverses partway along a trip (not at its stops): the square where its tail turned */
   onMidReverse?: (t: Train, square: number) => void;
 
@@ -135,13 +142,36 @@ export class TrainSystem {
       const m = t.plan[j]!; if (isRev(m)) break;
       steps.push(m);
       // on the wrong lane (after turning back) the train can't wait where oncoming trains run: it clears the whole way back to its own lane
-      room = this.net.passing[m.piece] && !this.laneCost(m) ? room + this.net.pieces[m.piece]!.len : 0;
+      const own = this.anyLane.has(m.piece) || this.net.side[m.piece]! * m.dir >= 0;
+      room = this.net.passing[m.piece] && own ? room + this.net.pieces[m.piece]!.len : 0;
+      // never wait on a platform or loading track behind another train: it may turn back into this one
+      if (room >= need && this.anyLane.has(m.piece) && this.trackAheadTaken(t, j)) room = 0;
       if (room >= need) break;
     }
-    if (!steps.length || !steps.every(s => this.free(t, s.piece))) return false;
+    if (!steps.length) return false;
+    if (!steps.every(s => this.free(t, s.piece))) {
+      // about to run into a station or yard whose track it planned is taken: take a free platform or loading track instead
+      if (t.area && t.dest !== undefined && t.platTry !== t.dest && steps.some(s => this.anyLane.has(s.piece) && !this.free(t, s.piece))) {
+        t.platTry = t.dest;
+        const taken = (p: number) => !this.free(t, p);
+        const way = this.route({ head: t.trail.at(-1)!, tail: t.trail[0]!, trail: t.trail, trainLen: trainLength(t), canReverseNow: false, goal: this.goalFor(t.dest, t.area),
+          extra: s => this.anyLane.has(s.piece) && taken(s.piece) ? Infinity : this.laneCost(s) });
+        if (way && way.length && !way.some(isRev)) { t.plan = way; t.held = 0; this.rebuildHolds(); }
+      }
+      return false;
+    }
     for (const s of steps) this.holder.set(s.piece, t.id);
     t.held += steps.length;
     return true;
+  }
+
+  /** another train stands on (or holds) the rest of this platform or loading track, past plan step j */
+  private trackAheadTaken(t: Train, j: number): boolean {
+    for (let k = j + 1; k < t.plan.length; k++) {
+      const m = t.plan[k]!; if (isRev(m) || !this.anyLane.has(m.piece)) return false;
+      const h = this.holder.get(m.piece); if (h !== undefined && h !== t.id) return true;
+    }
+    return false;
   }
 
   /** Distance the head may still travel before it must stand still. */
@@ -245,9 +275,9 @@ export class TrainSystem {
     this.rebuildHolds();
   }
 
-  /** Trains keep to the left lane on double track (the right lane only when there is no other way). */
+  /** Trains keep to the right on double track, like cars on a road: heading right (east) they run on the bottom lane, heading left on the top one. The other lane only when there is no other way at all. */
   private laneCost(s: Step): number {
-    return !this.anyLane.has(s.piece) && this.net.side[s.piece]! * s.dir > 0 ? 5000 : 0;
+    return !this.anyLane.has(s.piece) && !this.throat.has(s.piece) && this.net.side[s.piece]! * s.dir < 0 ? WRONG_LANE : 0;
   }
 
   /** is this step a place where t's trip ends? */

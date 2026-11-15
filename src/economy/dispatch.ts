@@ -344,3 +344,44 @@ export function trainStatus(g: Game, t: Train): string {
   if (j.phase === 'toDrop') return `🚂 Taking ${t.cargo?.n ?? ''} ${icon} to ${where}`;
   return `${icon} Unloading at ${where}`;
 }
+
+/** One island's trains, as the 🚂 Your trains card shows them. */
+export interface IslandFleet {
+  island: number; name: string; trains: Train[];
+  /** where a new train for this island comes from: the engine shed (home) or a landing's yard (it comes over by boat) */
+  buyAt: 'shed' | Building | null;
+  price: number;
+  /** a landing here with idle trains on another island that could be shipped over */
+  shipTo?: Building;
+}
+
+/** Every island with your railway on it (home first): its trains and how to add one. */
+export function fleetByIsland(g: Game): IslandFleet[] {
+  const per = new Map<number, Train[]>();
+  for (const t of g.s.trains) { const k = islandOfTrain(g, t); per.set(k, [...(per.get(k) ?? []), t]); }
+  const docks = (g.s.buildings ?? []).filter(b => isDock(b) && isLinked(g, b));
+  const isl = new Set<number>([g.world.home, ...per.keys(), ...docks.map(b => islandOfB(g, b))]);
+  const out: IslandFleet[] = [];
+  for (const k of isl) {
+    const dock = docks.find(b => islandOfB(g, b) === k), home = k === g.world.home;
+    const f: IslandFleet = { island: k, name: k < 0 ? 'On bridges' : islandName(g, k), trains: per.get(k) ?? [], buyAt: home ? 'shed' : dock ?? null, price: trainPrice(g) + (home ? 0 : FERRY_FEE) };
+    if (!home && dock && spareTrains(g, dock).length) f.shipTo = dock;
+    if (k < 0 && !f.trains.length) continue;
+    out.push(f);
+  }
+  return out.sort((a, b) => +(b.island === g.world.home) - +(a.island === g.world.home) || b.trains.length - a.trains.length);
+}
+
+/** Buy a train for an island: from the engine shed at home, or by boat to a landing elsewhere. */
+export function buyTrainFor(g: Game, island: number): Train | string {
+  if (island === g.world.home) return buyTrain(g);
+  const dock = (g.s.buildings ?? []).find(b => isDock(b) && isLinked(g, b) && islandOfB(g, b) === island);
+  if (!dock) return 'Trains reach this island by boat: build a dock or landing on it first';
+  return buyTrainAt(g, dock);
+}
+
+/** The train to sell first on an island: one with no work, then an empty one, then one that delivers its load first. */
+export function trainToSell(g: Game, island: number): Train | undefined {
+  const ts = g.s.trains.filter(t => islandOfTrain(g, t) === island && !t.sellAfter && !t.broke);
+  return ts.find(t => !t.job && !t.cargo) ?? ts.find(t => !t.cargo && t.job?.phase !== 'loading') ?? ts[0];
+}

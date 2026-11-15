@@ -7,7 +7,7 @@ import { hasProject, nextParkPrice, orderMul, PARK_PRICE, parkSpot, parksOf, pay
 import { isCapital, islandOfSite, regions, tradeOf, tradeReward, tradeWhy } from '../economy/trade.ts';
 import { FOUND_PRICE, orderDone, orderOf, reward, sizeName, steadyGoods, stepOf, townLinked, upgradePrice } from '../economy/towns.ts';
 import { type Dest, destinationsOf, destName, type Ship, shipPlan, siteOf } from '../economy/shipping.ts';
-import { FERRY_FEE, islandOfTrain, spareTrains, trainPrice, trainRefund, trainStatus } from '../economy/dispatch.ts';
+import { FERRY_FEE, fleetByIsland, islandOfTrain, spareTrains, trainPrice, trainRefund, trainStatus, trainToSell } from '../economy/dispatch.ts';
 import { JAM_AFTER } from '../economy/jams.ts';
 import { BRIDGE_UPKEEP, bridgeSquares } from '../track/rules.ts';
 import { dockRange, isDock, islandName, islandOfB, seaDist } from '../ships/docks.ts';
@@ -24,7 +24,7 @@ import { ordersHtml, placeName } from './orders.ts';
 import { mapHtml, type MapView } from './mapviews.ts';
 import { mapCost, MAP_R, MAP_R_SEA } from '../world/maps.ts';
 
-export type Card = { kind: 'shed'; id: 0 } | { kind: 'plot'; id: number } | { kind: 'town'; id: number; page?: string } | { kind: 'bld'; id: number; page?: string } | { kind: 'train'; id: number } | { kind: 'story'; id: 0; page?: string } | { kind: 'game'; id: number; page?: string } | { kind: 'orders'; id: 0 } | { kind: 'map'; id: 0 } | { kind: 'ship'; id: number } | { kind: 'find'; id: number; more?: number };
+export type Card = { kind: 'shed'; id: 0 } | { kind: 'fleet'; id: 0; page?: string } | { kind: 'plot'; id: number } | { kind: 'town'; id: number; page?: string } | { kind: 'bld'; id: number; page?: string } | { kind: 'train'; id: number } | { kind: 'story'; id: 0; page?: string } | { kind: 'game'; id: number; page?: string } | { kind: 'orders'; id: 0 } | { kind: 'map'; id: 0 } | { kind: 'ship'; id: number } | { kind: 'find'; id: number; more?: number };
 
 /** the kind that makes each good */
 const makerOf = (k: Good) => (Object.keys(INDUSTRIES) as IndustryKind[]).find(m => INDUSTRIES[m].makes === k);
@@ -51,6 +51,7 @@ const bName = (b: Building) => INDUSTRIES[b.kind].name;
 /** Card HTML. Every number is read fresh, so the card is redrawn each second while open. */
 export function cardHtml(g: Game, c: Card, view?: MapView | null): string | null {
   if (c.kind === 'shed') return shedCard(g);
+  if (c.kind === 'fleet') return fleetCard(g, c.page);
   if (c.kind === 'story') return storyHtml(g, c.page);
   if (c.kind === 'orders') return ordersHtml(g);
   if (c.kind === 'map') return mapHtml(g, view ?? null);
@@ -366,6 +367,38 @@ function shipUpRows(g: Game): string {
     if (!top) h += `<button class="mini" data-act="shipup" data-k="${k}" ${g.s.money >= p ? '' : 'disabled'}>⬆ ${fmtMoney(p)}</button>`;
     h += `</div></div>`;
   }
+  return h;
+}
+
+/** 🚂 Your trains: one row per island with how many trains it has, Buy 1 and Sell 1; a page lists one island's trains. */
+function fleetCard(g: Game, page?: string): string {
+  const all = fleetByIsland(g), cap = trainCap(g);
+  if (page) { // one island's trains, each a tap away
+    const f = all.find(x => String(x.island) === page); if (!f) return fleetCard(g);
+    let h = `<div class="head"><b class="big">🏝</b><div><h2>${esc(f.name)}</h2><span class="chip2">🚂 ${f.trains.length} train${f.trains.length === 1 ? '' : 's'}</span></div></div>`;
+    for (const t of f.trains) {
+      const held = (t.stopT ?? 0) >= JAM_AFTER, st = t.sellAfter ? '💰 sold: goes after this delivery' : held ? '🚦 held up' : t.cargo ? `🚚 carrying ${GOODS[t.cargo.good as Good]?.icon ?? ''}` : t.job ? '🚚 on its way to load' : '💤 waiting for work';
+      h += `<div class="row${held ? ' alert' : ''}"><b class="ico">🚂</b><div class="grow"><div class="line"><span>Train ${t.id}</span><span>${st}</span></div><small>${trainStatus(g, t)}</small></div><button class="mini" data-act="open" data-kind="train" data-id="${t.id}">Open ›</button></div>`;
+    }
+    if (!f.trains.length) h += `<div class="note">No trains here yet.</div>`;
+    return h + `<button class="act back" data-act="open" data-kind="fleet" data-id="0">‹ All islands</button>`;
+  }
+  let h = `<div class="head"><b class="big">🚂</b><div><h2>Your trains</h2><span class="chip2">🚂 ${g.s.trains.length}</span> <span class="chip2">📦 ${cap} per load</span></div></div>`;
+  for (const f of all) {
+    const idle = f.trains.filter(t => !t.job).length, held = f.trains.filter(t => (t.stopT ?? 0) >= JAM_AFTER).length, busy = f.trains.length - idle;
+    const sell = trainToSell(g, f.island), v = trainRefund(g);
+    h += `<div class="row isl"><b class="ico">${f.island < 0 ? '🌉' : f.island === g.world.home ? '🏠' : '🏝'}</b><div class="grow">`
+      + `<div class="line"><span><b>${esc(f.name)}</b></span><span>🚂 ${f.trains.length} train${f.trains.length === 1 ? '' : 's'}</span></div>`
+      + `<div class="chips">${busy ? `<span class="chip2 ok">🚚 ${busy} working</span> ` : ''}${idle ? `<span class="chip2">💤 ${idle} waiting</span> ` : ''}${held ? `<span class="chip2 bad">🚦 ${held} held up</span>` : ''}</div>`
+      + `<div class="btns">`
+      + (f.buyAt ? `<button class="mini buy" data-act="buyon" data-isl="${f.island}" ${g.s.money >= f.price ? '' : 'disabled'}>＋ Buy 1 · ${fmtMoney(f.price)}</button>` : `<small>Trains come by boat: build a dock or landing here</small>`)
+      + (sell ? `<button class="mini sell" data-act="sellon" data-isl="${f.island}">💰 Sell 1 · +${fmtMoney(v)}</button>` : '')
+      + (f.shipTo ? `<button class="mini" data-act="open" data-kind="bld" data-id="${f.shipTo.id}" data-page="trains">⛴ Ship one here</button>` : '')
+      + (f.trains.length ? `<button class="mini" data-act="open" data-kind="fleet" data-id="0" data-page="${f.island}">📋 List ›</button>` : '')
+      + `</div>${f.buyAt && f.buyAt !== 'shed' ? `<small>A new train comes over by boat (+${fmtMoney(FERRY_FEE)} crossing)</small>` : ''}</div></div>`;
+  }
+  h += `<small class="why">Trains run themselves: each takes the best waiting load where it is needed. Sell 1 sells a train with no work first; one carrying goods delivers them, then goes.</small>`;
+  h += `<button class="act alt" data-act="open" data-kind="shed" data-id="0">🔧 Fleet upgrades ›<br><small>more wagons, faster engines, for every train</small></button>`;
   return h;
 }
 
