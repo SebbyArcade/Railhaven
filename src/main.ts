@@ -6,7 +6,10 @@ import { BREAK_TEXT, breakRail, tickBreaks } from './track/breaks.ts';
 import { hallAt, hallsOf } from './buildings/stations.ts';
 import { type View, toSquare, toWorld } from './render/camera.ts';
 import { Renderer } from './render/renderer.ts';
-import { loadFrom, readSave, saveCode, saveTo } from './save/save.ts';
+import { loadFrom, onSave, readSave, saveCode, saveJson, saveTo } from './save/save.ts';
+import { addSlot, copySlot, deleteSlot, openSlot, readIndex, renameSlot, touchActive } from './save/slots.ts';
+import { homeHtml, isHomePage } from './ui/home.ts';
+import { mapThumb } from './render/thumb.ts';
 import { isRevealed } from './world/fog.ts';
 import { TERRAIN_NAMES } from './world/terrain.ts';
 import { attachInput } from './ui/input.ts';
@@ -46,7 +49,13 @@ const $ = (id: string) => document.getElementById(id)!;
 const params = new URLSearchParams(location.search);
 /** a new game in the browser starts Mira's lessons */
 const freshGame = (seed?: number) => { const g = newGame(seed); g.s.tut = 0; return g; };
-let game: Game = (!params.has('new') && loadFrom(localStorage)) || freshGame(params.has('seed') ? +params.get('seed')! : undefined);
+// save slots: the playing game stays under the usual key, the list of games beside it (made from this browser's game the first time)
+const slotsOk = (() => { try { readIndex(localStorage); return true; } catch { return false; } })();
+let game: Game = (!params.has('new') && !params.has('seed') && loadFrom(localStorage)) || freshGame(params.has('seed') ? +params.get('seed')! : undefined);
+if (slotsOk && (params.has('new') || params.has('seed') || !readIndex(localStorage).list.length)) { const why = addSlot(localStorage, saveJson(game), game); if (why) { game = loadFrom(localStorage) ?? game; } }
+onSave((st, g) => { if (slotsOk && st === localStorage) try { touchActive(localStorage, g); } catch { /* storage full: the game itself is saved */ } });
+/** the playing game's small map picture, made when the home screen opens or the game is put aside */
+const snapPic = () => { if (slotsOk) try { touchActive(localStorage, game, mapThumb(game)); } catch { /* no picture */ } };
 const tools = new Tools(() => game);
 let renderer = new Renderer(game, tools);
 /** run the game rules for some seconds at once (screenshot checks and the bot) */
@@ -103,7 +112,10 @@ function renderCard() {
   if (tools.card?.kind === 'game' && tools.card.page === 'stats' && cardEl.querySelector('#stats')) return; // keep the report selectable
   if (tools.card?.kind === 'map' && cardEl.style.display === 'block' && cardEl.querySelector('#mapQ')) return; // nothing on it changes: keep the search being typed
   if (tools.card?.kind === 'game' && tools.card.page === 'move' && myCode && (cardEl.querySelector('#myCode') as HTMLTextAreaElement | null)?.value === myCode) return; // keep the code selectable
-  const html = tools.card && (tools.card.kind === 'game' ? gameHtml(tools.card.page, !!oldSave(), importReport, myCode, tools.card.page === 'stats' ? gameReport(game) : null, sound.settings) : cardHtml(game, tools.card, tools.view));
+  if (tools.card?.kind === 'game' && cardEl.contains(document.activeElement) && document.activeElement?.tagName === 'INPUT') return; // keep a name or map number being typed
+  const home = tools.card?.kind === 'game' && isHomePage(tools.card.page);
+  cardEl.classList.toggle('home', home);
+  const html = tools.card && (tools.card.kind === 'game' ? (home ? homeHtml(tools.card.page, readIndex(localStorage), tools.card.id, delArmed?.id === tools.card.id && performance.now() < delArmed.until) : gameHtml(tools.card.page === 'settings' ? '' : tools.card.page, !!oldSave(), importReport, myCode, tools.card.page === 'stats' ? gameReport(game) : null, sound.settings)) : cardHtml(game, tools.card, tools.view));
   if (!html) { tools.card = null; cardEl.style.display = 'none'; return; }
   cardEl.innerHTML = `<button class="x" data-act="close">✕</button>${html}`; cardEl.style.display = 'block';
   if (performance.now() - newArmed < 3000) { const nb = cardEl.querySelector<HTMLButtonElement>('button[data-act="newmap"]'); if (nb) { nb.classList.add('sure'); nb.textContent = '⚠ Tap again to start a new map'; } }
@@ -112,16 +124,38 @@ function renderCard() {
     if (b) { b.classList.add('sure'); b.textContent = '⚠ Tap again to remove it'; }
   }
 }
-let armed: { id: number; until: number } | null = null;
+let armed: { id: number; until: number } | null = null, delArmed: { id: number; until: number } | null = null;
 cardEl.onclick = e => {
   const b = (e.target as HTMLElement).closest('button'); if (!b) return;
   if (b.dataset.act === 'close') { closeCard(); return; }
   if (b.dataset.act === 'newmap') {
     // the artifact frame blocks confirm(), so ask with a second tap instead
     if (performance.now() - newArmed > 3000) { newArmed = performance.now(); b.textContent = '⚠ Tap again to start a new map'; b.classList.add('sure'); return; }
-    newArmed = 0; startGame(freshGame()); return;
+    newArmed = 0; startGame(freshGame()); return; // (no longer offered: new games start from Your games)
   }
   if (b.dataset.act === 'loadfile') { filePick.click(); return; }
+  if (b.dataset.act === 'slotpage') { delArmed = null; openCard({ kind: 'game', id: +b.dataset.id!, page: 'slot' }); return; }
+  if (b.dataset.act === 'play') { const id = +b.dataset.id!; if (id === readIndex(localStorage).active) { closeCard(); return; } saveTo(localStorage, game); snapPic(); const g = openSlot(localStorage, id); if (typeof g === 'string') { toast(g); return; } startGame(g, false); toast('▶ ' + (readIndex(localStorage).list.find(m => m.id === id)?.name ?? 'Your game'), 2500); return; }
+  if (b.dataset.act === 'rename') { const why = renameSlot(localStorage, +b.dataset.id!, cardEl.querySelector<HTMLInputElement>('#slotName')?.value ?? ''); (document.activeElement as HTMLElement | null)?.blur(); toast(why || '✏ Name saved'); renderCard(); return; }
+  if (b.dataset.act === 'copyslot') { saveTo(localStorage, game); const why = copySlot(localStorage, +b.dataset.id!); toast(why || '📄 Copied: the copy is in Your games'); if (!why) openCard({ kind: 'game', id: 0, page: 'games' }); return; }
+  if (b.dataset.act === 'delslot') {
+    const id = +b.dataset.id!;
+    if (!delArmed || delArmed.id !== id || performance.now() > delArmed.until) { delArmed = { id, until: performance.now() + 4000 }; renderCard(); return; }
+    delArmed = null; saveTo(localStorage, game);
+    const r = deleteSlot(localStorage, id);
+    if (typeof r === 'string') { toast(r); return; }
+    if (r.ok === 'switch') startGame(r.g, false);
+    if (r.ok === 'empty') { const g = freshGame(); addSlot(localStorage, saveJson(g), g); startGame(g, false); }
+    toast('🗑 Game deleted'); openCard({ kind: 'game', id: 0, page: 'games' }); return;
+  }
+  if (b.dataset.act === 'newgame') {
+    let seed: number | undefined;
+    if (b.dataset.seed) { const v = (cardEl.querySelector<HTMLInputElement>('#seedIn')?.value ?? '').replace(/\D/g, ''); if (!v) { toast('Type a map number first, or start on a random map'); return; } seed = +v; }
+    saveTo(localStorage, game); snapPic();
+    const g = freshGame(seed); const why = addSlot(localStorage, saveJson(g), g);
+    if (why) { toast(why); return; }
+    startGame(g, false); return;
+  }
   if (b.dataset.act === 'open') { // from the Orders board: show the place on the map and open its card
     const kind = b.dataset.kind as 'town' | 'bld' | 'train' | 'ship', id = +b.dataset.id!, c = game.s.camera;
     const sh = kind === 'ship' ? game.s.ships?.find(x => x.id === id) : undefined;
@@ -138,7 +172,7 @@ cardEl.onclick = e => {
   }
   if (b.dataset.act === 'snd') { const k = b.dataset.k as 'music' | 'sfx'; sound.unlock(); sound.set(k, !sound.settings[k]); renderCard(); return; }
   if (b.dataset.act === 'full') { const d = document.documentElement; if (document.fullscreenElement) void document.exitFullscreen?.(); else d.requestFullscreen?.().catch(() => toast('Full screen works when the game is opened in Chrome')); return; }
-  if (b.dataset.act === 'copycode') { void saveCode(game).then(async c => { myCode = c; renderCard(); try { await navigator.clipboard.writeText(c); toast('📋 Code copied: paste it in 🗺 Game on the other side'); } catch { toast('Press on the code below, Select all, then Copy'); } }); return; }
+  if (b.dataset.act === 'copycode') { void saveCode(game).then(async c => { myCode = c; renderCard(); try { await navigator.clipboard.writeText(c); toast('📋 Code copied: paste it in 🏠 Home → ⚙ Settings on the other side'); } catch { toast('Press on the code below, Select all, then Copy'); } }); return; }
   if (b.dataset.act === 'copystats') { const t = cardEl.querySelector<HTMLTextAreaElement>('#stats'); if (t) { t.value = gameReport(game); void navigator.clipboard.writeText(t.value).then(() => toast('📋 Report copied: paste it in the chat'), () => { t.select(); toast('Press on the report, Select all, then Copy'); }); } return; }
   if (b.dataset.act === 'savefile') { void saveCode(game).then(saveFile); return; }
   if (b.dataset.act === 'loadold') { const t = oldSave(); if (t) void bringOver(t); return; }
@@ -341,18 +375,23 @@ let newArmed = 0;
 const OLD_KEY = 'railhaven90';
 let importReport: string[] | null = null, myCode: string | null = null;
 const oldSave = () => { try { return localStorage.getItem(OLD_KEY); } catch { return null; } };
-$('newGame').onclick = () => { if (tools.card?.kind === 'game') { closeCard(); return; } menuOpen = false; tools.mode = 'pan'; tools.cancel(); myCode = null; openCard({ kind: 'game', id: 0 }); };
-function startGame(g: Game) { game = g; lastSeason = -1; tools.cancel(); closeCard(); renderer = new Renderer(game, tools); saveTo(localStorage, game); }
+const openHome = () => { menuOpen = false; tools.mode = 'pan'; tools.cancel(); myCode = null; saveTo(localStorage, game); snapPic(); openCard({ kind: 'game', id: 0 }); };
+$('newGame').onclick = () => { if (tools.card?.kind === 'game') { closeCard(); return; } openHome(); };
+/** Play another game: a new one goes into a new slot (refused when all are taken); one opened from a slot is already in place. */
+function startGame(g: Game, newSlot = true) {
+  if (newSlot && slotsOk) { saveTo(localStorage, game); snapPic(); const why = addSlot(localStorage, saveJson(g), g); if (why) { toast('⚠ ' + why, 5000); return false; } }
+  game = g; lastSeason = -1; tools.cancel(); closeCard(); renderer = new Renderer(game, tools); saveTo(localStorage, game); return true;
+}
 async function bringOver(text: string) {
   try {
     toast('🚂 Bringing your game over…', 8000);
     await new Promise(r => setTimeout(r, 30));
     const mine = await readSave(text);
-    if (mine) { startGame(mine); toast('✅ Your game is here', 2500); return; }
+    if (mine) { if (startGame(mine)) toast('✅ Your game is here, in a new slot', 2500); return; }
     const o = await decodeLegacy(text);
     if (!isLegacy(o)) { toast('This save is not from the old Railhaven'); return; }
     const { g, report } = importLegacy(o);
-    startGame(g); importReport = report; openCard({ kind: 'game', id: 0, page: 'report' }); toast('✅ Your game is here', 2500);
+    if (!startGame(g)) return; importReport = report; openCard({ kind: 'game', id: 0, page: 'report' }); toast('✅ Your game is here, in a new slot', 2500);
   } catch (e) { toast('⚠ ' + ((e as Error).message || 'That save could not be read')); }
 }
 /** Save the code as a file: through Claude's download prompt inside the Claude app, a plain browser download elsewhere. */
@@ -401,7 +440,7 @@ for (const ev of ['pointerdown', 'touchstart', 'keydown']) window.addEventListen
 let last0 = 0, last = performance.now(), saveT = 0, lastMenu = 0, lastCard = 0, newsAt = 0;
 function frame(now: number) {
   const dt = Math.max(0, Math.min(0.1, (now - last) / 1000)); last = now; // the first frame time can be a little before load time
-  if (idle() && pausedEl.style.display !== 'flex') { pausedEl.style.display = 'flex'; saveTo(localStorage, game); }
+  if (idle() && !onHome() && pausedEl.style.display !== 'flex') { pausedEl.style.display = 'flex'; saveTo(localStorage, game); }
   if (!document.hidden && !idle()) { game.s.t += dt; game.sys.tick(dt); tickProduction(game, dt); tickTowns(game, dt); tickTrains(game, dt); if (Math.floor(game.s.t / 5) !== Math.floor((game.s.t - dt) / 5)) checkStuck(game); if (tickBreaks(game)) breaksChanged(game); }
   { const se = seasonOf(game.s.t); if (se !== lastSeason) { if (lastSeason >= 0) (game.news ??= []).push(`${SEASONS[se]} has come`); lastSeason = se; } }
   sound.season = seasonOf(game.s.t); sound.pause(document.hidden || idle());
@@ -446,5 +485,9 @@ hud.onclick = e => { if ((e.target as HTMLElement).closest('[data-orders]')) { i
 const IDLE_S = 300, pausedEl = $('paused');
 let lastTouch = performance.now();
 for (const ev of ['pointerdown', 'keydown', 'wheel'] as const) addEventListener(ev, () => { lastTouch = performance.now(); if (pausedEl.style.display === 'flex') pausedEl.style.display = 'none'; }, { capture: true, passive: true });
-const idle = () => performance.now() - lastTouch > IDLE_S * 1000;
+/** the home screen pauses the game behind it */
+const onHome = () => tools.card?.kind === 'game' && isHomePage(tools.card.page);
+const idle = () => onHome() || performance.now() - lastTouch > IDLE_S * 1000;
+// the game opens on the home screen (automated checks skip it unless they ask for it with ?home)
+if (!(navigator.webdriver && !params.has('home')) && !params.has('new') && !params.has('seed')) openHome();
 requestAnimationFrame(frame);

@@ -1,0 +1,31 @@
+// The home screen and Your games on a phone: your save becomes slot 1, then a new game, switching back, the pages.
+// Usage: node tools/home-shot.mjs save.json [out folder]
+import { chromium } from 'playwright';
+import { existsSync, readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+const [file, out = 'shots'] = process.argv.slice(2);
+const browser = await chromium.launch({ executablePath: existsSync('/opt/pw-browsers/chromium') ? '/opt/pw-browsers/chromium' : undefined });
+const page = await browser.newPage({ viewport: { width: 412, height: 860 }, deviceScaleFactor: 2 });
+const errs = []; page.on('pageerror', e => errs.push(e.message));
+await page.addInitScript(s => { if (!sessionStorage.getItem('put')) { sessionStorage.setItem('put', '1'); localStorage.clear(); if (s) localStorage.setItem('railhaven2', s); } }, file ? readFileSync(file, 'utf8') : '');
+const url = 'file://' + resolve('dist/index.html') + '?home';
+await page.goto(url); await page.waitForTimeout(900);
+const shot = async n => { await page.waitForTimeout(350); await page.screenshot({ path: `${out}/${n}.png` }); };
+const tap = async sel => { await page.click(sel); await page.waitForTimeout(250); };
+await shot('1-home');
+await tap('[data-page="games"]'); await shot('2-games-one');
+await tap('[data-page="new"]'); await shot('3-new');
+await tap('[data-act="newgame"]:not([data-seed])'); await page.waitForTimeout(600);
+const t1 = await page.evaluate(() => ({ seed: window.railhaven.game.s.seed, card: !!document.querySelector('#card.home') }));
+await tap('#newGame'); await tap('[data-page="games"]'); await shot('4-games-two');
+await tap('.slot:not(.on):not(.new)'); await shot('5-slot');
+await tap('[data-act="play"]'); await page.waitForTimeout(600);
+const t2 = await page.evaluate(() => ({ seed: window.railhaven.game.s.seed, money: window.railhaven.game.s.money }));
+await page.reload(); await page.waitForTimeout(900);
+const t3 = await page.evaluate(() => ({ seed: window.railhaven.game.s.seed, n: JSON.parse(localStorage.getItem('railhaven2.slots')).list.length }));
+await shot('6-home-after-reload');
+await tap('[data-page="settings"]'); await shot('7-settings');
+await tap('[data-act="page"][data-page=""]'); await tap('[data-page="learn"]'); await shot('8-learn');
+await page.setViewportSize({ width: 880, height: 760 }); await tap('[data-act="page"][data-page=""]'); await shot('9-home-unfolded');
+console.log(JSON.stringify({ t1, t2, t3, errs }));
+await browser.close();
