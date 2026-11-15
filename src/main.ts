@@ -1,4 +1,6 @@
 import { destName } from './economy/shipping.ts';
+import { Sound } from './audio/sound.ts';
+import { hearScene } from './audio/scene.ts';
 import { breaksChanged, newGame, trackChanged } from './game.ts';
 import { BREAK_TEXT, breakRail, tickBreaks } from './track/breaks.ts';
 import { hallAt, hallsOf } from './buildings/stations.ts';
@@ -49,7 +51,7 @@ const tools = new Tools(() => game);
 let renderer = new Renderer(game, tools);
 /** run the game rules for some seconds at once (screenshot checks and the bot) */
 function step(secs: number) { for (let k = 0; k < secs * 20; k++) { const dt = 0.05; game.s.t += dt; game.sys.tick(dt); tickProduction(game, dt); tickTowns(game, dt); tickTrains(game, dt); if (Math.floor(game.s.t / 5) !== Math.floor((game.s.t - dt) / 5)) checkStuck(game); if (tickBreaks(game)) breaksChanged(game); } }
-(window as any).railhaven = { get game() { return game; }, get renderer() { return renderer; }, tools, step, openCard: (c: Card | null) => openCard(c), breakRail: (i: number) => { const b = breakRail(game, i); breaksChanged(game); return b; } };
+(window as any).railhaven = { get game() { return game; }, get renderer() { return renderer; }, get sound() { return sound; }, hear: () => hearScene(game, view), tools, step, openCard: (c: Card | null) => openCard(c), breakRail: (i: number) => { const b = breakRail(game, i); breaksChanged(game); return b; } };
 
 const view: View = { w: 0, h: 0 };
 let dpr = 1;
@@ -101,7 +103,7 @@ function renderCard() {
   if (tools.card?.kind === 'game' && tools.card.page === 'stats' && cardEl.querySelector('#stats')) return; // keep the report selectable
   if (tools.card?.kind === 'map' && cardEl.style.display === 'block' && cardEl.querySelector('#mapQ')) return; // nothing on it changes: keep the search being typed
   if (tools.card?.kind === 'game' && tools.card.page === 'move' && myCode && (cardEl.querySelector('#myCode') as HTMLTextAreaElement | null)?.value === myCode) return; // keep the code selectable
-  const html = tools.card && (tools.card.kind === 'game' ? gameHtml(tools.card.page, !!oldSave(), importReport, myCode, tools.card.page === 'stats' ? gameReport(game) : null) : cardHtml(game, tools.card, tools.view));
+  const html = tools.card && (tools.card.kind === 'game' ? gameHtml(tools.card.page, !!oldSave(), importReport, myCode, tools.card.page === 'stats' ? gameReport(game) : null, sound.settings) : cardHtml(game, tools.card, tools.view));
   if (!html) { tools.card = null; cardEl.style.display = 'none'; return; }
   cardEl.innerHTML = `<button class="x" data-act="close">✕</button>${html}`; cardEl.style.display = 'block';
   if (performance.now() - newArmed < 3000) { const nb = cardEl.querySelector<HTMLButtonElement>('button[data-act="newmap"]'); if (nb) { nb.classList.add('sure'); nb.textContent = '⚠ Tap again to start a new map'; } }
@@ -134,6 +136,7 @@ cardEl.onclick = e => {
     else { delete t.pin; toast('🔄 It sends automatically again'); }
     openCard({ kind: 'bld', id: t.id }); return;
   }
+  if (b.dataset.act === 'snd') { const k = b.dataset.k as 'music' | 'sfx'; sound.unlock(); sound.set(k, !sound.settings[k]); renderCard(); return; }
   if (b.dataset.act === 'full') { const d = document.documentElement; if (document.fullscreenElement) void document.exitFullscreen?.(); else d.requestFullscreen?.().catch(() => toast('Full screen works when the game is opened in Chrome')); return; }
   if (b.dataset.act === 'copycode') { void saveCode(game).then(async c => { myCode = c; renderCard(); try { await navigator.clipboard.writeText(c); toast('📋 Code copied: paste it in 🗺 Game on the other side'); } catch { toast('Press on the code below, Select all, then Copy'); } }); return; }
   if (b.dataset.act === 'copystats') { const t = cardEl.querySelector<HTMLTextAreaElement>('#stats'); if (t) { t.value = gameReport(game); void navigator.clipboard.writeText(t.value).then(() => toast('📋 Report copied: paste it in the chat'), () => { t.select(); toast('Press on the report, Select all, then Copy'); }); } return; }
@@ -393,12 +396,16 @@ function updateUi() {
 }
 
 let lastSeason = -1;
+const sound = new Sound(); let soundT = 0;
+for (const ev of ['pointerdown', 'touchstart', 'keydown']) window.addEventListener(ev, () => sound.unlock(), { capture: true, passive: true });
 let last0 = 0, last = performance.now(), saveT = 0, lastMenu = 0, lastCard = 0, newsAt = 0;
 function frame(now: number) {
   const dt = Math.max(0, Math.min(0.1, (now - last) / 1000)); last = now; // the first frame time can be a little before load time
   if (idle() && pausedEl.style.display !== 'flex') { pausedEl.style.display = 'flex'; saveTo(localStorage, game); }
   if (!document.hidden && !idle()) { game.s.t += dt; game.sys.tick(dt); tickProduction(game, dt); tickTowns(game, dt); tickTrains(game, dt); if (Math.floor(game.s.t / 5) !== Math.floor((game.s.t - dt) / 5)) checkStuck(game); if (tickBreaks(game)) breaksChanged(game); }
   { const se = seasonOf(game.s.t); if (se !== lastSeason) { if (lastSeason >= 0) (game.news ??= []).push(`${SEASONS[se]} has come`); lastSeason = se; } }
+  sound.season = seasonOf(game.s.t); sound.pause(document.hidden || idle());
+  if (now - soundT > 100) { soundT = now; sound.update(hearScene(game, view)); }
   if (game.news?.length && now > newsAt && !(tools.card?.kind === 'story' && tools.card.page === 'act')) { toast(game.news.shift()!, 4000); newsAt = now + 4200; }
   if (Math.floor(now / 1000) !== lastCard) {
     lastCard = Math.floor(now / 1000);
