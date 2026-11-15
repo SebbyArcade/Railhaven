@@ -39,10 +39,10 @@ function fits(g: Game, x: number, y: number, d: Dir, blocked: Set<number>, own: 
   const line = g.track.get(L), along = DX[d] !== 0 ? bit(1) | bit(3) : bit(0) | bit(2);
   if (!line || blocked.has(L) || !(g.linked?.has(L) ?? true)) return false;
   if (line.links !== (own ? along | bit(opp(d)) : along)) return false;
-  // nothing else touching the shed or the siding from the sides
-  const side = DX[d] !== 0 ? [1, 3] : [0, 2];
-  for (const e of [opp(d), ...side] as Dir[]) if (g.track.has((y + DY[e]) * n + x + DX[e])) return false;
-  for (const e of side as Dir[]) if (g.track.has(A + DX[e] + DY[e] * n)) return false;
+  // track may pass behind or beside the shed and its siding, but nothing may run into them from the sides
+  const side = DX[d] !== 0 ? [1, 3] : [0, 2], into = (i: number, e: Dir) => ((g.track.get(i)?.links ?? 0) & bit(opp(e))) !== 0;
+  for (const e of [opp(d), ...side] as Dir[]) if (into((y + DY[e]) * n + x + DX[e], e)) return false;
+  for (const e of side as Dir[]) if (into(A + DX[e] + DY[e] * n, e)) return false;
   return true;
 }
 
@@ -84,6 +84,15 @@ export function placeShed(g: Game): number[] {
   }
   if (best) { g.s.shed = best; laySiding(g); } else delete g.s.shed;
   return [...before, ...(best ? Object.values(shedSiding(g)!) : [])];
+}
+
+/** Put the shed back where it stood (Undo): take up the siding where it is now; the next trackChanged lays the old one. */
+export function restoreShed(g: Game, sh: Shed | null | undefined) {
+  if (sh === undefined) return;
+  const cur = g.s.shed;
+  if (cur && sh && cur.x === sh.x && cur.y === sh.y && cur.side === sh.side) return;
+  if (cur) liftSiding(g);
+  if (sh) g.s.shed = { ...sh }; else delete g.s.shed;
 }
 
 export const shedSquare = (g: Game) => g.s.shed ? g.s.shed.y * g.world.n + g.s.shed.x : -1;
