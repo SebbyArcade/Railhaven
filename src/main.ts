@@ -12,6 +12,10 @@ import { MODE_HINT, type Mode, Tools } from './ui/tools.ts';
 import { INDUSTRIES, type IndustryKind, priceOf } from './buildings/industries.ts';
 import { tickProduction } from './economy/production.ts';
 import type { Game } from './state.ts';
+import { footprint } from './buildings/industries.ts';
+import { type Card, cardHtml } from './ui/cards.ts';
+import { sizeName, tickTowns, upgradeTown } from './economy/towns.ts';
+import { tickTrains } from './economy/dispatch.ts';
 
 const canvas = document.getElementById('c') as HTMLCanvasElement;
 const ctx = canvas.getContext('2d')!;
@@ -22,7 +26,9 @@ const params = new URLSearchParams(location.search);
 let game: Game = (!params.has('new') && loadFrom(localStorage)) || newGame(params.has('seed') ? +params.get('seed')! : undefined);
 const tools = new Tools(() => game);
 let renderer = new Renderer(game, tools);
-(window as any).railhaven = { get game() { return game; }, tools, breakRail: (i: number) => { const b = breakRail(game, i); breaksChanged(game); return b; } };
+/** run the game rules for some seconds at once (screenshot checks and the bot) */
+function step(secs: number) { for (let k = 0; k < secs * 20; k++) { const dt = 0.05; game.s.t += dt; game.sys.tick(dt); tickProduction(game, dt); tickTowns(game, dt); tickTrains(game, dt); if (tickBreaks(game)) breaksChanged(game); } }
+(window as any).railhaven = { get game() { return game; }, tools, step, openCard: (c: Card) => openCard(c), breakRail: (i: number) => { const b = breakRail(game, i); breaksChanged(game); return b; } };
 
 const view: View = { w: 0, h: 0 };
 let dpr = 1;
@@ -44,7 +50,7 @@ attachInput(canvas, () => game.s.camera, () => view, () => game.world.n * 32, {
   dragMove(sx, sy) { const i = squareAt(sx, sy); if (i >= 0) tools.dragOver(i); },
   tap(sx, sy) {
     const i = squareAt(sx, sy); if (i < 0) return;
-    if (tools.mode === 'pan') { const [wx, wy] = toWorld(game.s.camera, view, sx, sy); if (tools.tapWorld(wx, wy)) return; }
+    if (tools.mode === 'pan') { const [wx, wy] = toWorld(game.s.camera, view, sx, sy); if (tools.tapWorld(wx, wy)) { renderCard(); return; } }
     if (tools.tapSquare(i)) return;
     const n = game.world.n, x = i % n, y = (i / n) | 0;
     if (!isRevealed(game, i)) { toast('Unexplored fog. Scouting comes in a later stage.'); return; }
@@ -52,10 +58,32 @@ attachInput(canvas, () => game.s.camera, () => view, () => game.world.n * 32, {
     if (br) { const s = Math.ceil(br.crewAt - game.s.t); toast(`${BREAK_TEXT[br.kind]}: trains go round or wait. ${s > 0 ? `Repair crew arrives in ${s} s` : `Repair crew at work, ${Math.ceil(br.doneAt - game.s.t)} s left`}`); return; }
     if (game.s.shed && game.s.shed.x === x && game.s.shed.y === y) { toast('🏚 Engine shed: trains will be bought and kept here'); return; }
     const site = hallAt(hallsOf(game.track, n, game.s.sites), i)?.town ?? game.s.sites.find(s => Math.abs(s.x - x) <= 1 && Math.abs(s.y - y) <= 1);
-    if (site) toast(site.kind === 'town' ? `🏘 ${site.name}` : site.kind === 'plot' ? `🚩 Settlement site: ${site.name}` : `⛏ ${site.res} deposit`);
+    const bld = game.s.buildings?.find(b => footprint(n, b).includes(i));
+    if (bld) { openCard({ kind: 'bld', id: bld.id }); return; }
+    if (site?.kind === 'town') { openCard({ kind: 'town', id: site.id }); return; }
+    if (tools.card) { closeCard(); return; }
+    if (site) toast(site.kind === 'plot' ? `🚩 Settlement site: ${site.name}` : `⛏ ${site.res} deposit`);
     else toast(TERRAIN_NAMES[game.world.terr[i]!]!);
   },
 });
+
+// Cards: town, building and train; redrawn every second while open so numbers stay live
+const cardEl = $('card');
+function openCard(c: Card) { tools.card = c; tools.selected = c.kind === 'train' ? c.id : null; renderCard(); }
+function closeCard() { tools.card = null; tools.selected = null; renderCard(); }
+function renderCard() {
+  const html = tools.card && cardHtml(game, tools.card);
+  if (!html) { tools.card = null; cardEl.style.display = 'none'; return; }
+  cardEl.innerHTML = `<button class="x" data-act="close">✕</button>${html}`; cardEl.style.display = 'block';
+}
+cardEl.onclick = e => {
+  const b = (e.target as HTMLElement).closest('button'); if (!b) return;
+  if (b.dataset.act === 'close') { closeCard(); return; }
+  if (b.dataset.act === 'upgrade') {
+    const t = game.s.sites.find(s => s.id === +b.dataset.id!)!, L = (t.lvl ?? 0) + 1;
+    const why = upgradeTown(game, t); toast(why || `⬆ ${t.name} is now a ${sizeName(L)}! New order on its card`); renderCard();
+  }
+};
 
 // Build menu: colourful tiles, one per industry
 const menu = $('buildMenu');
@@ -78,7 +106,7 @@ $('newGame').onclick = () => {
   // the artifact frame blocks confirm(), so ask with a second tap instead
   if (performance.now() - newArmed > 3000) { newArmed = performance.now(); toast('Tap New again to start a new map'); return; }
   newArmed = 0;
-  game = newGame(); tools.cancel(); tools.selected = null; renderer = new Renderer(game, tools); saveTo(localStorage, game);
+  game = newGame(); tools.cancel(); closeCard(); renderer = new Renderer(game, tools); saveTo(localStorage, game);
 };
 $('ok').onclick = () => tools.confirm();
 $('undo').onclick = () => tools.undo();
@@ -97,10 +125,12 @@ function updateUi() {
   if (bar) { $('ctext').textContent = bar.text; ($('ok') as HTMLButtonElement).disabled = !bar.can; $('ok').textContent = bar.ok; }
 }
 
-let last = performance.now(), saveT = 0, lastMenu = 0;
+let last = performance.now(), saveT = 0, lastMenu = 0, lastCard = 0, newsAt = 0;
 function frame(now: number) {
   const dt = Math.min(0.1, (now - last) / 1000); last = now;
-  if (!document.hidden) { game.s.t += dt; game.sys.tick(dt); tickProduction(game, dt); if (tickBreaks(game)) breaksChanged(game); }
+  if (!document.hidden) { game.s.t += dt; game.sys.tick(dt); tickProduction(game, dt); tickTowns(game, dt); tickTrains(game, dt); if (tickBreaks(game)) breaksChanged(game); }
+  if (game.news?.length && now > newsAt) { toast(game.news.shift()!, 4000); newsAt = now + 4200; }
+  if (Math.floor(now / 1000) !== lastCard) { lastCard = Math.floor(now / 1000); renderCard(); }
   saveT += dt; if (saveT > 5) { saveT = 0; saveTo(localStorage, game); }
   renderer.draw(ctx, view, dpr, now / 1000);
   updateHud(hud, game);

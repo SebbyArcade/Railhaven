@@ -1,3 +1,4 @@
+import { sizeName, stepOf } from '../economy/towns.ts';
 import { hash } from '../core/rng.ts';
 import type { Game, Site } from '../state.ts';
 import type { Hall } from '../buildings/stations.ts';
@@ -7,9 +8,9 @@ import { TILE } from '../world/terrain.ts';
 
 const RES_ICON: Record<string, string> = { coal: '⚫', stone: '🪨', iron: '🧲', oil: '🛢', wood: '🪵', farm: '🌾' };
 
-/** Town size names on the order ladder. */
-export function townSize(pop: number): string {
-  return pop <= 0 ? 'Ruins' : pop < 100 ? 'Hamlet' : pop < 250 ? 'Village' : pop < 600 ? 'Town' : pop < 1500 ? 'City' : pop < 4000 ? 'Metropolis' : 'Megacity';
+/** Town size name: its step on the order ladder. */
+export function townSize(s: Site): string {
+  return (s.pop ?? 0) <= 0 ? 'Ruins' : sizeName(stepOf(s));
 }
 
 function drawTown(ctx: CanvasRenderingContext2D, g: Game, s: Site, tm: number, zoom: number, hall?: Hall) {
@@ -43,7 +44,7 @@ function drawTown(ctx: CanvasRenderingContext2D, g: Game, s: Site, tm: number, z
   ctx.fillStyle = '#ffe9c4'; ctx.fillText(label, X, Y + 22 + (fs + 6) / 2 + 1);
   if (zoom >= 1.15) {
     ctx.font = `600 ${fs * 0.75}px system-ui`; ctx.fillStyle = 'rgba(20,18,14,.75)';
-    const sz = townSize(pop) + (pop > 0 ? ' · ' + pop : ''), sw = ctx.measureText(sz).width + 10;
+    const sz = townSize(s) + (pop > 0 ? ' · 👥 ' + Math.floor(pop) : ''), sw = ctx.measureText(sz).width + 10;
     ctx.fillRect(X - sw / 2, Y + 22 + fs + 8, sw, fs * 0.75 + 5);
     ctx.fillStyle = '#f3e6c8'; ctx.fillText(sz, X, Y + 22 + fs + 8 + (fs * 0.75 + 5) / 2 + 1);
   }

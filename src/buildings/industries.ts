@@ -84,21 +84,36 @@ function around(g: Game, b: Pick<Building, 'x' | 'y' | 'horizontal' | 'side'>, r
   return [...out];
 }
 
-/** How much of its full output the place gives (forest, fields or pasture around it), 0-1. */
-export function shareAt(g: Game, b: Pick<Building, 'x' | 'y' | 'horizontal' | 'side' | 'kind'>): number {
-  const t = g.world.terr, taken = takenSquares(g);
-  if (b.kind === 'wood') return Math.min(1, around(g, b, 2).filter(i => t[i] === T.Forest && !taken.has(i)).length / 6);
-  if (b.kind === 'farm') return Math.min(1, around(g, b, 1).filter(i => t[i] === T.Grass && !taken.has(i)).length / 6);
-  if (b.kind === 'wool') return Math.min(1, around(g, b, 1).filter(i => (t[i] === T.Hills || t[i] === T.Grass) && !taken.has(i)).length / 6);
+/** How much of its full output the place gives (forest, fields or pasture around it), 0-1. `extra`: squares about to be built on. */
+export function shareAt(g: Game, b: Pick<Building, 'x' | 'y' | 'horizontal' | 'side' | 'kind'>, extra?: Set<number>): number {
+  const t = g.world.terr, taken = takenSquares(g), free = (i: number) => !taken.has(i) && !extra?.has(i);
+  if (b.kind === 'wood') return Math.min(1, around(g, b, 2).filter(i => t[i] === T.Forest && free(i)).length / 6);
+  if (b.kind === 'farm') return Math.min(1, around(g, b, 1).filter(i => t[i] === T.Grass && free(i)).length / 6);
+  if (b.kind === 'wool') return Math.min(1, around(g, b, 1).filter(i => (t[i] === T.Hills || t[i] === T.Grass) && free(i)).length / 6);
   return 1;
 }
 
+/** Buildings that would make less if these squares were built on, and how much less per minute. */
+export function harmOf(g: Game, squares: number[]): { b: Building; lost: number }[] {
+  const extra = new Set(squares), out: { b: Building; lost: number }[] = [];
+  for (const b of g.s.buildings ?? []) {
+    if (b.kind !== 'wood' && b.kind !== 'farm' && b.kind !== 'wool') continue;
+    const before = shareAt(g, b), after = shareAt(g, b, extra);
+    if (after < before) out.push({ b, lost: Math.round(INDUSTRIES[b.kind].rate * (1 + 0.5 * (b.lvl - 1)) * (before - after) * 60) });
+  }
+  return out;
+}
+export const harmText = (h: { b: Building; lost: number }[]) => h.length ? ` · ⚠ covers ${h.map(x => `${x.b.kind === 'wood' ? 'trees' : 'fields'} of the ${INDUSTRIES[x.b.kind].name} (−${x.lost}/min)`).join(', ')}` : '';
+
 /** Squares already used by track, buildings, towns and the shed. */
 export function takenSquares(g: Game, except?: Building): Set<number> {
+  const key = `${g.track.size}/${g.s.buildings?.length ?? 0}/${g.s.shed?.x},${g.s.shed?.y}`;
+  if (!except && g.taken?.key === key && g.taken.net === g.net) return g.taken.set;
   const n = g.world.n, out = new Set<number>(g.track.keys());
   for (const b of g.s.buildings ?? []) if (b !== except) for (const i of footprint(n, b)) out.add(i);
   for (const s of g.s.sites) if (s.kind === 'town') for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) out.add((s.y + dy) * n + s.x + dx);
   if (g.s.shed) out.add(g.s.shed.y * n + g.s.shed.x);
+  if (!except) g.taken = { key, net: g.net, set: out };
   return out;
 }
 
