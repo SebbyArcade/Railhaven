@@ -78,6 +78,8 @@ export interface GameState {
   pois?: import('./world/explore.ts').Poi[];
   /** 2 once the later landmarks (old halt, falls, ranger hut, windmill) were added to this map */
   poiV?: number;
+  /** 🗺 area maps bought (each marks what hides in the fog inside its circle) */
+  maps?: import('./world/maps.ts').AreaMap[];
   /** scouts out exploring */
   scouts?: import('./world/explore.ts').Scout[];
   /** guided lesson reached (new games start at 0; absent = no lessons), game time the last one was done, lesson bar folded */

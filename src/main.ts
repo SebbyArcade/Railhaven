@@ -186,6 +186,7 @@ cardEl.onclick = e => {
     if (at) { c.x = (at.x + 0.5) * 32; c.y = (at.y + 0.5) * 32; }
     openCard({ kind, id } as Card); return;
   }
+  if (b.dataset.act === 'areamap') { const why = tools.openMap(+b.dataset.x!, +b.dataset.y!); if (why) { toast(why); return; } closeCard(); const c = game.s.camera; c.x = (+b.dataset.x! + 0.5) * 32; c.y = (+b.dataset.y! + 0.5) * 32; c.z = Math.max(0.1, Math.min(c.z, 0.9 * Math.min(view.w, view.h) / (2 * (tools.mapPv?.r ?? 45) * 32))); return; }
   if (b.dataset.act === 'view') { setView((b.dataset.v || null) as MapView | null); closeCard(); return; }
   if (b.dataset.act === 'pin') { // 📌 choose where a building sends its goods ('' = automatic)
     const t = game.s.buildings?.find(x => x.id === +b.dataset.id!); if (!t) return;

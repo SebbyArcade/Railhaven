@@ -14,10 +14,11 @@ import { refundOf, removeBuilding } from '../economy/upgrades.ts';
 import { townLinked } from '../economy/towns.ts';
 import { hallOf } from '../buildings/stations.ts';
 import { placeName } from './orders.ts';
+import { buyMap, findsText, mapAt, mapCost, mapFinds, talkOf } from '../world/maps.ts';
 
 type Placement = ReturnType<typeof placementsAt>[number];
 
-export type Mode = 'pan' | 'rail' | 'double' | 'remove' | 'train' | 'build' | 'scout';
+export type Mode = 'pan' | 'rail' | 'double' | 'remove' | 'train' | 'build' | 'scout' | 'map';
 
 export const MODE_HINT: Record<Mode, string> = {
   pan: '',
@@ -26,7 +27,8 @@ export const MODE_HINT: Record<Mode, string> = {
   remove: '✂ Tap a track square to remove it.',
   train: '🚂 Trains roll out of the engine shed and run themselves: each takes the best waiting load where it is needed.',
   build: '🏗 Drag the picture where you want it. Blue row = loading track: your rails join it in line, at either end (gold arrows). Tap a ⟳ corner to turn it, double-tap it to build. ↶ Undo takes it back.',
-  scout: '🔭 Tap a glowing town (scouts on foot) or dock (a boat), then drag or tap to draw the route into the fog.',
+  scout: '🔭 Tap a glowing town (scouts on foot) or dock (a boat), then drag or tap to draw the route into the fog. A 🗺 map (on a town card) shows where to look.',
+  map: '🗺 Tap the map to move the circle. A map marks hidden towns and landmarks in it with ?. If it finds nothing, you get half back.',
 };
 
 /** The build tools: what the player is doing, and the confirm bar it needs. */
@@ -63,6 +65,8 @@ export class Tools {
   private dragOff: [number, number] | null = null;
   /** Scout mode: the route being drawn (from a town on foot, or a dock by boat) */
   scout: { path: number[]; boat: boolean; name: string } | null = null;
+  /** Map mode: the circle a map would cover */
+  mapPv: { x: number; y: number; r: number; near: string } | null = null;
 
   constructor(private g: () => Game) {}
 
@@ -71,7 +75,13 @@ export class Tools {
     this.cancel();
   }
 
-  cancel() { this.scout = null; this.plan = null; this.dbl.clear(); this.removeAt = null; this.preview = null; this.previewErr = ''; this.dragOff = null; if (this.mode !== 'build') this.buildKind = null; }
+  /** Open Map mode with the circle centred on (x, y): a town or dock on the railway. */
+  openMap(x: number, y: number): string {
+    const m = mapAt(this.g(), x, y); if (typeof m === 'string') return m;
+    this.mode = 'map'; this.cancel(); this.mapPv = m; return '';
+  }
+
+  cancel() { if (this.mode !== 'map') this.mapPv = null; this.scout = null; this.plan = null; this.dbl.clear(); this.removeAt = null; this.preview = null; this.previewErr = ''; this.dragOff = null; if (this.mode !== 'build') this.buildKind = null; }
 
   /** choose what to build: glowing squares show where it fits */
   chooseBuild(k: IndustryKind): { x: number; y: number } | null {
@@ -248,6 +258,7 @@ export class Tools {
     }
     if (this.mode === 'remove') { this.removeAt = g.track.has(i) ? i : null; this.removeCut = this.removeAt === null ? '' : cutText(g, i); if (!g.track.has(i)) toast('No track here'); return true; }
     if (this.mode === 'train') return true;
+    if (this.mode === 'map') { const m = mapAt(g, i % n, (i / n) | 0); if (typeof m === 'string') toast(m); else this.mapPv = m; return true; }
     return false;
   }
 
@@ -336,6 +347,10 @@ export class Tools {
       if (!k) return { text: `${this.scout.boat ? '⛵ Boat' : '🚶 Scout'} from ${this.scout.name}: draw the route`, ok: '✓ Send', can: false };
       return { text: `${this.scout.boat ? '⛵' : '🚶'} ${k} squares · ${fmtMoney(c)} · next square +${fmtMoney(scoutCost(k + 1, this.scout.boat) - c)}${out ? ` · ${out}/${MAX_SCOUTS} out` : ''}`, ok: '✓ Send', can: c <= g.s.money && out < MAX_SCOUTS };
     }
+    if (this.mode === 'map' && this.mapPv) {
+      const m = this.mapPv, c = mapCost(g), k = mapFinds(g, m.x, m.y, m.r).length;
+      return { text: `🗺 Map of this circle near ${m.near} · 💬 Travellers say: ${talkOf(k)}`, ok: `✓ Buy · ${fmtMoney(c)}`, can: c <= g.s.money };
+    }
     if (this.mode === 'build' && this.preview && this.previewErr) {
       return { text: `⚠ ${this.previewErr}`, ok: '✓ Build', can: false, turn: true, near: !lockedText(g, this.preview.kind) };
     }
@@ -378,6 +393,10 @@ export class Tools {
     } else if (this.mode === 'scout' && this.scout) {
       const s = sendScout(g, this.scout.path, this.scout.boat); if (typeof s === 'string') { toast(s); return; }
       toast(s.boat ? '⛵ The boat sets sail' : '🚶 The scout sets off'); this.scout = null;
+    } else if (this.mode === 'map' && this.mapPv) {
+      const r = buyMap(g, this.mapPv.x, this.mapPv.y); if (typeof r === 'string') { toast(r); return; }
+      toast(r.finds.length ? `🗺 The map shows ${findsText(r.finds)}: each is a ? in the fog. Scout it (🔭) or lay track there` : `🗺 Nothing hides in this circle · ${fmtMoney(r.refund)} back. Try another spot`, 5000);
+      this.mapPv = null; this.mode = 'pan';
     } else if (this.mode === 'remove' && this.removeAt !== null) {
       const i = this.removeAt;
       if (g.s.trains.some(t => t.trail.some(s => g.net.pieces[s.piece]!.squares.includes(i)))) { toast('A train is on this track'); return; }
