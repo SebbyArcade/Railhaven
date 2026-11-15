@@ -3,7 +3,7 @@ import { looks } from './looks.ts';
 import { hash } from '../core/rng.ts';
 import type { Game, Site } from '../state.ts';
 import type { Hall } from '../buildings/stations.ts';
-import { buildingSide } from './stations.ts';
+import { buildingSide, stationDoor } from './stations.ts';
 import { isRevealed } from '../world/fog.ts';
 import { TILE } from '../world/terrain.ts';
 import { bush, cottage, fence, person } from './art.ts';
@@ -22,14 +22,28 @@ function drawTown(ctx: CanvasRenderingContext2D, g: Game, s: Site, tm: number, z
   const L = s.lvl ?? 0, ruin = pop <= 0;
   type Spot = { hx: number; hy: number; w: number; d: number; k: number };
   const spots: Spot[] = [];
+  // a station beside the town: a lane from its door, along the station and across to the town square; the houses
+  // gather toward the station
+  const door = hall && !hall.squares.includes(s.y * g.world.n + s.x) ? stationDoor(g.s.seed, hall) : null;
+  const path = door ? (hall!.horizontal ? [door, { x: X, y: door.y }, { x: X, y: Y }] : [door, { x: door.x, y: Y }, { x: X, y: Y }]) : [];
+  const CX = door ? X + (door.x - X) * 0.4 : X, CY = door ? Y + (door.y - Y) * 0.4 : Y;
+  const onLane = (hx: number, hy: number, w: number) => {
+    for (let i = 0; i + 1 < path.length; i++) {
+      const a = path[i]!, b = path[i + 1]!, vx = b.x - a.x, vy = b.y - a.y, l2 = vx * vx + vy * vy || 1;
+      const t = Math.max(0, Math.min(1, ((hx - a.x) * vx + (hy - a.y) * vy) / l2));
+      if (Math.abs(a.x + vx * t - hx) < w / 2 + 4 && Math.abs(a.y + vy * t - hy) < 10) return true;
+    }
+    return false;
+  };
+  if (door) lane(ctx, path, ruin);
   for (let k = 0; k < houses; k++) {
     const a = H(s.x, s.y, k) * 6.283, r = 12 + H(s.y, s.x, k) * (14 + houses * 1.3);
     const big = !ruin && H(k, s.y, 5) < 0.15 + L * 0.12; // more two-storey houses as the town grows
     const w = (big ? 11 : 9) + H(k, s.x, 3) * 3, d = big ? 12 : 9.5;
     let hx = 0, hy = 0, ok = false;
     for (let tries = 0; tries < 8 && !ok; tries++) { // houses keep off the rails, the station and each other
-      const rr = r + tries * 12; hx = X + Math.cos(a) * rr; hy = Y + Math.sin(a) * rr * 0.8;
-      ok = !blockedAt(g, hx, hy, w, hall) && !spots.some(o => Math.abs(o.hx - hx) < (o.w + w) / 2 + 2.5 && Math.abs(o.hy - hy) < (o.d + d) / 2 + 2.5);
+      const rr = r + tries * 12; hx = CX + Math.cos(a) * rr; hy = CY + Math.sin(a) * rr * 0.8;
+      ok = !blockedAt(g, hx, hy, w, hall) && !onLane(hx, hy, w) && !spots.some(o => Math.abs(o.hx - hx) < (o.w + w) / 2 + 2.5 && Math.abs(o.hy - hy) < (o.d + d) / 2 + 2.5);
     }
     if (ok) spots.push({ hx, hy, w, d, k });
   }
@@ -74,6 +88,17 @@ function drawTown(ctx: CanvasRenderingContext2D, g: Game, s: Site, tm: number, z
   }
 }
 
+/** A sandy lane (overgrown while the town is in ruins) from the station door to the town square. */
+function lane(ctx: CanvasRenderingContext2D, path: { x: number; y: number }[], ruin: boolean) {
+  const line = () => { ctx.beginPath(); path.forEach((p, i) => i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)); ctx.stroke(); };
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  ctx.save(); ctx.translate(0, 1); ctx.strokeStyle = 'rgba(70,60,40,.25)'; ctx.lineWidth = 7; line(); ctx.restore();
+  ctx.strokeStyle = ruin ? '#a89a72' : '#d6c290'; ctx.lineWidth = 5.5; line();
+  if (ruin) { ctx.strokeStyle = 'rgba(90,122,58,.55)'; ctx.lineWidth = 1.6; ctx.setLineDash([3, 4]); line(); ctx.setLineDash([]); }
+  const e = path.at(-1)!; ctx.fillStyle = ruin ? '#a89a72' : '#d6c290'; ctx.beginPath(); ctx.arc(e.x, e.y, 6, 0, 7); ctx.fill(); // a little square in the middle of town
+  ctx.lineCap = 'butt'; ctx.lineJoin = 'miter';
+}
+
 /** true when a house here would sit on track or on the station (hall, platforms, building) */
 function blockedAt(g: Game, hx: number, hy: number, w: number, hall?: Hall): boolean {
   const n = g.world.n;
@@ -84,7 +109,7 @@ function blockedAt(g: Game, hx: number, hy: number, w: number, hall?: Hall): boo
   }
   if (hall) {
     const X = (hall.cx + 0.5) * TILE, Y = (hall.cy + 0.5) * TILE, side = buildingSide(g.s.seed, hall);
-    const u = hall.horizontal ? hx - X : hy - Y, v = (hall.horizontal ? hy - Y : hx - X) * side;
+    const u = hall.horizontal ? hx - X : hy - Y, v = (hall.horizontal ? hy - Y : X - hx) * side; // v as drawHall turns it
     if (Math.abs(u) < 1.5 * TILE + w / 2 && v > -30 && v < 36) return true;
   }
   return false;

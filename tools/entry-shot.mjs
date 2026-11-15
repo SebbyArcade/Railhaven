@@ -32,5 +32,8 @@ await page.waitForTimeout(300); await skip(); await look(); await page.waitForTi
 // after: carry on down and end right beside the town's east side
 console.log('laid', await lay([[ax, y - 4], [x + 5, y - 4], [x + 5, y], [x + 1, y]]));
 await page.waitForTimeout(300); await skip(); await look(); await page.waitForTimeout(500); await page.screenshot({ path: 'shots/entry-after.png' });
+// a few minutes on: people are back and the hamlet grows around its station
+await page.evaluate(([x, y]) => { const g = window.railhaven.game; const t = g.s.sites.find(s => s.x === x && s.y === y); t.pop = 120; t.lvl = 1; }, [x, y]);
+await page.waitForTimeout(500); await page.screenshot({ path: 'shots/entry-town.png' });
 console.log(info, errors.join('\n') || 'no page errors');
 await browser.close();
