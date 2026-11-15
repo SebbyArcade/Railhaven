@@ -80,6 +80,7 @@ function blockedAt(g: Game, hx: number, hy: number, w: number, hall?: Hall): boo
   for (const [ox, oy] of [[-w / 2, -7], [w / 2, -7], [-w / 2, 11], [w / 2, 11], [0, 2]]) {
     const x = Math.floor((hx + ox!) / TILE), y = Math.floor((hy + oy!) / TILE);
     if (g.track.has(y * n + x)) return true;
+    if (g.s.parks?.some(q => q.x === x && q.y === y)) return true; // a park or town project stands here
   }
   if (hall) {
     const X = (hall.cx + 0.5) * TILE, Y = (hall.cy + 0.5) * TILE, side = buildingSide(g.s.seed, hall);

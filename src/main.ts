@@ -26,6 +26,7 @@ import { tickProduction } from './economy/production.ts';
 import type { Game } from './state.ts';
 import { footprint } from './buildings/industries.ts';
 import { type Card, cardHtml } from './ui/cards.ts';
+import { buyPark, buyProject, type ParkKind, parksOf, projectOf } from './buildings/parks.ts';
 import { type MapView, VIEWS } from './ui/mapviews.ts';
 import { gameReport } from './ui/report.ts';
 import { SEASONS, seasonOf } from './world/season.ts';
@@ -231,6 +232,15 @@ cardEl.onclick = e => {
     const why = foundTown(game, p);
     if (why) { toast(why); renderCard(); return; }
     toast(`🏘 ${name} founded! Lay track onto it to link it`); openCard({ kind: 'town', id: p.id }); return;
+  }
+  if (b.dataset.act === 'park' || b.dataset.act === 'project') {
+    const t = game.s.sites.find(s => s.id === Number(b.dataset.id)); if (!t) return;
+    const why = b.dataset.act === 'park' ? buyPark(game, t) : buyProject(game, t, b.dataset.k as ParkKind);
+    if (why) { toast(why); return; }
+    const p = game.s.parks!.at(-1)!, P = projectOf(p.k);
+    game.taken = undefined; game.terrainDirty?.([p.y * game.world.n + p.x]);
+    toast(P ? `${P.icon} ${P.name} opened in ${t.name}: ${P.text.toLowerCase()}` : `🌳 Park opened in ${t.name}: its orders are now ${parksOf(game, t).length * 5}% smaller`, 3500);
+    renderCard(); return;
   }
   if (b.dataset.act === 'upgrade') {
     const t = game.s.sites.find(s => s.id === +b.dataset.id!)!, L = (t.lvl ?? 0) + 1;

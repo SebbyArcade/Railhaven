@@ -1,3 +1,4 @@
+import { drawParks } from './parks.ts';
 import type { Game } from '../state.ts';
 import { dockRange, seaDist } from '../ships/docks.ts';
 import { isRevealed } from '../world/fog.ts';
@@ -74,6 +75,7 @@ export class Renderer {
     });
     const halls = hallsOf(g.track, n, g.s.sites);
     for (const h of halls) if (vis(h.squares[1]) && isRevealed(g, h.squares[1])) drawHall(ctx, g.s.seed, h, cam.z);
+    drawParks(ctx, g, x0, y0, x1, y1, cam.z, tm);
     drawSites(ctx, g, x0, y0, x1, y1, cam.z, tm, halls);
     for (const b of g.s.buildings ?? []) if (vis(b.y * n + b.x) && isRevealed(g, b.y * n + b.x)) drawFields(ctx, g, b, tm, cam.z);
     for (const b of g.s.buildings ?? []) if (vis(b.y * n + b.x) && isRevealed(g, b.y * n + b.x)) drawBuilding(ctx, g, b, tm, cam.z);

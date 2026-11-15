@@ -12,6 +12,7 @@ import { tickScouts } from '../world/explore.ts';
 import { tickMissions } from '../progress/missions.ts';
 import { fleetMulOf, minLoad, rushDelivered, trainCap } from './upgrades.ts';
 import { V_MAX } from '../trains/train.ts';
+import { payMul } from '../buildings/parks.ts';
 import { deliverToTown, orderDone, reward, sizeName, stepOf } from './towns.ts';
 
 export const LOAD_TIME = 4;
@@ -141,7 +142,7 @@ function unload(g: Game, t: Train) {
   }
   const town = siteOf(g, j.to.id)!;
   const p = deliverToTown(g, town, k, c.n);
-  let v = payFor(k, p.order, c.d, 'order') + payFor(k, p.steady, c.d, 'steady') + payFor(k, p.surplus, c.d, 'extra');
+  let v = (payFor(k, p.order, c.d, 'order') + payFor(k, p.steady, c.d, 'steady') + payFor(k, p.surplus, c.d, 'extra')) * payMul(g, town); // 🏛 town projects pay more
   v -= rushDelivered(g, j.to, k, p.order, v); pay(g, v);
   t.lastPay = { pay: Math.round(v), at: g.s.t, n: c.n, good: k, to: j.to };
   if (!town.filled && orderDone(g, town)) {

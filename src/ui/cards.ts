@@ -2,6 +2,7 @@ import type { Game, Site } from '../state.ts';
 import { fallsMul, POI, POI_RARITY, poisOf, RARITY } from '../world/explore.ts';
 import { buildingSquares, bufOf, growsTracks, stripError, tracksOf, type Building, capOf, GOODS, type Good, INDUSTRIES, type IndustryKind, inputsOf, isFactory, isLinked, lockedText, outputOf, shareAt, forestOf, stumpsOf } from '../buildings/industries.ts';
 import { factoryState } from '../economy/production.ts';
+import { hasProject, nextParkPrice, orderMul, PARK_PRICE, parkSpot, parksOf, payMul, PROJECTS, projectsOf } from '../buildings/parks.ts';
 import { FOUND_PRICE, orderDone, orderOf, reward, sizeName, steadyGoods, stepOf, townLinked, upgradePrice } from '../economy/towns.ts';
 import { type Dest, destinationsOf, destName, type Ship, shipPlan, siteOf } from '../economy/shipping.ts';
 import { FERRY_FEE, trainPrice, trainStatus } from '../economy/dispatch.ts';
@@ -17,7 +18,7 @@ import { ordersHtml, placeName } from './orders.ts';
 import { mapHtml, type MapView } from './mapviews.ts';
 import { mapCost, MAP_R, MAP_R_SEA } from '../world/maps.ts';
 
-export type Card = { kind: 'shed'; id: 0 } | { kind: 'plot'; id: number } | { kind: 'town'; id: number } | { kind: 'bld'; id: number; page?: string } | { kind: 'train'; id: number } | { kind: 'story'; id: 0; page?: string } | { kind: 'game'; id: number; page?: string } | { kind: 'orders'; id: 0 } | { kind: 'map'; id: 0 } | { kind: 'ship'; id: number } | { kind: 'find'; id: number; more?: number };
+export type Card = { kind: 'shed'; id: 0 } | { kind: 'plot'; id: number } | { kind: 'town'; id: number; page?: string } | { kind: 'bld'; id: number; page?: string } | { kind: 'train'; id: number } | { kind: 'story'; id: 0; page?: string } | { kind: 'game'; id: number; page?: string } | { kind: 'orders'; id: 0 } | { kind: 'map'; id: 0 } | { kind: 'ship'; id: number } | { kind: 'find'; id: number; more?: number };
 
 /** the kind that makes each good */
 const makerOf = (k: Good) => (Object.keys(INDUSTRIES) as IndustryKind[]).find(m => INDUSTRIES[m].makes === k);
@@ -50,14 +51,15 @@ export function cardHtml(g: Game, c: Card, view?: MapView | null): string | null
   if (c.kind === 'ship') return shipCard(g, c.id);
   if (c.kind === 'plot') { const p = siteOf(g, c.id); return p?.kind === 'plot' ? plotCard(g, p) : null; }
   if (c.kind === 'find') return findCard(g, c.id, c.more ?? 0);
-  if (c.kind === 'town') { const t = siteOf(g, c.id); return t?.kind === 'town' ? townCard(g, t) : null; }
+  if (c.kind === 'town') { const t = siteOf(g, c.id); return t?.kind === 'town' ? townCard(g, t, c.page) : null; }
   if (c.kind === 'bld') { const b = g.s.buildings?.find(x => x.id === c.id); return b ? buildingCard(g, b, c.page) : null; }
   const t = g.s.trains.find(x => x.id === c.id); return t ? trainCard(g, t) : null;
 }
 
-function townCard(g: Game, t: Site): string {
+function townCard(g: Game, t: Site, page?: string): string {
   const L = stepOf(t), o = orderOf(g, t), linked = townLinked(g, t), plan = shipPlan(g);
   let h = `<div class="head"><b class="big">🏘</b><div><h2>${esc(t.name ?? 'Town')}</h2><span class="chip2">${sizeName(L)}</span> <span class="chip2">👥 ${Math.floor(t.pop ?? 0)}</span></div></div>`;
+  if (page === 'parks' || page === 'projects') return h + townPage(g, t, page);
   if (!linked) h += `<div class="warn">🔌 Not on the railway yet: lay track from your line into its station</div>`;
   const done = orderDone(g, t);
   h += `<h3>📋 ${done ? 'Order filled!' : `Wants these to grow into a ${sizeName(L + 1)}`}</h3>`;
@@ -77,7 +79,38 @@ function townCard(g: Game, t: Site): string {
   const coming = g.s.trains.filter(x => x.job && sameDest(x.job.to, { kind: 'town', id: t.id })).length;
   if (coming) h += `<div class="note">🚂 ${coming} train${coming > 1 ? 's' : ''} bringing goods here</div>`;
   if (linked) h += mapBtn(g, t.x, t.y, MAP_R);
+  if (linked) {
+    const np = parksOf(g, t).length, pj = projectsOf(g, t).length, om = orderMul(g, t), pm = payMul(g, t);
+    if (om < 1 || pm > 1) h += `<div class="gift">${om < 1 ? `🌳 Orders ${Math.round((1 - om) * 100)}% smaller` : ''}${om < 1 && pm > 1 ? ' · ' : ''}${pm > 1 ? `🏛 Deliveries pay ${Math.round((pm - 1) * 100)}% more` : ''}</div>`;
+    const tile = (pg: string, icon: string, title: string, sub: string) => `<button class="tile" data-act="page" data-page="${pg}"><b>${icon} ${title}</b><small>${sub}</small></button>`;
+    h += `<div class="tiles">` + tile('parks', '🌳', 'Parks', `${np} / ${PARK_PRICE.length}${np ? ` · orders −${np * 5}%` : ''}`) + tile('projects', '🏛', 'Town projects', `${pj} / ${PROJECTS.length}`) + `</div>`;
+  }
   return h;
+}
+
+/** The Parks and Town projects pages of a town card. */
+function townPage(g: Game, t: Site, page: string): string {
+  const back = `<button class="act back" data-act="page" data-page="">‹ Back</button>`, name = esc(t.name ?? 'this town');
+  let h = '';
+  if (page === 'parks') {
+    const np = parksOf(g, t).length, c = nextParkPrice(g, t), spot = c !== null ? parkSpot(g, t) : null;
+    h += `<h3>🌳 Parks</h3><div class="note">Parks make ${name} a nicer place to live: each one makes its orders 5% smaller, so it grows with fewer goods. Up to ${PARK_PRICE.length} per town.</div>`;
+    h += `<div class="row"><b class="ico">🌳</b><div class="grow"><div class="line"><span>${[0, 1, 2].map(k => k < np ? '🌳' : '<span style="opacity:.3">🌳</span>').join(' ')}</span><span>${np} / ${PARK_PRICE.length}</span></div>${bar(np / PARK_PRICE.length, '#5cc46a')}<small>${np ? `Orders here are ${np * 5}% smaller` : 'No park yet'}</small></div></div>`;
+    if (c === null) h += `<div class="gift">✅ ${name} has all its parks</div>`;
+    else if (!spot) h += `<div class="warn">🚧 No free grass near ${name}: track, water or buildings fill every square 2-4 squares from its centre</div>`;
+    else { h += `<button class="act" data-act="park" data-id="${t.id}" ${g.s.money >= c ? '' : 'disabled'}>🌳 Open a park · ${fmtMoney(c)}</button>`; if (g.s.money < c) h += `<small class="why">Need ${fmtMoney(c - Math.floor(g.s.money))} more: deliveries keep paying</small>`; }
+    return h + back;
+  }
+  h += `<h3>🏛 Town projects</h3><div class="note">Big projects for a growing town. Each adds a building to ${name}'s streets and a lasting bonus here.</div>`;
+  const room = !!parkSpot(g, t);
+  for (const P of PROJECTS) {
+    const has = hasProject(g, t, P.k), lock = stepOf(t) < P.size;
+    h += `<div class="row${has ? ' done' : ''}"><b class="ico">${P.icon}</b><div class="grow"><div class="line"><span>${P.name}</span><span>${has ? '✅ Built' : lock ? `🔒 ${sizeName(P.size)}` : fmtMoney(P.price)}</span></div><small>${P.text}</small>`;
+    if (!has && !lock) h += room ? `<button class="mini" data-act="project" data-id="${t.id}" data-k="${P.k}" ${g.s.money >= P.price ? '' : 'disabled'}>🏗 Build · ${fmtMoney(P.price)}</button>` : `<small class="why">No free grass near ${name} for it</small>`;
+    else if (lock) h += `<small class="why">Unlocks when ${name} grows into a ${sizeName(P.size)}</small>`;
+    h += `</div></div>`;
+  }
+  return h + back;
 }
 
 function plotCard(g: Game, p: Site): string {

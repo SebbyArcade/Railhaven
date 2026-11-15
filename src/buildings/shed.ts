@@ -71,6 +71,7 @@ export function placeShed(g: Game): number[] {
   const n = g.world.n, a = g.s.sites[0]!, blocked = new Set<number>();
   for (const h of hallsOf(g.track, n, g.s.sites)) for (const i of [...h.squares, ...h.approaches]) blocked.add(i);
   for (const b of g.s.buildings ?? []) for (const i of footprint(n, b)) blocked.add(i);
+  for (const p of g.s.parks ?? []) blocked.add(p.y * n + p.x);
   const cur = g.s.shed;
   if (cur && fits(g, cur.x, cur.y, cur.side, blocked, true)) return [];
   if (cur && fits(g, cur.x, cur.y, cur.side, blocked, false)) { laySiding(g); return Object.values(shedSiding(g)!); } // an older save: no siding yet
