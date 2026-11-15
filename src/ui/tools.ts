@@ -33,6 +33,8 @@ export class Tools {
   selected: number | null = null;
   /** the open card (town, building or train), shown on the map too */
   card: Card | null = null;
+  /** the map view shown (👁 Map), or none */
+  view: import('./mapviews.ts').MapView | null = null;
   flash: { square: number; until: number } | null = null;
   /** lesson ring: the square to tap next */
   ring: number | null = null;

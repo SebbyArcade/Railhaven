@@ -22,8 +22,10 @@ import { drawExplore } from './explore.ts';
 import { islandSpec, SPEC_TEXT } from '../world/specialty.ts';
 import type { Tools } from '../ui/tools.ts';
 import { bodyPoint } from '../trains/train.ts';
-import { type Ship, shipPlan } from '../economy/shipping.ts';
-import { drawShipArrow, drawTownBadges } from './orders.ts';
+import { type Plan, shipPlan } from '../economy/shipping.ts';
+import { drawAlerts, drawShipArrow, drawTownBadges } from './orders.ts';
+import { stuckList } from '../ui/orders.ts';
+import { drawView, ViewCache } from './views.ts';
 
 /** Squares under a building (trees are cleared there). */
 function builtOn(g: Game, i: number): boolean {
@@ -34,8 +36,12 @@ function builtOn(g: Game, i: number): boolean {
 /** Draws one frame. Reads the game, never changes it. */
 export class Renderer {
   readonly terrain: TerrainCache;
-  private plan = new Map<number, Ship>();
+  private plan: Plan = Object.assign(new Map(), { docks: new Map() });
   private planAt = -9;
+  private alerts = new Set<number>();
+  private views = new ViewCache();
+  /** the map view's edge arrows on screen, so a tap on one can go there */
+  readonly arrows: { sx: number; sy: number; m: import('../ui/mapviews.ts').Mark }[] = [];
   constructor(private g: Game, private tools?: Tools) {
     this.terrain = new TerrainCache(g.world, i => g.track.has(i) || i === shedSquare(g) || builtOn(g, i));
     g.terrainDirty = sq => this.terrain.invalidate(sq);
@@ -69,7 +75,7 @@ export class Renderer {
     drawShed(ctx, g, tm); // after trains: a train on the siding runs in under its roof
     drawShips(ctx, g, tm, (x, y) => x >= x0 - 2 && x <= x1 + 2 && y >= y0 - 2 && y <= y1 + 2 && !!isRevealed(g, Math.round(y) * n + Math.round(x)));
     drawExplore(ctx, g, this.tools, tm, (x, y) => x >= x0 - 2 && x <= x1 + 2 && y >= y0 - 2 && y <= y1 + 2, cam.z);
-    if (tm - this.planAt > 1) { this.planAt = tm; this.plan = shipPlan(g); } // the plan changes slowly: once a second is plenty
+    if (tm - this.planAt > 1) { this.planAt = tm; this.plan = shipPlan(g); this.alerts = new Set(stuckList(g, this.plan).filter(x => x.bld !== undefined).map(x => x.bld!)); } // the plan changes slowly: once a second is plenty
     if (this.tools?.card?.kind === 'bld') drawShipArrow(ctx, g, this.plan, this.tools.card.id, tm);
     // an open dock card shows the sea it reaches
     const open = this.tools?.card?.kind === 'bld' ? g.s.buildings?.find(b => b.id === this.tools!.card!.id) : undefined;
@@ -81,10 +87,12 @@ export class Renderer {
       }
     }
     drawTownBadges(ctx, g, this.plan, cam.z, tm);
+    if (!this.tools?.view) drawAlerts(ctx, g, this.alerts, cam.z, tm);
     this.drawOverlay(ctx, tm);
     drawFog(ctx, g, x0, y0, x1, y1, cam.z, tm);
     this.drawIslandNames(ctx, cam.z);
     ctx.restore();
+    const v = this.tools?.view; if (v) drawView(ctx, g, v, view, this.views.get(g, v, tm), tm, this.arrows);
   }
 
   private drawOverlay(ctx: CanvasRenderingContext2D, tm: number) {

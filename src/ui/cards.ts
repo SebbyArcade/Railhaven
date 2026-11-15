@@ -13,8 +13,9 @@ import type { Train } from '../trains/train.ts';
 import { fmtMoney } from './hud.ts';
 import { storyHtml } from './story.ts';
 import { ordersHtml } from './orders.ts';
+import { mapHtml, type MapView } from './mapviews.ts';
 
-export type Card = { kind: 'shed'; id: 0 } | { kind: 'plot'; id: number } | { kind: 'town'; id: number } | { kind: 'bld'; id: number; page?: string } | { kind: 'train'; id: number } | { kind: 'story'; id: 0; page?: string } | { kind: 'game'; id: 0; page?: string } | { kind: 'orders'; id: 0 };
+export type Card = { kind: 'shed'; id: 0 } | { kind: 'plot'; id: number } | { kind: 'town'; id: number } | { kind: 'bld'; id: number; page?: string } | { kind: 'train'; id: number } | { kind: 'story'; id: 0; page?: string } | { kind: 'game'; id: 0; page?: string } | { kind: 'orders'; id: 0 } | { kind: 'map'; id: 0 };
 
 /** the kind that makes each good */
 const makerOf = (k: Good) => (Object.keys(INDUSTRIES) as IndustryKind[]).find(m => INDUSTRIES[m].makes === k);
@@ -39,10 +40,11 @@ const bar = (f: number, col: string) => `<div class="bar"><i style="width:${Math
 const bName = (b: Building) => INDUSTRIES[b.kind].name;
 
 /** Card HTML. Every number is read fresh, so the card is redrawn each second while open. */
-export function cardHtml(g: Game, c: Card): string | null {
+export function cardHtml(g: Game, c: Card, view?: MapView | null): string | null {
   if (c.kind === 'shed') return shedCard(g);
   if (c.kind === 'story') return storyHtml(g, c.page);
   if (c.kind === 'orders') return ordersHtml(g);
+  if (c.kind === 'map') return mapHtml(g, view ?? null);
   if (c.kind === 'plot') { const p = siteOf(g, c.id); return p?.kind === 'plot' ? plotCard(g, p) : null; }
   if (c.kind === 'town') { const t = siteOf(g, c.id); return t?.kind === 'town' ? townCard(g, t) : null; }
   if (c.kind === 'bld') { const b = g.s.buildings?.find(x => x.id === c.id); return b ? buildingCard(g, b, c.page) : null; }
