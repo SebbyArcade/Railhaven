@@ -113,6 +113,13 @@ cardEl.onclick = e => {
     newArmed = 0; startGame(freshGame()); return;
   }
   if (b.dataset.act === 'loadfile') { filePick.click(); return; }
+  if (b.dataset.act === 'open') { // from the Orders board: show the place on the map and open its card
+    const kind = b.dataset.kind as 'town' | 'bld' | 'train', id = +b.dataset.id!, c = game.s.camera;
+    const at = kind === 'town' ? game.s.sites.find(s => s.id === id) : kind === 'bld' ? game.s.buildings?.find(x => x.id === id) : null;
+    if (at) { c.x = (at.x + 0.5) * 32; c.y = (at.y + 0.5) * 32; }
+    openCard({ kind, id } as Card); return;
+  }
+  if (b.dataset.act === 'full') { const d = document.documentElement; if (document.fullscreenElement) void document.exitFullscreen?.(); else d.requestFullscreen?.().catch(() => toast('Full screen works when the game is opened in Chrome')); return; }
   if (b.dataset.act === 'copycode') { void saveCode(game).then(async c => { myCode = c; renderCard(); try { await navigator.clipboard.writeText(c); toast('📋 Code copied: paste it in 🗺 Game on the other side'); } catch { toast('Press on the code below, Select all, then Copy'); } }); return; }
   if (b.dataset.act === 'savefile') { void saveCode(game).then(saveFile); return; }
   if (b.dataset.act === 'loadold') { const t = oldSave(); if (t) void bringOver(t); return; }
@@ -370,7 +377,8 @@ function updateUi() {
 let last0 = 0, last = performance.now(), saveT = 0, lastMenu = 0, lastCard = 0, newsAt = 0;
 function frame(now: number) {
   const dt = Math.min(0.1, (now - last) / 1000); last = now;
-  if (!document.hidden) { game.s.t += dt; game.sys.tick(dt); tickProduction(game, dt); tickTowns(game, dt); tickTrains(game, dt); if (Math.floor(game.s.t / 5) !== Math.floor((game.s.t - dt) / 5)) checkStuck(game); if (tickBreaks(game)) breaksChanged(game); }
+  if (idle() && pausedEl.style.display !== 'flex') { pausedEl.style.display = 'flex'; saveTo(localStorage, game); }
+  if (!document.hidden && !idle()) { game.s.t += dt; game.sys.tick(dt); tickProduction(game, dt); tickTowns(game, dt); tickTrains(game, dt); if (Math.floor(game.s.t / 5) !== Math.floor((game.s.t - dt) / 5)) checkStuck(game); if (tickBreaks(game)) breaksChanged(game); }
   if (game.news?.length && now > newsAt && !(tools.card?.kind === 'story' && tools.card.page === 'act')) { toast(game.news.shift()!, 4000); newsAt = now + 4200; }
   if (Math.floor(now / 1000) !== lastCard) {
     lastCard = Math.floor(now / 1000);
@@ -387,4 +395,11 @@ function frame(now: number) {
   requestAnimationFrame(frame);
 }
 addEventListener('visibilitychange', () => { if (document.hidden) saveTo(localStorage, game); });
+// 📋 the Railway level chip opens the Orders board
+hud.onclick = e => { if ((e.target as HTMLElement).closest('[data-orders]')) { if (tools.card?.kind === 'orders') closeCard(); else { menuOpen = false; tools.mode = 'pan'; tools.cancel(); openCard({ kind: 'orders', id: 0 }); } } };
+// no money piles up while nobody is playing: after 5 minutes without a touch the game pauses until the next one
+const IDLE_S = 300, pausedEl = $('paused');
+let lastTouch = performance.now();
+for (const ev of ['pointerdown', 'keydown', 'wheel'] as const) addEventListener(ev, () => { lastTouch = performance.now(); if (pausedEl.style.display === 'flex') pausedEl.style.display = 'none'; }, { capture: true, passive: true });
+const idle = () => performance.now() - lastTouch > IDLE_S * 1000;
 requestAnimationFrame(frame);

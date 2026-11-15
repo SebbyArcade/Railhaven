@@ -8,8 +8,8 @@ that makes sense. Details for each line: `legacy/CHANGES.md` (search the version
 - [x] TypeScript + Vite project, single-file build
 - [x] CLAUDE.md with design rules
 - [x] Old game kept in `legacy/` (live source, v283 preview source, playable v283 build, CHANGES.md)
-- [ ] GitHub Actions: typecheck, tests, build on every pull request
-- [ ] Sébastien's saves copied to `tests/saves/`
+- [x] GitHub Actions: typecheck, tests, build on every pull request
+- [x] Sébastien's saves copied to `tests/saves/`
 
 ## Stage 1: map and camera
 - [x] Same terrain as the old game for the same seed (tested bit for bit)
@@ -60,8 +60,8 @@ that makes sense. Details for each line: `legacy/CHANGES.md` (search the version
 ## Stage 5: extras, save import, art
 - [x] Legacy save importer (localStorage `railhaven90` and RAILHAVEN2 codes/files) tested on every save in `tests/saves/` (tools/import-check.ts)
 - [x] Move my game: export/import codes and files (🗺 Game → 📤 Move my game; RAILHAVEN3 codes, save files)
-- [ ] Cards: town (status + tiles), industry, factory, dock, train, ship; Orders board; Stuck list; alerts (❗) (done: town, industry and train cards, order badges over towns)
+- [ ] Cards: town (status + tiles), industry, factory, dock, train, ship; Orders board; Stuck list; alerts (❗) (done: town, industry, factory, dock, train cards, order badges over towns, 📋 Orders board with a ⚠ Needs you list; to do: ship card, ❗ alerts on the map)
 - [ ] Map views: Problems, Demand, Resources, Fuel range, Exploration
 - [ ] Hints (💡), Recommended build, discovery cards, toasts queue, game report
 - [ ] Miniature art at today's level: towns (street grid, gardens, station buildings), industries, factories, docks, shed, trains (steam + cargo wagons), ships, people, smoke
-- [ ] Pause when hidden / idle, full-screen button, side sheet on wide screens
+- [x] Pause when hidden / idle, full-screen button, side sheet on wide screens
