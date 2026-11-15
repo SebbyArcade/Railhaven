@@ -72,3 +72,19 @@ describe('🚩 settlement sites', () => {
     expect(h).toContain('Found the town'); expect(h).toContain('Lay track into its station'); expect(h).toContain('more');
   });
 });
+
+describe('💡 tips only when money is stuck (his live save, 2026-11-15)', () => {
+  const live = () => { const raw = fs.readFileSync('tests/saves/save-seb-2026-11-15b.json', 'utf8'); return loadFrom({ getItem: () => raw, setItem: () => {} } as unknown as Storage)! as Game; };
+  const flat = (g: Game, perMin: number) => { for (let k = 0; k < 40; k++) { g.s.t += 5; g.s.money += perMin / 12; sampleNet(g); } };
+
+  it('when one sale is not enough, it names every building to sell from and the total', () => {
+    const g = live(); g.s.money = 200; flat(g, 0);
+    const t = moneyTip(g)!;
+    expect(t.text).toMatch(/Sell the stock at your .*Wheat Farm.* and .*together\): then a Coal Mine is in reach/);
+  });
+
+  it('no tip when the player is doing fine, even if money dips for a moment', () => {
+    const g = live(); g.s.money = 50000; flat(g, -100);
+    expect(moneyTip(g)).toBeNull();
+  });
+});

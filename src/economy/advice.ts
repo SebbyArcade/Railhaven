@@ -121,7 +121,9 @@ export function moneyTip(g: Game): Tip | null {
   // the needed building is not about to be affordable from deliveries alone (selling stock may be the way: the tip says so)
   const step = neededStep(g), net2 = netPerMin(g, 120), far = !!step && g.s.money < step.price && net2 !== null && (net2 <= 0 || (step.price - g.s.money) / net2 > 5);
   const shown = g.s.t - (g.tipAt ?? -1e9) < 45; // once up, a tip stays a while (no flicker as money goes up and down)
-  if (!granted && !far && !shown && (net === null || net >= 0)) return null;
+  // only while money is barely going up and the next needed building is out of reach (never just because money dipped)
+  const short = !!step && g.s.money < step.price && net !== null && net < 0;
+  if (!granted && !far && !shown && !short) return null;
   const tip = pickTip(g, step);
   if (tip && !shown) g.tipAt = g.s.t;
   return tip;
@@ -134,9 +136,14 @@ function pickTip(g: Game, step: Step | null): Tip | null {
     return { text: `${why}🏗 Build a ${INDUSTRIES[step.kind].icon} ${INDUSTRIES[step.kind].name} ($${step.price.toLocaleString('en-US')}): ${step.town.name} wants ${w.icon} ${w.name.toLowerCase()}`, go: { kind: 'build', what: step.kind } };
   }
   if (step && g.s.money + sellable(g) >= step.price) {
-    const b = (g.s.buildings ?? []).filter(x => sellOffer(x).pay > 0).sort((p, q) => sellOffer(q).pay - sellOffer(p).pay)[0] as Building;
-    const o = sellOffer(b), k = INDUSTRIES[b.kind].makes as Good;
-    return { text: `${why}💸 Sell ${o.n} ${GOODS[k].icon} at the ${INDUSTRIES[b.kind].name} for $${o.pay.toLocaleString('en-US')}: then a ${INDUSTRIES[step.kind].name} is in reach`, go: { kind: 'bld', id: b.id } };
+    const all = (g.s.buildings ?? []).filter(x => sellOffer(x).pay > 0).sort((p, q) => sellOffer(q).pay - sellOffer(p).pay) as Building[];
+    // the fewest sales that together reach the price, biggest first
+    const pick: Building[] = []; let got = g.s.money;
+    for (const b of all) { if (got >= step.price) break; pick.push(b); got += sellOffer(b).pay; }
+    const b = pick[0]!, o = sellOffer(b), k = INDUSTRIES[b.kind].makes as Good;
+    if (pick.length === 1) return { text: `${why}💸 Sell ${o.n} ${GOODS[k].icon} at the ${INDUSTRIES[b.kind].name} for $${o.pay.toLocaleString('en-US')}: then a ${INDUSTRIES[step.kind].name} is in reach`, go: { kind: 'bld', id: b.id } };
+    const names = pick.map(x => `${INDUSTRIES[x.kind].icon} ${INDUSTRIES[x.kind].name}`), sum = pick.reduce((a, x) => a + sellOffer(x).pay, 0);
+    return { text: `${why}💸 Sell the stock at your ${names.slice(0, -1).join(', ')} and ${names.at(-1)} ($${sum.toLocaleString('en-US')} together): then a ${INDUSTRIES[step.kind].name} is in reach. Start with the ${INDUSTRIES[b.kind].name} (+$${o.pay.toLocaleString('en-US')})`, go: { kind: 'bld', id: b.id } };
   }
   const t = workless(g);
   if (t && g.s.trains.length > 1) return { text: `${why}🚂 Train ${t.id} has had no paying work for a while: sell it for $${trainRefund(g).toLocaleString('en-US')}`, go: { kind: 'train', id: t.id } };
