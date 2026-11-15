@@ -5,6 +5,7 @@ import { MAX_SCOUTS, scoutCost, scoutStarts, scoutStepError, sendScout } from '.
 import { trackChanged } from '../game.ts';
 import { type BuiltStroke, buildPlan, extendPlan, isAnchor, type PaintPlan, planCost, planError, startPlan, undoStroke } from '../track/paint.ts';
 import { removeSquare } from '../track/edit.ts';
+import { passingLoop } from '../track/loops.ts';
 import { BRIDGE_UPKEEP, TRACK_COST } from '../track/rules.ts';
 import { buyTrain, trainPrice } from '../economy/dispatch.ts';
 import { bodyPoint, trainLength } from '../trains/train.ts';
@@ -24,7 +25,7 @@ export type Mode = 'pan' | 'rail' | 'double' | 'remove' | 'train' | 'build' | 's
 export const MODE_HINT: Record<Mode, string> = {
   pan: '',
   rail: '🛤 Drag outward from your track (from Ashford at first). To join a town, follow its arrows: track straight across its square, past it, or ending right beside it. ✓ Build when done.',
-  double: '═ Tap or drag along your track to make it double. Trains keep left, so two can pass.',
+  double: '═ Tap single track for a 🔁 passing loop, or drag along your track to double it. Trains keep right like cars: one lane each way.',
   remove: '✂ Tap a track square to remove it.',
   train: '🚂 Trains roll out of the engine shed and run themselves: each takes the best waiting load where it is needed.',
   build: '🏗 Drag the picture where you want it. Blue row = loading track: your rails join it in line, at either end (gold arrows). Tap a ⟳ corner to turn it, double-tap it to build. ↶ Undo takes it back.',
@@ -251,7 +252,17 @@ export class Tools {
       if (!this.plan && g.s.sites.some(s => s.kind === 'plot' && s.y * n + s.x === i)) return false; // the flag: its card opens
       toast('New track must join your network: start from your track or from Ashford'); return true;
     }
-    if (this.mode === 'double') { if (g.track.has(i)) { if (this.dbl.has(i)) this.dbl.delete(i); else this.dbl.add(i); } return true; }
+    if (this.mode === 'double') {
+      if (!g.track.has(i)) return true;
+      if (!this.dbl.size && !g.track.get(i)!.dbl) { // a first tap on single track: a passing loop, long enough for your trains
+        const loop = passingLoop(g, i);
+        if (typeof loop === 'string') { this.dbl.add(i); toast(`${loop}. This square is marked: tap or drag more squares to double`, 4000); return true; }
+        for (const q of loop) this.dbl.add(q);
+        toast(`🔁 Passing loop: ${loop.length} squares. A train waits on one track while another passes on the other. Tap ✓ Double`, 4000); return true;
+      }
+      if (this.dbl.has(i)) this.dbl.delete(i); else this.dbl.add(i);
+      return true;
+    }
     if (this.mode === 'build' && this.buildKind) {
       if (this.preview && turnSquares(n, this.preview).includes(i)) { this.turn(); return true; } // a corner arrow: turn it
       if (this.preview && footprint(n, this.preview).includes(i)) { // a tap on the outline: a second tap soon after builds it

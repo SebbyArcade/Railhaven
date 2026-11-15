@@ -58,7 +58,7 @@ function assemble(s: GameState): Game {
     for (const t of s.trains) if (t.at) relocate(net, t, t.at);
     s.netKey = networkKey(net);
   }
-  g.sys.blocked = blockedPieces(g); g.sys.anyLane = platformPieces(g);
+  g.sys.blocked = blockedPieces(g); g.sys.anyLane = platformPieces(g); g.sys.throat = throatPieces(g, g.sys.anyLane);
   for (const t of s.trains) if (t.dest !== undefined && t.plan.length === 0) g.sys.sendTo(t, t.dest, t.area);
   g.sys.rebuildHolds();
   return g;
@@ -136,13 +136,33 @@ export function trackChanged(g: Game) {
   checkPois(g);
   g.s.trains.forEach((t, k) => { relocate(g.net, t, where[k]!); });
   g.s.breaks = g.s.breaks?.filter(b => g.track.has(b.square));
-  g.sys.blocked = blockedPieces(g); g.sys.anyLane = platformPieces(g);
+  g.sys.blocked = blockedPieces(g); g.sys.anyLane = platformPieces(g); g.sys.throat = throatPieces(g, g.sys.anyLane);
   g.sys.rebuildHolds();
   for (const t of g.s.trains) if (t.dest !== undefined) g.sys.sendTo(t, t.dest, t.area);
   g.s.netKey = networkKey(g.net);
 }
 
 /** Pieces wholly inside station halls and yards, where trains may use either lane. */
+/** Pieces within two squares of a station hall or yard (outside it): their throats, where nobody stops. */
+function throatPieces(g: Game, area: Set<number>): Set<number> {
+  const n = g.world.n, inArea = new Set<number>(), near = new Set<number>();
+  for (const id of area) for (const i of g.net.pieces[id]!.squares) inArea.add(i);
+  let edge = [...inArea];
+  for (let k = 0; k < 2; k++) {
+    const next: number[] = [];
+    for (const i of edge) {
+      const t = g.track.get(i); if (!t) continue;
+      for (let d = 0; d < 4; d++) if (t.links & (1 << d)) {
+        const j = i + [1, n, -1, -n][d]!; // E S W N, as in core/grid
+        if (!g.track.has(j) || inArea.has(j) || near.has(j)) continue;
+        near.add(j); next.push(j);
+      }
+    }
+    edge = next;
+  }
+  return new Set(g.net.pieces.filter(p => !area.has(p.id) && p.squares.some(i => near.has(i))).map(p => p.id));
+}
+
 function platformPieces(g: Game): Set<number> {
   const n = g.world.n, sq = new Set<number>();
   for (const h of hallsOf(g.track, n, g.s.sites, g.world.terr)) for (const i of h.squares) sq.add(i);

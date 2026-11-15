@@ -60,7 +60,8 @@ export function stuckList(g: Game, plan = shipPlan(g)): Stuck[] {
         .sort((a, b) => +(islandOfB(g, b) === g.world.home) - +(islandOfB(g, a) === g.world.home))[0];
       out.push({ icon: '🚦', text: `${who}: ${esc(j.crowded.island)} has ${j.crowded.idle} trains with no work standing on its line. Ship spare trains to another island (⚓ Dock → 🚂 Trains there)`, btn: to ? `<button class="mini" data-act="open" data-kind="bld" data-id="${to.id}" data-page="trains">⛴ Ship ›</button>` : open('train', j.trains[0]!.id), x: j.x, y: j.y });
     } else if (j.squares.length) {
-      out.push({ icon: '🚦', text: `${who}: the line ahead is single track. Double ${j.squares.length} square${j.squares.length > 1 ? 's' : ''} (${fmtMoney(j.squares.length * TRACK_COST.double)}) so trains can pass`, btn: `<button class="mini" data-act="dbljam" data-sq="${j.squares.join(',')}">═ Double ›</button>`, x: j.x, y: j.y });
+      if (j.loop) out.push({ icon: '🚦', text: `${who}: trains wait for each other on single track. A 🔁 passing loop here (${j.loop.length} squares, ${fmtMoney(j.loop.length * TRACK_COST.double)}) lets them pass`, btn: `<button class="mini" data-act="dbljam" data-sq="${j.loop.join(',')}">🔁 Loop ›</button>`, x: j.x, y: j.y });
+      else out.push({ icon: '🚦', text: `${who}: the line ahead is single track. Double ${j.squares.length} square${j.squares.length > 1 ? 's' : ''} (${fmtMoney(j.squares.length * TRACK_COST.double)}) so trains can pass`, btn: `<button class="mini" data-act="dbljam" data-sq="${j.squares.join(',')}">═ Double ›</button>`, x: j.x, y: j.y });
     } else out.push({ icon: '🚦', text: `${who}: trains are queuing on double track. Another line or a bigger yard there would help`, btn: open('train', j.trains[0]!.id), x: j.x, y: j.y });
   }
   const idle = g.s.trains.filter(t => !t.job);

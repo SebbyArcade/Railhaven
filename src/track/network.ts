@@ -197,13 +197,7 @@ export function buildNetwork(track: TrackMap, n: number, opt: NetworkOptions = {
   //     (and so runs on the wrong lane) can cross back to its own lane soon. Next to stations and yards, and every 8 squares.
   const crossover = new Set<Piece>(), xUsed = new Set<number>();
   const plainDbl = (i: number, d: Dir) => i >= 0 && !consumed.has(i) && (!opt.noWide?.(i) || !!opt.crossOk?.(i)) && !opt.lanes?.(i) && isDbl(i) && !isCross(i) && links(i) === (bit(d) | bit(opposite(d)));
-  for (const i of keys) for (const d of [0, 1] as Dir[]) {
-    const j = nb(i, d), before = nb(i, opposite(d)), after = nb(j, d);
-    if (!plainDbl(i, d) || !plainDbl(j, d) || xUsed.has(i) || xUsed.has(j)) continue;
-    if (laneOffsets(i, opposite(d)).length !== 2 || laneOffsets(j, d).length !== 2) continue;
-    const along = d === 0 ? i % n : (i / n) | 0;
-    const byStop = [before, i, j, after].some(q => q >= 0 && !!opt.stationEnd?.(q)) || [before, after].some(q => q >= 0 && !!opt.noWide?.(q) && !opt.crossOk?.(q));
-    if (along % 8 !== 0 && !byStop) continue;
+  const xover = (i: number, d: Dir, j: number) => {
     xUsed.add(i).add(j);
     const ta: V2 = [DX[d], DY[d]], k = 0.42 * 2 * T;
     for (const o of [-LANE, LANE]) {
@@ -211,6 +205,20 @@ export function buildNetwork(track: TrackMap, n: number, opt: NetworkOptions = {
       add(sampleCubic(p0, [p0[0] + ta[0] * k, p0[1] + ta[1] * k], [p3[0] - ta[0] * k, p3[1] - ta[1] * k], p3, 16), [i, j], 'fan', ta, ta);
       crossover.add(pieces.at(-1)!);
     }
+  };
+  for (const i of keys) for (const d of [0, 1] as Dir[]) {
+    const j = nb(i, d), before = nb(i, opposite(d)), after = nb(j, d);
+    if (!plainDbl(i, d) || !plainDbl(j, d) || xUsed.has(i) || xUsed.has(j)) continue;
+    if (laneOffsets(i, opposite(d)).length !== 2 || laneOffsets(j, d).length !== 2) continue;
+    const along = d === 0 ? i % n : (i / n) | 0;
+    // next to a station or yard on this same line (a branch leaving beside a station doesn't count)
+    const stop = (q: number) => q >= 0 && !!opt.noWide?.(q) && !opt.crossOk?.(q);
+    const byStop = [before, after].some(stop) || [before >= 0 ? nb(before, opposite(d)) : -1, after >= 0 ? nb(after, d) : -1].some(q => stop(q) && [before, after].some(e => e >= 0 && !!opt.stationEnd?.(e)));
+    if (along % 8 !== 0 && !byStop) continue;
+    // out on the open line only where the double track runs on a good way both sides (never inside a short passing loop,
+    // whose two tracks must stay free to wait on)
+    if (!byStop) { let ok = true; for (const [q0, dd] of [[i, opposite(d)], [j, d]] as [number, Dir][]) { let q = q0; for (let k = 0; k < 3; k++) { q = nb(q, dd); if (!plainDbl(q, d)) { ok = false; break; } } } if (!ok) continue; }
+    xover(i, d, j);
   }
 
   // drop pieces left hanging (a branch leg whose junction side is all taken by turnouts): every non-buffer end must join
@@ -253,7 +261,8 @@ export function buildNetwork(track: TrackMap, n: number, opt: NetworkOptions = {
     if (near(P, Q) || across(P, Q) || ((dblTurn.has(P) || dblTurn.has(Q) || crossover.has(P) || crossover.has(Q)) && touch(P, Q))) { conflicts[a]!.push(b); conflicts[b]!.push(a); }
   }
   // a train can wait here while another passes: a parallel lane runs beside it (double track, station or yard tracks)
-  const passing = pieces.map(p => p.kind !== 'fan' && !dblTurn.has(p) && !p.squares.some(sq => crossing.has(sq)) && p.squares.every(sq => net_bySq(bySquare, sq).some(o => o !== p.id && !conflicts[p.id]!.includes(o) && pieces[o]!.kind !== 'fan')));
+  // never on points: a train standing on a crossover's squares would block the trains that need to cross there
+  const passing = pieces.map(p => p.kind !== 'fan' && !dblTurn.has(p) && !p.squares.some(sq => crossing.has(sq) || xUsed.has(sq)) && p.squares.every(sq => net_bySq(bySquare, sq).some(o => o !== p.id && !conflicts[p.id]!.includes(o) && pieces[o]!.kind !== 'fan')));
   const side = pieces.map(p => {
     if (crossover.has(p)) return 0; // a crossover is fine either way: the lane after it counts
     // offset of the lane from the middle of the square edge it starts on, seen along the direction of travel

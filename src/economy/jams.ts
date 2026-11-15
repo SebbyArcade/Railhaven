@@ -5,6 +5,7 @@ import { isLinked, yardSquares } from '../buildings/industries.ts';
 import { hallsOf } from '../buildings/stations.ts';
 import { isDock, islandName, islandOfB } from '../ships/docks.ts';
 import { headSquare, islandOfTrain } from './dispatch.ts';
+import { passingLoop } from '../track/loops.ts';
 
 /** A train held up this long (seconds) counts as stuck in a jam. */
 export const JAM_AFTER = 45;
@@ -14,6 +15,8 @@ export interface Jam {
   trains: Train[];
   /** single-track squares just ahead of them: doubling these lets trains pass */
   squares: number[];
+  /** a passing loop on that stretch, when there is a straight long enough for one */
+  loop?: number[];
   /** where to look, and the nearest town's name */
   x: number; y: number; near: string; island: number;
   /** the island has more trains waiting for work than its track can hold: ship some away from this dock */
@@ -54,6 +57,9 @@ export function jams(g: Game): Jam[] {
     const idle = g.s.trains.filter(t => !t.job && islandOfTrain(g, t) === isl).length;
     const work = (g.s.buildings ?? []).filter(b => !isDock(b) && isLinked(g, b) && islandOfB(g, b) === isl).length;
     const jam: Jam = { trains, squares: [...sq], x, y, island: isl, near: nearestTown(g, x, y)?.name ?? 'your line' };
+    for (const i of [...sq].sort((a, b) => Math.hypot(a % n - x, Math.floor(a / n) - y) - Math.hypot(b % n - x, Math.floor(b / n) - y)).reverse()) {
+      const l = passingLoop(g, i); if (typeof l !== 'string') { jam.loop = l; break; }
+    }
     if (idle >= 3 && idle > work) {
       const dock = (g.s.buildings ?? []).find(b => isDock(b) && isLinked(g, b) && islandOfB(g, b) === isl);
       jam.crowded = { idle, island: islandName(g, isl), ...(dock ? { dock: dock.id } : {}) };
