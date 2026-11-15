@@ -1,0 +1,240 @@
+import type { Hear, Scene } from './scene.ts';
+
+/**
+ * Music and sound effects, all made in code with Web Audio (no sound files, so the game stays one file).
+ * Effects follow what is on screen (see scene.ts) and fade out when zoomed out; the music keeps playing.
+ */
+
+export interface SoundSettings { music: boolean; sfx: boolean }
+const KEY = 'railhaven-sound';
+
+export function loadSettings(): SoundSettings {
+  try { const s = JSON.parse(localStorage.getItem(KEY) ?? '{}'); return { music: s.music !== false, sfx: s.sfx !== false }; } catch { return { music: true, sfx: true }; }
+}
+
+const rnd = (a: number, b: number) => a + Math.random() * (b - a);
+const midi = (m: number) => 440 * 2 ** ((m - 69) / 12);
+
+/** Chord progressions per season: [root offset from the key, minor?] for each bar. */
+const SEASON_MUSIC = [
+  { key: 60, bpm: 78, bars: [[0, 0], [9, 1], [5, 0], [7, 0]] },  // spring
+  { key: 62, bpm: 86, bars: [[0, 0], [5, 0], [9, 1], [7, 0]] },  // summer
+  { key: 57, bpm: 72, bars: [[0, 1], [8, 0], [3, 0], [10, 0]] }, // autumn
+  { key: 55, bpm: 66, bars: [[0, 1], [5, 1], [8, 0], [7, 0]] },  // winter
+] as const;
+const PENTA_MAJ = [0, 2, 4, 7, 9], PENTA_MIN = [0, 3, 5, 7, 10];
+
+export class Sound {
+  settings = loadSettings();
+  private ac: AudioContext | null = null;
+  private master!: GainNode; private musicBus!: GainNode; private sfxBus!: GainNode; private echo!: DelayNode;
+  private noise!: AudioBuffer;
+  private loops: Record<'sea' | 'wind' | 'rain', { g: GainNode; f: BiquadFilterNode } | null> = { sea: null, wind: null, rain: null };
+  private next = new Map<string, number>();
+  private wasMoving = new Map<string, boolean>();
+  private whistleAt = 0; private thunderAt = 0; private birdAt = 0;
+  private bar = 0; private barAt = 0; private note = 7;
+  season = 0;
+
+  /** Browsers only allow sound after a tap: call this from the first touch. */
+  unlock() {
+    if (!this.ac) {
+      const AC = window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      if (!AC) return;
+      const ac = this.ac = new AC();
+      this.master = ac.createGain(); this.master.gain.value = 0.9; this.master.connect(ac.destination);
+      this.musicBus = ac.createGain(); this.musicBus.connect(this.master);
+      this.sfxBus = ac.createGain(); this.sfxBus.connect(this.master);
+      // a soft echo on the music for warmth
+      this.echo = ac.createDelay(1); this.echo.delayTime.value = 0.42;
+      const fb = ac.createGain(); fb.gain.value = 0.28; const eg = ac.createGain(); eg.gain.value = 0.35;
+      this.echo.connect(fb); fb.connect(this.echo); this.echo.connect(eg); eg.connect(this.musicBus);
+      const len = ac.sampleRate * 2, buf = this.noise = ac.createBuffer(1, len, ac.sampleRate), d = buf.getChannelData(0);
+      let b0 = 0, b1 = 0, b2 = 0; // soft (pink-ish) noise
+      for (let i = 0; i < len; i++) { const w = Math.random() * 2 - 1; b0 = 0.99765 * b0 + w * 0.099; b1 = 0.963 * b1 + w * 0.2965; b2 = 0.57 * b2 + w * 1.0527; d[i] = (b0 + b1 + b2 + w * 0.1848) * 0.2; }
+      this.apply();
+      this.barAt = ac.currentTime + 0.3;
+    }
+    if (this.ac.state === 'suspended') void this.ac.resume();
+  }
+
+  /** Turn music or effects on or off (remembered on this device). */
+  set(k: keyof SoundSettings, on: boolean) {
+    this.settings[k] = on; localStorage.setItem(KEY, JSON.stringify(this.settings)); this.apply();
+  }
+  private apply() {
+    if (!this.ac) return; const t = this.ac.currentTime;
+    this.musicBus.gain.setTargetAtTime(this.settings.music ? 0.16 : 0, t, 0.3);
+    this.sfxBus.gain.setTargetAtTime(this.settings.sfx ? 0.8 : 0, t, 0.2);
+  }
+
+  /** Stop all sound while the game is paused or hidden. */
+  pause(paused: boolean) {
+    if (!this.ac) return;
+    if (paused && this.ac.state === 'running') void this.ac.suspend();
+    else if (!paused && this.ac.state === 'suspended') { void this.ac.resume(); this.barAt = Math.max(this.barAt, this.ac.currentTime + 0.2); }
+  }
+
+  /** Call every frame with what is audible now. */
+  update(sc: Scene) {
+    const ac = this.ac; if (!ac || ac.state !== 'running') return;
+    const now = ac.currentTime;
+    if (this.settings.music) this.music(now); else this.barAt = now + 0.3;
+    this.ambience(sc, now);
+    if (!this.settings.sfx) return;
+    const seen = new Set<string>();
+    for (const h of sc.sources) { seen.add(h.id); this.source(h, now); }
+    for (const id of [...this.next.keys()]) if (!seen.has(id)) { this.next.delete(id); this.wasMoving.delete(id); }
+  }
+
+  // ---------- music ----------
+  private music(now: number) {
+    while (this.barAt < now + 0.5) {
+      const M = SEASON_MUSIC[this.season]!, beat = 60 / M.bpm, t0 = this.barAt, [off, minor] = M.bars[this.bar % 4]!;
+      const root = M.key + off, third = minor ? 3 : 4;
+      for (const iv of [0, third, 7, 12]) this.pad(midi(root - 12 + iv), t0, beat * 4);
+      this.tone(midi(root - 24), t0, beat * 1.8, 0.22, 'sine'); this.tone(midi(root - 24 + 7), t0 + beat * 2, beat * 1.8, 0.14, 'sine');
+      const scale = this.season >= 2 ? PENTA_MIN : PENTA_MAJ; void minor;
+      for (let b = 0; b < 8; b++) { // a wandering little tune on the half beats
+        if (Math.random() > (b % 2 ? 0.28 : 0.6)) continue;
+        this.note = Math.max(0, Math.min(11, this.note + Math.round(rnd(-2.4, 2.4))));
+        const m = M.key + scale[this.note % 5]! + 12 * Math.floor(this.note / 5);
+        this.pluck(midi(m), t0 + b * beat / 2, 0.11);
+      }
+      this.bar++; this.barAt += beat * 4;
+    }
+  }
+  private pad(f: number, t: number, dur: number) {
+    const ac = this.ac!, g = ac.createGain(), lp = ac.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 900;
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.05, t + 0.9); g.gain.setTargetAtTime(0, t + dur - 0.4, 0.5);
+    for (const det of [-6, 6]) { const o = ac.createOscillator(); o.type = 'triangle'; o.frequency.value = f; o.detune.value = det; o.connect(lp); o.start(t); o.stop(t + dur + 2); }
+    lp.connect(g); g.connect(this.musicBus);
+  }
+  private tone(f: number, t: number, dur: number, vol: number, type: OscillatorType) {
+    const ac = this.ac!, o = ac.createOscillator(), g = ac.createGain(); o.type = type; o.frequency.value = f;
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vol, t + 0.05); g.gain.setTargetAtTime(0, t + dur * 0.6, dur * 0.3);
+    o.connect(g); g.connect(this.musicBus); o.start(t); o.stop(t + dur + 1);
+  }
+  private pluck(f: number, t: number, vol: number) {
+    const ac = this.ac!, g = ac.createGain();
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vol, t + 0.01); g.gain.exponentialRampToValueAtTime(0.0005, t + 1.4);
+    for (const [m, v] of [[1, 1], [2, 0.25], [3, 0.08]] as const) { const o = ac.createOscillator(), og = ac.createGain(); o.frequency.value = f * m; og.gain.value = v; o.connect(og); og.connect(g); o.start(t); o.stop(t + 1.5); }
+    g.connect(this.musicBus); g.connect(this.echo);
+  }
+
+  // ---------- ambience: sea, wind, rain, birds, thunder ----------
+  private loop(k: 'sea' | 'wind' | 'rain', type: BiquadFilterType, freq: number) {
+    const ac = this.ac!, src = ac.createBufferSource(), f = ac.createBiquadFilter(), g = ac.createGain();
+    src.buffer = this.noise; src.loop = true; src.playbackRate.value = k === 'rain' ? 1.3 : 0.7;
+    f.type = type; f.frequency.value = freq; g.gain.value = 0;
+    src.connect(f); f.connect(g); g.connect(this.sfxBus); src.start();
+    return this.loops[k] = { g, f };
+  }
+  private ambience(sc: Scene, now: number) {
+    const sea = this.loops.sea ?? this.loop('sea', 'lowpass', 500), wind = this.loops.wind ?? this.loop('wind', 'bandpass', 700), rain = this.loops.rain ?? this.loop('rain', 'highpass', 1800);
+    const swell = 0.6 + 0.4 * Math.sin(now * 0.7) * Math.sin(now * 0.23);
+    sea.g.gain.setTargetAtTime(sc.sea * 0.35 * swell, now, 0.3);
+    const windy = (this.season === 3 ? 0.5 : 0.12) * Math.max(sc.hills + sc.grass * 0.4, sc.near * 0.3) + sc.storm * 0.4;
+    wind.g.gain.setTargetAtTime(windy * (0.6 + 0.4 * Math.sin(now * 0.31)), now, 0.5); wind.f.frequency.setTargetAtTime(500 + 300 * Math.sin(now * 0.17), now, 0.5);
+    rain.g.gain.setTargetAtTime(sc.storm * 0.3, now, 0.6);
+    if (!this.settings.sfx) return;
+    if (sc.storm > 0.25 && now > this.thunderAt) { this.thunderAt = now + rnd(9, 20); this.thunder(sc.storm, now + 0.05); }
+    const leafy = (sc.forest + sc.grass * 0.5) * (this.season === 3 ? 0 : this.season === 2 ? 0.4 : 1) * (1 - sc.storm);
+    if (leafy > 0.08 && now > this.birdAt) { this.birdAt = now + rnd(1.5, 5) / leafy; this.bird(rnd(-0.6, 0.6), Math.min(0.5, leafy), now); }
+  }
+
+  // ---------- effects ----------
+  private out(pan: number) {
+    const ac = this.ac!, p = ac.createStereoPanner(); p.pan.value = pan; p.connect(this.sfxBus); return p;
+  }
+  private burst(t: number, dur: number, vol: number, pan: number, type: BiquadFilterType, freq: number, q = 1) {
+    const ac = this.ac!, s = ac.createBufferSource(), f = ac.createBiquadFilter(), g = ac.createGain();
+    s.buffer = this.noise; s.playbackRate.value = rnd(0.8, 1.2); f.type = type; f.frequency.value = freq; f.Q.value = q;
+    g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    s.connect(f); f.connect(g); g.connect(this.out(pan)); s.start(t, rnd(0, 1.5)); s.stop(t + dur + 0.05);
+  }
+  private ping(t: number, f: number, dur: number, vol: number, pan: number, type: OscillatorType = 'sine', bend = 1) {
+    const ac = this.ac!, o = ac.createOscillator(), g = ac.createGain(); o.type = type;
+    o.frequency.setValueAtTime(f, t); if (bend !== 1) o.frequency.exponentialRampToValueAtTime(f * bend, t + dur);
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vol, t + 0.008); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    o.connect(g); g.connect(this.out(pan)); o.start(t); o.stop(t + dur + 0.05);
+  }
+  private whistle(t: number, vol: number, pan: number) {
+    const ac = this.ac!, g = ac.createGain(), f = ac.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 1100; f.Q.value = 2;
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vol, t + 0.08); g.gain.setValueAtTime(vol, t + 0.55); g.gain.linearRampToValueAtTime(0, t + 0.9);
+    for (const fr of [740, 880, 1110]) { const o = ac.createOscillator(); o.type = 'sawtooth'; o.frequency.value = fr; o.frequency.linearRampToValueAtTime(fr * 0.985, t + 0.9); o.connect(f); o.start(t); o.stop(t + 1); }
+    f.connect(g); g.connect(this.out(pan));
+  }
+  private horn(t: number, vol: number, pan: number) {
+    const ac = this.ac!, g = ac.createGain(), lp = ac.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 600;
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vol, t + 0.15); g.gain.setValueAtTime(vol, t + 1.3); g.gain.linearRampToValueAtTime(0, t + 1.8);
+    for (const fr of [98, 147]) { const o = ac.createOscillator(); o.type = 'sawtooth'; o.frequency.value = fr; o.connect(lp); o.start(t); o.stop(t + 1.9); }
+    lp.connect(g); g.connect(this.out(pan));
+  }
+  private bird(pan: number, vol: number, t: number) {
+    const base = rnd(2600, 4200), n = Math.floor(rnd(2, 5));
+    for (let i = 0; i < n; i++) this.ping(t + i * rnd(0.09, 0.16), base * rnd(0.9, 1.1), 0.08, 0.05 * vol, pan, 'sine', rnd(1.2, 1.5));
+  }
+  private gull(t: number, vol: number, pan: number) {
+    for (let i = 0; i < 3; i++) this.ping(t + i * 0.22, 1500, 0.2, 0.05 * vol, pan, 'triangle', 0.6);
+  }
+  private thunder(vol: number, t: number) {
+    this.burst(t, 0.25, 0.5 * vol, rnd(-0.5, 0.5), 'lowpass', 1500);
+    this.burst(t + 0.1, 2.8, 0.7 * vol, rnd(-0.3, 0.3), 'lowpass', 160);
+  }
+  private baa(t: number, vol: number, pan: number) {
+    const ac = this.ac!, o = ac.createOscillator(), g = ac.createGain(), f = ac.createBiquadFilter(), lfo = ac.createOscillator(), lg = ac.createGain();
+    o.type = 'sawtooth'; o.frequency.value = rnd(330, 420); lfo.frequency.value = 7; lg.gain.value = 12; lfo.connect(lg); lg.connect(o.frequency);
+    f.type = 'bandpass'; f.frequency.value = 900; f.Q.value = 3;
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.09 * vol, t + 0.05); g.gain.linearRampToValueAtTime(0, t + 0.6);
+    o.connect(f); f.connect(g); g.connect(this.out(pan)); o.start(t); lfo.start(t); o.stop(t + 0.7); lfo.stop(t + 0.7);
+  }
+  private saw(t: number, vol: number, pan: number) {
+    const ac = this.ac!, o = ac.createOscillator(), g = ac.createGain(), f = ac.createBiquadFilter();
+    o.type = 'sawtooth'; o.frequency.setValueAtTime(140, t); o.frequency.linearRampToValueAtTime(180, t + 0.3); o.frequency.linearRampToValueAtTime(150, t + 1.4);
+    f.type = 'bandpass'; f.frequency.value = 2200; f.Q.value = 1.5;
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.05 * vol, t + 0.2); g.gain.setValueAtTime(0.05 * vol, t + 1.2); g.gain.linearRampToValueAtTime(0, t + 1.5);
+    o.connect(f); f.connect(g); g.connect(this.out(pan)); o.start(t); o.stop(t + 1.6);
+  }
+
+  /** Each sound source plays little events on its own clock. */
+  private source(h: Hear, now: number) {
+    const at = this.next.get(h.id);
+    // a train setting off whistles (not too often)
+    const was = this.wasMoving.get(h.id); this.wasMoving.set(h.id, !!h.moving);
+    if (h.kind === 'train' && h.moving && was === false && now > this.whistleAt && h.vol > 0.15) { this.whistleAt = now + 8; this.whistle(now + 0.05, 0.12 * h.vol, h.pan); }
+    if (at === undefined) { this.next.set(h.id, now + rnd(0, 1.5)); return; }
+    if (now < at) return;
+    const v = h.vol, p = h.pan; let gap = 2;
+    switch (h.kind) {
+      case 'train': {
+        if (!h.rate) { if (Math.random() < 0.15) this.burst(now, 1.2, 0.05 * v, p, 'highpass', 3500); gap = rnd(1, 2); break; } // standing: a soft breath of steam now and then
+        this.burst(now, 0.12, 0.22 * v, p, 'bandpass', 900, 0.8); // chuff
+        gap = 0.62 - 0.46 * h.rate;
+        if (Math.random() < 0.08) this.ping(now + 0.03, 3200, 0.03, 0.04 * v, p, 'square'); // rail joint click
+        break;
+      }
+      case 'load': this.burst(now, 0.18, 0.3 * v, p, 'lowpass', 300); this.ping(now, 120, 0.15, 0.1 * v, p); gap = rnd(0.6, 1.4); break;
+      case 'repair': this.ping(now, 1900, 0.12, 0.09 * v, p, 'square'); this.ping(now + 0.01, 2850, 0.18, 0.05 * v, p); this.burst(now, 0.05, 0.12 * v, p, 'highpass', 3000); gap = Math.random() < 0.3 ? 1.4 : rnd(0.32, 0.5); break;
+      case 'ship':
+        if (h.moving && Math.random() < 0.25) this.horn(now, 0.14 * v, p); else this.gull(now, v, p);
+        gap = rnd(8, 16); break;
+      case 'dock': if (Math.random() < 0.3) this.ping(now, 1320, 1.6, 0.05 * v, p, 'sine'); else this.gull(now, v, p); gap = rnd(5, 11); break;
+      case 'town': for (let i = 0; i < 3; i++) this.ping(now + i * 0.9, 660, 2.5, 0.05 * v, p, 'sine'); gap = rnd(40, 80); break;
+      case 'wood': this.burst(now, 0.08, 0.35 * v, p, 'bandpass', 700, 2); this.ping(now, 220, 0.1, 0.1 * v, p); gap = Math.random() < 0.25 ? rnd(2.5, 4) : rnd(0.8, 1.2); break;
+      case 'sawmill': this.saw(now, v, p); gap = rnd(3.5, 6); break;
+      case 'stone': case 'coal': case 'iron':
+        this.ping(now, rnd(2200, 2900), 0.09, 0.07 * v, p, 'triangle'); this.burst(now, 0.06, 0.12 * v, p, 'highpass', 2500);
+        if (Math.random() < 0.12) this.burst(now + 0.1, 0.6, 0.2 * v, p, 'lowpass', 400); // rocks tumbling into a cart
+        gap = rnd(0.7, 1.6); break;
+      case 'oil': this.ping(now, 70, 0.3, 0.16 * v, p); this.burst(now + 0.8, 0.25, 0.08 * v, p, 'bandpass', 500); gap = 1.6; break;
+      case 'farm': this.burst(now, 0.5, 0.08 * v, p, 'bandpass', 3000, 0.7); gap = rnd(2.5, 5); break; // scythe swish
+      case 'wool': this.baa(now, v, p); gap = rnd(6, 14); break;
+      case 'gristmill': this.ping(now, 95, 0.5, 0.08 * v, p, 'triangle', 0.8); gap = rnd(2.4, 3.2); break; // creaking wheel
+      default: // works: a clank and a breath of steam
+        this.ping(now, rnd(160, 260), 0.14, 0.1 * v, p, 'square'); this.burst(now + 0.15, 0.5, 0.1 * v, p, 'highpass', 4000);
+        gap = rnd(1.8, 3.4);
+    }
+    this.next.set(h.id, now + gap);
+  }
+}
