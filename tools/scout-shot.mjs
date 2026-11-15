@@ -1,28 +1,20 @@
-// Scout mode: start rings, a drawn route, then the scout on its way. Usage: node tools/scout-shot.mjs [seed]
+// A scout route being drawn from Ashford out into the fog, in a new game. Usage: node tools/scout-shot.mjs
 import { chromium } from 'playwright';
-import { existsSync, mkdirSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
-mkdirSync('shots', { recursive: true });
 const browser = await chromium.launch({ executablePath: existsSync('/opt/pw-browsers/chromium') ? '/opt/pw-browsers/chromium' : undefined });
-const page = await browser.newPage({ viewport: { width: 412, height: 915 }, deviceScaleFactor: 1, hasTouch: true });
+const page = await browser.newPage({ viewport: { width: 412, height: 860 }, deviceScaleFactor: 2, hasTouch: true });
 const errors = []; page.on('pageerror', e => errors.push(String(e)));
-await page.goto('file://' + resolve('dist/index.html') + '?new&seed=' + (process.argv[2] || 4242));
-await page.waitForTimeout(300);
+await page.goto('file://' + resolve('dist/index.html'));
+await page.waitForTimeout(1500);
 await page.evaluate(() => {
-  const R = window.railhaven, g = R.game, T = R.tools, n = g.world.n, a = g.s.sites[0];
-  T.setMode('rail'); T.dragStart(a.y * n + a.x); for (let k = 1; k <= 4; k++) T.dragOver(a.y * n + a.x - k); T.confirm(); T.setMode('pan');
-  g.s.camera.x = a.x * 32; g.s.camera.y = (a.y - 6) * 32; g.s.camera.z = 1.1;
+  const r = window.railhaven, g = r.game, n = g.world.n, a = g.s.sites[0], path = [];
+  for (let k = 0; k <= 14; k++) path.push(a.y * n + a.x + k);
+  for (let k = 1; k <= 10; k++) path.push((a.y - k) * n + a.x + 14);
+  r.openCard(null); if (g.s.ms) g.s.ms.actNew = false; g.found = [];
+  r.tools.mode = 'scout'; r.tools.scout = { path, boat: false, from: a.id };
+  g.s.camera.x = (a.x + 9) * 32; g.s.camera.y = (a.y - 3) * 32; g.s.camera.z = 1;
 });
-await page.click('#bar [data-mode="scout"]'); await page.waitForTimeout(400);
-await page.screenshot({ path: 'shots/scout-1.png' });
-const r = await page.evaluate(() => {
-  const R = window.railhaven, g = R.game, T = R.tools, n = g.world.n, a = g.s.sites[0], st = a.y * n + a.x;
-  T.tapSquare(st); T.tapSquare(st - 14 * n); T.tapSquare(st - 14 * n - 5);
-  return { path: T.scout?.path.length, bar: document.getElementById('ctext').textContent };
-});
-await page.waitForTimeout(300); console.log(JSON.stringify(r)); await page.screenshot({ path: 'shots/scout-2.png' });
-await page.click('#ok'); await page.waitForTimeout(3500);
-await page.screenshot({ path: 'shots/scout-3.png' });
-console.log(await page.evaluate(() => document.getElementById('toast').textContent));
+await page.waitForTimeout(1200); await page.screenshot({ path: 'shots/scout-route.png' });
+console.log(errors.join('\n') || 'no page errors');
 await browser.close();
-if (errors.length) { console.error(errors.join('\n')); process.exit(1); }
