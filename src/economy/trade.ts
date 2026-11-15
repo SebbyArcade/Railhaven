@@ -67,11 +67,20 @@ export function madeOn(g: Game, k: number): Set<Good> {
 
 /** Islands a ship route joins to island k (docks on the railway at both ends). */
 export function seaNeighbours(g: Game, k: number): Set<number> {
-  const lanes = seaLanes(g), out = new Set<number>();
-  for (const d of linkedDocks(g)) if (islandOfB(g, d) === k) for (const r of lanesFrom(g, d.id, lanes)) {
-    const o = g.s.buildings!.find(b => b.id === r.id); if (o) out.add(islandOfB(g, o));
+  return new Set(seaPaths(g, k).keys());
+}
+
+/**
+ * Islands ships can carry goods to from island k, one sea route away or two (a dock in between passes them on), with
+ * the docks on those routes.
+ */
+export function seaPaths(g: Game, k: number): Map<number, Set<number>> {
+  const lanes = seaLanes(g), docks = linkedDocks(g), isl = (id: number) => { const o = docks.find(b => b.id === id); return o ? islandOfB(g, o) : -1; };
+  const out = new Map<number, Set<number>>(), add = (i: number, ids: number[]) => { if (i < 0 || i === k) return; const s = out.get(i) ?? out.set(i, new Set()).get(i)!; for (const x of ids) s.add(x); };
+  for (const d of docks) if (islandOfB(g, d) === k) for (const r of lanesFrom(g, d.id, lanes)) {
+    add(isl(r.id), [d.id, r.id]);
+    for (const r2 of lanesFrom(g, r.id, lanes)) if (r2.id !== d.id) add(isl(r2.id), [d.id, r.id, r2.id]);
   }
-  out.delete(k);
   return out;
 }
 
@@ -174,12 +183,6 @@ export function tradeWhy(g: Game, t: Site, o: TradeOrder): string {
 
 /** Is a cargo ship somewhere on the sea routes that join islands a and b (it can sail between them)? */
 function shipServes(g: Game, a: number, b: number): boolean {
-  const lanes = seaLanes(g), docks = linkedDocks(g), seen = new Set<number>(), q: number[] = [];
-  for (const d of docks) if (islandOfB(g, d) === a) { seen.add(d.id); q.push(d.id); }
-  for (let h = 0; h < q.length; h++) for (const r of lanesFrom(g, q[h]!, lanes)) {
-    const o = docks.find(d => d.id === r.id); if (!o || seen.has(o.id)) continue;
-    if (islandOfB(g, o) !== a && islandOfB(g, o) !== b) continue; // only the routes between the two islands
-    seen.add(o.id); q.push(o.id);
-  }
+  const seen = seaPaths(g, a).get(b); if (!seen) return false;
   return (g.s.ships ?? []).some(s => seen.has(s.at) || (s.to !== undefined && seen.has(s.to)));
 }

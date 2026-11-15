@@ -164,7 +164,7 @@ function bestJob(g: Game, t: Train, plan: Plan): { b: Building; k: Good; ship: S
 function divert(g: Game, t: Train, plan: Plan) {
   const best = bestJob(g, t, plan);
   if (best) {
-    t.job = { src: best.b.id, to: best.ship.to, good: best.k, phase: 'toLoad', timer: 0, ...(best.ship.sea !== undefined ? { sea: best.ship.sea } : {}) };
+    t.job = { src: best.b.id, to: best.ship.to, good: best.k, phase: 'toLoad', timer: 0, ...(best.ship.sea !== undefined ? { sea: best.ship.sea } : {}), ...(best.ship.then !== undefined ? { then: best.ship.then } : {}) };
     if (g.sys.sendToArea(t, yardSquares(g.world.n, best.b))) return;
     endJob(t);
   }
@@ -196,7 +196,7 @@ function unload(g: Game, t: Train) {
   g.s.loads = (g.s.loads ?? 0) + 1; // train loads delivered (for achievements)
   if (j.to.kind === 'bld' && isDock(bldOf(g, j.to.id)!)) { // a dock: the goods wait for a ship (or stay landed for this island)
     const d = bldOf(g, j.to.id)!;
-    if (j.sea !== undefined) { const q = (d.outq ??= []).find(x => x.to === j.sea && x.good === k); if (q) q.n += c.n; else d.outq.push({ good: k, n: c.n, to: j.sea }); }
+    if (j.sea !== undefined) { const q = (d.outq ??= []).find(x => x.to === j.sea && x.good === k && x.then === j.then); if (q) q.n += c.n; else d.outq.push({ good: k, n: c.n, to: j.sea, ...(j.then !== undefined ? { then: j.then } : {}) }); }
     else (d.landed ??= {})[k] = (d.landed[k] ?? 0) + c.n;
     const v = payFor(k, c.n, c.d, 'factory'); pay(g, v);
     t.lastPay = { pay: Math.round(v), at: g.s.t, n: c.n, good: k, to: j.to };
@@ -266,7 +266,7 @@ export function tickTrains(g: Game, dt: number) {
       if ((t.idle = (t.idle ?? 0) - dt) > 0) continue;
       t.idle = 2; // look again every 2 s
       const best = bestJob(g, t, P()); if (!best) continue;
-      t.job = { src: best.b.id, to: best.ship.to, good: best.k, phase: 'toLoad', timer: 0, ...(best.ship.sea !== undefined ? { sea: best.ship.sea } : {}) };
+      t.job = { src: best.b.id, to: best.ship.to, good: best.k, phase: 'toLoad', timer: 0, ...(best.ship.sea !== undefined ? { sea: best.ship.sea } : {}), ...(best.ship.then !== undefined ? { then: best.ship.then } : {}) };
       if (!g.sys.sendToArea(t, yardSquares(g.world.n, best.b))) endJob(t);
       continue;
     }
@@ -283,7 +283,7 @@ export function tickTrains(g: Game, dt: number) {
       const n = Math.min(trainCap(g), Math.floor(readyOf(src, j.good)));
       if (n <= 0) { endJob(t); continue; }
       if (isDock(src)) src.landed![j.good as Good]! -= n; else src.stock -= n;
-      const ship = planFor(P(), src, j.good); if (ship) { j.to = ship.to; j.sea = ship.sea; }
+      const ship = planFor(P(), src, j.good); if (ship) { j.to = ship.to; j.sea = ship.sea; j.then = ship.then; }
       t.cargo = { good: j.good, n, d: ship?.d ?? 8 };
       j.phase = 'toDrop'; sendLoaded(g, t);
     } else if (j.phase === 'toDrop') {

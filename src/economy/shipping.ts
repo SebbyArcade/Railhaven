@@ -38,7 +38,7 @@ export const bldDist = (g: Game, b: Building) => railDist(g, 'b' + b.id, yardSqu
 export type Dest = { kind: 'town' | 'bld'; id: number };
 export type Why = 'order' | 'factory' | 'steady' | 'extra';
 /** where a load goes; `sea` = the far dock when it goes to a dock for a ship */
-export interface Ship { to: Dest; why: Why; d: number; rush?: boolean; sea?: number }
+export interface Ship { to: Dest; why: Why; d: number; rush?: boolean; sea?: number; /** a second sea route: the far dock passes it on to this dock */ then?: number }
 type Pair = { s: { b: Building; k: Good; sk: string }; b: Building; to: Dest; d: number; t?: Site; f?: Building };
 type Targets = (from: Building, k: Good, d0: number, dist: Int32Array, push: (p: Omit<Pair, 's' | 'b'>) => void) => void;
 /** The plan: building id → where its goods go; `docks` holds landed goods at docks, keyed `dockId/good`. */
@@ -142,7 +142,9 @@ export function shipPlan(g: Game): Plan {
 
 /**
  * Goods nobody on their own island needs, but an order or factory on another island does: the train takes them
- * to a dock with a sea route there (paid like factory supply), and a ship carries them on.
+ * to a dock with a sea route there (paid like factory supply), and a ship carries them on. When no island one route
+ * away needs them, an island two routes away may (🚢 long-haul imports): the first ship lands them at a dock in
+ * between, which passes them on to the next ship without leaving the quay.
  */
 function seaNeeds(g: Game, srcs: { b: Building; k: Good; sk: string }[], out: Map<string, Ship>, targets: Targets, room: (p: any, why: 'need') => number) {
   if (!srcs.length) return;
@@ -164,6 +166,24 @@ function seaNeeds(g: Game, srcs: { b: Building; k: Good; sk: string }[], out: Ma
           const tot = d1d + r.d + p.d;
           if (tot < bt) { bt = tot; bk = k2; best = { to: { kind: 'bld', id: d1.id }, why: 'factory', d: d1d, sea: d2.id }; }
         });
+      }
+    }
+    if (!best) { // two routes away: by way of a dock that has a route on to the island that needs them
+      const home = islandOfB(g, s.b);
+      for (const d1 of docks) {
+        if (islandOfB(g, d1) !== home) continue;
+        const d1d = dist[yardSquares(n, d1)[1]!]!; if (d1d < 0) continue;
+        for (const r of lanesFrom(g, d1.id, lanes)) for (const r2 of lanesFrom(g, r.id, lanes)) {
+          const d3 = docks.find(b => b.id === r2.id)!; if (d3.id === d1.id || islandOfB(g, d3) === home) continue;
+          const k3 = `${d3.id}/${s.k}`;
+          if (!bound.has(k3)) bound.set(k3, seaBound(g, d3.id, s.k));
+          targets(d3, s.k, 0, bldDist(g, d3), p => {
+            if (p.t && !orderOf(g, p.t)[s.k] && !tradeRoom(g, p.t, s.k)) return;
+            if (room({ ...p, s, b: s.b }, 'need') - bound.get(k3)! <= 0) return;
+            const tot = d1d + r.d + r2.d + p.d;
+            if (tot < bt) { bt = tot; bk = k3; best = { to: { kind: 'bld', id: d1.id }, why: 'factory', d: d1d, sea: r.id, then: d3.id }; }
+          });
+        }
       }
     }
     if (!best) continue;

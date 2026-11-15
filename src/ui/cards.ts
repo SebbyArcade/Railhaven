@@ -117,8 +117,10 @@ function tradeSource(g: Game, plan: ReturnType<typeof shipPlan>, t: Site, k: Goo
   if (coming) return `🚂 ${coming} train${coming > 1 ? 's' : ''} bringing it now`;
   const afloat = (g.s.ships ?? []).reduce((a, s) => a + s.hold.filter(q => q.good === k).reduce((b, q) => b + q.n, 0), 0);
   if (afloat) return `🚢 ${afloat} on a ship now`;
-  const sent = (g.s.buildings ?? []).some(b => islandOfB(g, b) === from && INDUSTRIES[b.kind].makes === k && plan.get(b.id)?.sea !== undefined
-    && islandOfB(g, g.s.buildings!.find(d => d.id === plan.get(b.id)!.sea)!) === here);
+  const sent = (g.s.buildings ?? []).some(b => { // sent to its dock for a ship here (or for a ship to a dock that passes it on here)
+    const p = plan.get(b.id), far = p && (p.then ?? p.sea), d = far !== undefined ? g.s.buildings!.find(x => x.id === far) : undefined;
+    return islandOfB(g, b) === from && INDUSTRIES[b.kind].makes === k && !!d && islandOfB(g, d) === here;
+  });
   if (sent) return `⛴ ${esc(islandName(g, from))} sends it to its dock for a ship`;
   return `🔀 ${esc(islandName(g, from))}'s ${GOODS[k].name.toLowerCase()} goes to places that need it first: make more there`;
 }
@@ -179,7 +181,7 @@ function shipCard(g: Game, id: number): string | null {
   }
   h += `<h3>📦 In the hold</h3>`;
   if (!s.hold.length) h += `<div class="note">Empty${s.to !== undefined ? ': it sails to fetch goods waiting there' : ''}</div>`;
-  for (const q of s.hold) h += `<div class="row"><b class="ico">${GOODS[q.good].icon}</b><div class="grow"><div class="line"><span>${q.n} ${GOODS[q.good].name.toLowerCase()}</span><span>→ ${where(dock(q.to))}</span></div></div></div>`;
+  for (const q of s.hold) h += `<div class="row"><b class="ico">${GOODS[q.good].icon}</b><div class="grow"><div class="line"><span>${q.n} ${GOODS[q.good].name.toLowerCase()}</span><span>→ ${where(dock(q.to))}</span></div>${q.then !== undefined ? `<small>then on by the next ship to ${where(dock(q.then))}</small>` : ''}</div></div>`;
   const d = dock(s.to ?? s.at);
   if (d) h += `<button class="act alt" data-act="open" data-kind="bld" data-id="${d.id}">⚓ Open ${s.to !== undefined ? 'the dock it sails to' : 'this dock'}</button>`;
   h += shipUpRows(g);
