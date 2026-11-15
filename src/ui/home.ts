@@ -107,5 +107,6 @@ export function homeHtml(page: string | undefined, ix: SlotIndex, slotId = 0, de
     + `<button class="tile" data-act="page" data-page="medals">🏅 Achievements<small>${p ? `${MEDALS.filter(m => p.medals[m.id]).length} of ${MEDALS.length} medals · ✨ ${xpOf(p)} XP` : 'medals and XP'}</small></button>`
     + `<button class="tile" data-act="page" data-page="settings">⚙ Settings<small>sound, Move my game, report</small></button>`
     + `<button class="tile" data-act="page" data-page="learn">📖 How to play<small>the basics in six steps</small></button>`
-    + `<button class="tile" data-act="page" data-page="looks">🎨 Looks<small>train paints and town themes</small></button></div>`;
+    + `<button class="tile" data-act="page" data-page="looks">🎨 Looks<small>train paints and town themes</small></button>`
+    + `<button class="tile" data-act="bugreport">🐞 Report a bug<small>saves your game and a report: attach it in the chat</small></button></div>`;
 }

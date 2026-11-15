@@ -75,6 +75,24 @@ export function buyTrain(g: Game): Train | string {
   return 'The shed siding is busy: try again in a moment';
 }
 
+/** What selling a train pays back: half of what the last train bought cost. */
+export function trainRefund(g: Game): number {
+  const k = Math.max(0, g.s.trains.length - 1), p = 1000 + 250 * Math.max(0, k - 5);
+  return Math.round(((g.s.rlv ?? 0) < 3 ? Math.min(2500, p) : p) / 2);
+}
+
+/**
+ * 💰 Sell a train for half its price. One carrying goods delivers them first (it is marked and sold when empty).
+ * Returns why not, 'later' when it will go after its delivery, or '' when sold.
+ */
+export function sellTrain(g: Game, t: Train): string {
+  if (t.broke) return 'It is broken down: sell it once the repair crew has fixed it';
+  if (t.cargo || t.job?.phase === 'loading') { t.sellAfter = true; return 'later'; }
+  const v = trainRefund(g), k = g.s.trains.indexOf(t); if (k < 0) return 'That train is gone';
+  g.s.trains.splice(k, 1); g.s.money += v; g.sys.rebuildHolds();
+  return '';
+}
+
 /** Shipping a train over to another island costs this much on top of its price. */
 export const FERRY_FEE = 500;
 
@@ -139,6 +157,16 @@ export const headSquare = (g: Game, t: Train) => g.net.pieces[t.trail.at(-1)!.pi
 
 const parked = (t: Train) => t.dest === undefined && t.plan.length === 0 && t.refuge === undefined && t.pause <= 0 && t.v === 0;
 
+/**
+ * Running cost of a trip of this many squares (there and on to the drop), counting the slow parts: starting, stopping,
+ * turning back and waiting at signals take about three times as long as running flat out.
+ */
+export const tripCost = (g: Game, squares: number) => UPKEEP * fleetMul(g.s.trains.length) * fleetMulOf(g, 'rep') * (squares * 32 / g.sys.vmax * 3 + 10);
+
+/** Goods nobody is waiting for (past-order buying or surplus) that pay less than the trip costs are not worth fetching. */
+export const losesMoney = (g: Game, ship: Ship, pay: number, reach: number) =>
+  (ship.why === 'steady' || ship.why === 'extra') && !ship.rush && ship.sea === undefined && pay < tripCost(g, reach + ship.d);
+
 /** Pick the best waiting load for an idle train: needed goods first, then by pay per square of travel. */
 function bestJob(g: Game, t: Train, plan: Plan): { b: Building; k: Good; ship: Ship } | null {
   const at = headSquare(g, t);
@@ -150,7 +178,9 @@ function bestJob(g: Game, t: Train, plan: Plan): { b: Building; k: Good; ship: S
     for (const k of goods) {
       const ship = planFor(plan, b, k); if (!ship) continue;
       const avail = readyOf(b, k) - claimed(g, b, isDock(b) ? k : undefined); if (avail < minLoad(g)) continue;
-      const s = payFor(k, Math.min(trainCap(g), avail), ship.d, ship.why) / (reach + ship.d + 8) + (ship.why === 'order' || ship.rush || ship.sea !== undefined ? 1e3 : 0);
+      const v = payFor(k, Math.min(trainCap(g), avail), ship.d, ship.why);
+      if (losesMoney(g, ship, v, reach)) continue; // a load that pays less than the trip costs: the train waits for better work, for free
+      const s = v / (reach + ship.d + 8) + (ship.why === 'order' || ship.rush || ship.sea !== undefined ? 1e3 : 0);
       if (s > bs) { bs = s; best = { b, k, ship }; }
     }
   }
@@ -255,6 +285,10 @@ export function tickTrains(g: Game, dt: number) {
   // bridges cost a little to keep up, every minute, like trains on the move (counted with running costs)
   const br = bridgeSquares(g) * BRIDGE_UPKEEP / 60 * dt;
   if (br > 0) { g.s.money -= br; g.s.upkeep = (g.s.upkeep ?? 0) + br; }
+  for (const t of g.s.trains.filter(x => x.sellAfter && !x.cargo && x.job?.phase !== 'loading')) { // delivered: now it goes
+    const v = trainRefund(g); g.s.trains.splice(g.s.trains.indexOf(t), 1); g.s.money += v; g.sys.rebuildHolds();
+    news(g, `💰 Train ${t.id} delivered its load and was sold for $${v.toLocaleString('en-US')}`);
+  }
   for (const t of g.s.trains) {
     if (t.v > 0) { const c = UPKEEP * fm * dt; g.s.money -= c; g.s.upkeep = (g.s.upkeep ?? 0) + c; }
     const j = t.job;
@@ -262,10 +296,12 @@ export function tickTrains(g: Game, dt: number) {
     if (j && (j.phase === 'toLoad' || j.phase === 'toDrop') && t.v === 0 && t.pause <= 0 && !t.broke && !t.rr && t.plan.length) t.stopT = (t.stopT ?? 0) + dt;
     else if (t.stopT) t.stopT = 0;
     if (!j) {
+      t.noWork = (t.noWork ?? 0) + dt;
       if (!parked(t)) continue;
       if ((t.idle = (t.idle ?? 0) - dt) > 0) continue;
       t.idle = 2; // look again every 2 s
       const best = bestJob(g, t, P()); if (!best) continue;
+      t.noWork = 0;
       t.job = { src: best.b.id, to: best.ship.to, good: best.k, phase: 'toLoad', timer: 0, ...(best.ship.sea !== undefined ? { sea: best.ship.sea } : {}), ...(best.ship.then !== undefined ? { then: best.ship.then } : {}) };
       if (!g.sys.sendToArea(t, yardSquares(g.world.n, best.b))) endJob(t);
       continue;

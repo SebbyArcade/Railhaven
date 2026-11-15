@@ -13,6 +13,10 @@ export interface NetworkOptions {
   forceDouble?: (i: number) => boolean;
   /** lane offsets on squares with more than two lanes side by side (yards with 3 or 4 loading tracks) */
   lanes?: (i: number) => number[] | undefined;
+  /** squares where crossovers between the lanes may go even though they are kept free of wide curves (station halls and their approaches) */
+  crossOk?: (i: number) => boolean;
+  /** station approach squares: a crossover goes next to each, so trains that turn back in a station can reach their own lane */
+  stationEnd?: (i: number) => boolean;
 }
 
 /** The rail network built from painted squares. Rebuilt whenever track changes. */
@@ -38,6 +42,8 @@ export function buildNetwork(track: TrackMap, n: number, opt: NetworkOptions = {
   const T = TILE, pieces: Piece[] = [];
   const nb = (i: number, d: Dir) => { const x = (i % n) + DX[d], y = ((i / n) | 0) + DY[d]; return x < 0 || y < 0 || x >= n || y >= n ? -1 : y * n + x; };
   const isDbl = (i: number) => !!track.get(i)?.dbl || !!opt.forceDouble?.(i);
+  /** a flat crossing: the lines go straight over each other, no turning */
+  const isCross = (i: number) => !!track.get(i)?.cross && links(i) === 15;
   /** sides actually joined: both squares agree */
   const links = (i: number) => {
     const sq = track.get(i); if (!sq) return 0;
@@ -97,11 +103,31 @@ export function buildNetwork(track: TrackMap, n: number, opt: NetworkOptions = {
 
   // 2. gentle turnouts: at a junction, a branch with plain single straights on both legs leaves the main line
   //    as a radius-1.5 arc that starts a square early, like a real turnout (the straight line stays as it is)
-  const turned = new Set<string>();
+  const turned = new Set<string>(), dblTurn = new Set<Piece>();
   for (const c of keys) {
-    if (consumed.has(c) || opt.noWide?.(c) || isDbl(c)) continue;
+    if (consumed.has(c) || opt.noWide?.(c) || isCross(c)) continue;
     const s = sides(links(c));
     if (s.length < 3) continue;
+    if (isDbl(c)) { // double main line, single branch: both lanes lead off to the branch (the far lane crosses the near one)
+      for (const a of s) for (const b of s) {
+        if (a === b || a === opposite(b) || !s.includes(opposite(a))) continue;
+        const A = nb(c, a), B = nb(c, b);
+        if (A < 0 || B < 0 || consumed.has(A) || consumed.has(B) || opt.noWide?.(A) || opt.noWide?.(B) || opt.noWide?.(nb(c, opposite(a)))) continue;
+        if (links(A) !== (bit(a) | bit(opposite(a))) || links(B) !== (bit(b) | bit(opposite(b)))) continue;
+        if (laneOffsets(c, a).length !== 2 || laneOffsets(A, a).length !== 2 || laneOffsets(c, b).length !== 1 || isDbl(B)) continue;
+        const pb = port(B, b, 0), ta: V2 = [-DX[a], -DY[a]], tb: V2 = [DX[b], DY[b]];
+        for (const o of [-LANE, LANE]) {
+          const pa = port(A, a, o);
+          // a quarter ellipse: 1.5 squares along the main line, across to the branch
+          const L = Math.abs((pb[0] - pa[0]) * ta[0] + (pb[1] - pa[1]) * ta[1]), W = Math.abs((pb[0] - pa[0]) * tb[0] + (pb[1] - pa[1]) * tb[1]);
+          const pts = sampleCubic(pa, [pa[0] + ta[0] * 0.5523 * L, pa[1] + ta[1] * 0.5523 * L], [pb[0] - tb[0] * 0.5523 * W, pb[1] - tb[1] * 0.5523 * W], pb, 24);
+          add(pts, [A, c, B], 'wide', ta, tb);
+          dblTurn.add(pieces.at(-1)!);
+        }
+        turned.add(c + ':' + Math.min(a, b) + ':' + Math.max(a, b));
+      }
+      continue;
+    }
     for (const a of s) for (const b of s) {
       if (a >= b || a === opposite(b)) continue;
       const A = nb(c, a), B = nb(c, b);
@@ -131,8 +157,10 @@ export function buildNetwork(track: TrackMap, n: number, opt: NetworkOptions = {
       }
       continue;
     }
+    const flat = isCross(i);
     for (let u = 0; u < s.length; u++) for (let v = u + 1; v < s.length; v++) {
       const d1 = s[u]!, d2 = s[v]!, straight = d1 === opposite(d2);
+      if (flat && !straight) continue; // a crossing has only the two straight lines
       if (turned.has(i + ':' + Math.min(d1, d2) + ':' + Math.max(d1, d2))) continue;
       const L1 = laneOffsets(i, d1).map(o => port(i, d1, o)), L2 = laneOffsets(i, d2).map(o => port(i, d2, o));
       const t0: V2 = [-DX[d1], -DY[d1]], t1: V2 = [DX[d2], DY[d2]];
@@ -165,6 +193,26 @@ export function buildNetwork(track: TrackMap, n: number, opt: NetworkOptions = {
     }
   }
 
+  // 3b. crossovers on double track: two diagonals between the lanes over two squares, so a train that turned back
+  //     (and so runs on the wrong lane) can cross back to its own lane soon. Next to stations and yards, and every 8 squares.
+  const crossover = new Set<Piece>(), xUsed = new Set<number>();
+  const plainDbl = (i: number, d: Dir) => i >= 0 && !consumed.has(i) && (!opt.noWide?.(i) || !!opt.crossOk?.(i)) && !opt.lanes?.(i) && isDbl(i) && !isCross(i) && links(i) === (bit(d) | bit(opposite(d)));
+  for (const i of keys) for (const d of [0, 1] as Dir[]) {
+    const j = nb(i, d), before = nb(i, opposite(d)), after = nb(j, d);
+    if (!plainDbl(i, d) || !plainDbl(j, d) || xUsed.has(i) || xUsed.has(j)) continue;
+    if (laneOffsets(i, opposite(d)).length !== 2 || laneOffsets(j, d).length !== 2) continue;
+    const along = d === 0 ? i % n : (i / n) | 0;
+    const byStop = [before, i, j, after].some(q => q >= 0 && !!opt.stationEnd?.(q)) || [before, after].some(q => q >= 0 && !!opt.noWide?.(q) && !opt.crossOk?.(q));
+    if (along % 8 !== 0 && !byStop) continue;
+    xUsed.add(i).add(j);
+    const ta: V2 = [DX[d], DY[d]], k = 0.42 * 2 * T;
+    for (const o of [-LANE, LANE]) {
+      const p0 = port(i, opposite(d), o), p3 = port(j, d, -o);
+      add(sampleCubic(p0, [p0[0] + ta[0] * k, p0[1] + ta[1] * k], [p3[0] - ta[0] * k, p3[1] - ta[1] * k], p3, 16), [i, j], 'fan', ta, ta);
+      crossover.add(pieces.at(-1)!);
+    }
+  }
+
   // drop pieces left hanging (a branch leg whose junction side is all taken by turnouts): every non-buffer end must join
   for (let changed = true; changed;) {
     changed = false;
@@ -191,11 +239,23 @@ export function buildNetwork(track: TrackMap, n: number, opt: NetworkOptions = {
     const pm = mid(p), qm = mid(q);
     return Math.hypot(pm[0] - qm[0], pm[1] - qm[1]) < 9;
   };
-  for (const [, ids] of bySquare) for (const a of ids) for (const b of ids)
-    if (a < b && !conflicts[a]!.includes(b) && near(pieces[a]!, pieces[b]!)) { conflicts[a]!.push(b); conflicts[b]!.push(a); }
+  /** closest approach of two lanes, checked along every segment (a double turnout's far lane crosses the near lane between points) */
+  const touch = (p: Piece, q: Piece) => {
+    for (const [u, w] of [[p, q], [q, p]] as [Piece, Piece][]) for (let i = 0; i < u.pts.length; i += 2) for (let j = 0; j + 3 < w.pts.length; j += 2)
+      if (segDist(u.pts[i]!, u.pts[i + 1]!, w.pts[j]!, w.pts[j + 1]!, w.pts[j + 2]!, w.pts[j + 3]!) < 9) return true;
+    return false;
+  };
+  const crossing = new Set(keys.filter(isCross));
+  const across = (a: Piece, b: Piece) => a.squares.some(s => crossing.has(s)) && a.squares.some(s => b.squares.includes(s) && crossing.has(s)) && (a.ta[0] === 0) !== (b.ta[0] === 0);
+  for (const [, ids] of bySquare) for (const a of ids) for (const b of ids) {
+    if (a >= b || conflicts[a]!.includes(b)) continue;
+    const P = pieces[a]!, Q = pieces[b]!;
+    if (near(P, Q) || across(P, Q) || ((dblTurn.has(P) || dblTurn.has(Q) || crossover.has(P) || crossover.has(Q)) && touch(P, Q))) { conflicts[a]!.push(b); conflicts[b]!.push(a); }
+  }
   // a train can wait here while another passes: a parallel lane runs beside it (double track, station or yard tracks)
-  const passing = pieces.map(p => p.kind !== 'fan' && p.squares.every(sq => net_bySq(bySquare, sq).some(o => o !== p.id && !conflicts[p.id]!.includes(o) && pieces[o]!.kind !== 'fan')));
+  const passing = pieces.map(p => p.kind !== 'fan' && !dblTurn.has(p) && !p.squares.some(sq => crossing.has(sq)) && p.squares.every(sq => net_bySq(bySquare, sq).some(o => o !== p.id && !conflicts[p.id]!.includes(o) && pieces[o]!.kind !== 'fan')));
   const side = pieces.map(p => {
+    if (crossover.has(p)) return 0; // a crossover is fine either way: the lane after it counts
     // offset of the lane from the middle of the square edge it starts on, seen along the direction of travel
     const at = (x: number, y: number): V2 => Math.abs(x / T - Math.round(x / T)) < 1e-6 ? [x, (Math.floor(y / T) + 0.5) * T] : [(Math.floor(x / T) + 0.5) * T, y];
     for (const [x, y, t] of [[p.pts[0]!, p.pts[1]!, p.ta], [p.pts[p.pts.length - 2]!, p.pts[p.pts.length - 1]!, p.tb]] as [number, number, V2][]) {
@@ -206,6 +266,11 @@ export function buildNetwork(track: TrackMap, n: number, opt: NetworkOptions = {
     return 0;
   });
   return { n, pieces, outs, bySquare, conflicts, passing, side };
+}
+
+function segDist(px: number, py: number, ax: number, ay: number, bx: number, by: number) {
+  const vx = bx - ax, vy = by - ay, L = vx * vx + vy * vy, t = L ? Math.max(0, Math.min(1, ((px - ax) * vx + (py - ay) * vy) / L)) : 0;
+  return Math.hypot(px - ax - vx * t, py - ay - vy * t);
 }
 
 const net_bySq = (m: Map<number, number[]>, sq: number) => m.get(sq) ?? [];

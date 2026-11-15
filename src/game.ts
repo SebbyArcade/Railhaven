@@ -33,14 +33,16 @@ export function buildWorld(s: GameState) {
 
 function makeNetwork(track: TrackMap, n: number, sites: Site[], buildings: Building[], terr: Uint8Array): Network {
   const halls = hallsOf(track, n, sites, terr), dbl = doubleSquares(track, halls), still = new Set<number>(), lanes = new Map<number, number[]>();
-  for (const h of halls) for (const i of [...h.squares, ...h.approaches]) still.add(i);
+  const stn = new Set<number>(), ends = new Set<number>(), yard = new Set<number>();
+  for (const h of halls) for (const i of [...h.squares, ...h.approaches]) { still.add(i); stn.add(i); }
+  for (const h of halls) for (const i of h.approaches) ends.add(i);
   for (const b of buildings) { // yards: two loading tracks, the turnouts on the square past each end
     const sq = yardSquares(n, b), along = b.horizontal ? 0b0101 : 0b1010, step = b.horizontal ? 1 : n;
     const ln = tracksOf(b) > 2 ? yardLanes(b) : undefined; // 3 or 4 loading tracks: the extra ones run out on the strip
-    for (const i of sq) { if (track.has(i)) { dbl.add(i); if (ln) lanes.set(i, ln); } still.add(i); }
-    for (const i of [sq[0]! - step, sq.at(-1)! + step]) { const t = track.get(i); still.add(i); if (t && (t.links & ~along) === 0) { dbl.add(i); if (ln) lanes.set(i, ln); } }
+    for (const i of sq) { if (track.has(i)) { dbl.add(i); if (ln) lanes.set(i, ln); } still.add(i); yard.add(i); }
+    for (const i of [sq[0]! - step, sq.at(-1)! + step]) { const t = track.get(i); still.add(i); yard.add(i); if (t && (t.links & ~along) === 0) { dbl.add(i); if (ln) lanes.set(i, ln); } }
   }
-  return buildNetwork(track, n, { forceDouble: i => dbl.has(i), noWide: i => still.has(i), lanes: i => lanes.get(i) });
+  return buildNetwork(track, n, { forceDouble: i => dbl.has(i), noWide: i => still.has(i), lanes: i => lanes.get(i), crossOk: i => ends.has(i) && !yard.has(i), stationEnd: i => ends.has(i) });
 }
 
 function assemble(s: GameState): Game {
