@@ -1,5 +1,5 @@
 import { Rng } from '../core/rng.ts';
-import type { Game, GameState, Site } from '../state.ts';
+import type { Game, GameState, Resource, Site } from '../state.ts';
 import type { Building } from '../buildings/industries.ts';
 import { chartSea, isDock, linkedDocks } from '../ships/docks.ts';
 import { reveal } from './fog.ts';
@@ -15,6 +15,8 @@ import { buildWorld, loadGame, prepareSave } from '../game.ts';
  * its place: the old map is moved RING_W squares in from the new edge.
  */
 export const EXPEDITION_PRICE = 60000;
+/** The new deposits each ring brings: gold and gems (jewellery), then cocoa (chocolate), then rubber (tyres); later rings mix them all. */
+export const CHAINS: Resource[][] = [['gold', 'gems'], ['cocoa'], ['rubber'], ['gold', 'gems', 'cocoa', 'rubber']];
 export const EXPEDITION_DOCK = 3;
 export const expeditionPrice = (g: Game) => EXPEDITION_PRICE * 2 ** (g.s.rings ?? 0);
 const fmt = (v: number) => '$' + Math.round(v).toLocaleString('en-US');
@@ -63,6 +65,7 @@ function ringSites(g: Game, ring: number, firstNew: number): Site[] {
   const all = () => [...sites, ...out];
   const free = (x: number, y: number) => !all().some(s => Math.hypot(s.x - x, s.y - y) < 5);
   const apart = (x: number, y: number) => !all().some(o => (o.kind === 'town' || o.kind === 'plot') && Math.hypot(o.x - x, o.y - y) < 11);
+  let j = 0;
   w.islands.forEach((isl, k) => {
     if (k < firstNew || !isl.name) return;
     const r = Math.sqrt(isl.size / Math.PI);
@@ -77,10 +80,16 @@ function ringSites(g: Game, ring: number, firstNew: number): Site[] {
     // every new island has a town to find, bigger ones a settlement site too
     put(apart, (x, y) => add({ kind: 'town', x, y, pop: 0, name: nextName() }));
     if (r >= 7) put(apart, (x, y) => add({ kind: 'plot', x, y, name: nextName() }));
-    for (let i = 0; i < 4; i++) {
-      const res = rng.pick(['coal', 'iron', 'oil', 'stone', 'iron', 'oil'] as const);
-      put(res === 'oil' ? () => true : (x, y) => isMountainFoot(w, x, y), (x, y) => add({ kind: 'dep', x, y, res, rich: true, hidden: res === 'iron' || res === 'oil' }));
-    }
+    const dep = (res: Resource) => (x: number, y: number) => add({ kind: 'dep', x, y, res, rich: true, hidden: res === 'iron' || res === 'oil' });
+    const where = (res: Resource) => res === 'oil' ? () => true
+      : res === 'cocoa' ? (x: number, y: number) => w.terr[y * n + x] === T.Grass
+      : res === 'rubber' ? (x: number, y: number) => w.terr[y * n + x] === T.Forest || w.terr[y * n + x] === T.Grass
+      : (x: number, y: number) => isMountainFoot(w, x, y);
+    // this ring's new chain: two of its deposits on every island (taking turns, so a two-deposit chain has both)
+    const chain = CHAINS[Math.min(ring, CHAINS.length) - 1]!;
+    for (let i = 0; i < 2; i++) { const res = ring > CHAINS.length ? rng.pick(chain) : chain[(j + i) % chain.length]!; if (!put(where(res), dep(res))) put(() => true, dep(res)); }
+    for (let i = 0; i < 2; i++) { const res = rng.pick(['coal', 'iron', 'oil', 'stone', 'iron', 'oil'] as const); put(where(res), dep(res)); }
+    j++;
   });
   return out;
 }

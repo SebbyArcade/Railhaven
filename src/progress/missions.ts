@@ -191,6 +191,7 @@ const WHERE: Partial<Record<IndustryKind, string>> = {
   wood: 'in forest, beside your track', farm: 'on open grass, beside your track', wool: 'on open grassland',
   stone: 'on a glowing rock outcrop by the mountains', coal: 'on a glowing coal seam by the mountains',
   iron: 'on a glowing iron deposit', oil: 'on a glowing oil seep',
+  gold: 'on a glowing gold seam', gems: 'on a glowing gem vein', cocoa: 'on a wild cocoa grove', rubber: 'on a wild rubber grove',
 };
 
 /** Turn a candidate into a mission: title, how-to, Mira's line and the reward. */

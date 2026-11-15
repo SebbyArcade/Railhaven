@@ -9,7 +9,7 @@ import { footprint } from '../buildings/industries.ts';
 import { TILE } from '../world/terrain.ts';
 import { bush, cottage, fence, person } from './art.ts';
 
-const RES_ICON: Record<string, string> = { coal: '⚫', stone: '🪨', iron: '🧲', oil: '🛢', wood: '🪵', farm: '🌾' };
+const RES_ICON: Record<string, string> = { coal: '⚫', stone: '🪨', iron: '🧲', oil: '🛢', wood: '🪵', farm: '🌾', gold: '🪙', gems: '💎', cocoa: '🫘', rubber: '🌿' };
 
 /** Town size name: its step on the order ladder. */
 export function townSize(s: Site): string {

@@ -170,7 +170,7 @@ function drawPark(ctx: Ctx, g: Game, p: Park, zoom: number, tm: number) {
     // 🚉 the Grand Station: a long glass train shed with iron ribs, two tracks running in under it with a train at the
     // platform, and a cream stone front with a clock, a flag and passengers waiting outside
     const sx = x + 3, sw = TILE - 6, sy = y + 3, sh = 17;
-    ctx.fillStyle = 'rgba(20,16,10,.3)'; ctx.fillRect(sx + 1.5, sy + 1.5, sw, sh);
+    ctx.fillStyle = 'rgba(20,16,10,.16)'; ctx.fillRect(sx + 1, sy + 1, sw, sh);
     ctx.fillStyle = '#6b6f74'; ctx.fillRect(sx, sy, sw, sh); // floor seen through the glass
     ctx.fillStyle = '#6b4a2e'; for (let k = 0; k < 10; k++) for (const ty of [sy + 5, sy + 11]) ctx.fillRect(sx + 1 + k * 2.6, ty - 1.4, 0.9, 2.8);
     ctx.fillStyle = '#3e3a38'; for (const ty of [sy + 5, sy + 11]) { ctx.fillRect(sx, ty - 1, sw, 0.45); ctx.fillRect(sx, ty + 0.6, sw, 0.45); }
@@ -199,32 +199,49 @@ function drawPark(ctx: Ctx, g: Game, p: Park, zoom: number, tm: number) {
     if (zoom > 1) puff(ctx, sx + 6, sy + 2, tm * 0.6, false, 0.6);
   }
   else if (p.k === 'cathedral') {
-    // ⛪ a stone cathedral seen from above: a long nave with a slate roof, short transepts, a round rose window over
-    // the door, and a tall spire at the front with a gold cross; a lawn and two yews beside it
-    ctx.fillStyle = '#7fb85a'; ctx.fillRect(x + 2, y + 2, 7, TILE - 4); ctx.fillRect(x + TILE - 9, y + 2, 7, TILE - 4);
-    const nx = u - 5, nw = 10, ny = y + 4, nh = 20;
-    ctx.fillStyle = 'rgba(20,16,10,.3)'; ctx.fillRect(nx + 2, ny + 2, nw, nh); ctx.fillRect(u - 10 + 2, ny + 6 + 2, 20, 6);
-    ctx.fillStyle = '#4e5a66'; ctx.fillRect(nx, ny, nw, nh); ctx.fillRect(u - 10, ny + 6, 20, 6); // slate roofs (nave and transepts)
-    ctx.fillStyle = '#3a444e'; ctx.fillRect(u - 0.4, ny, 0.8, nh); ctx.fillRect(u - 10, ny + 8.6, 20, 0.8); // ridges
-    ctx.fillStyle = '#5c6874'; ctx.beginPath(); ctx.arc(u, ny + 1, 5, Math.PI, 0); ctx.fill(); // the round apse at the back
-    ctx.fillStyle = '#cfc4a8'; ctx.fillRect(nx - 0.5, ny + nh, nw + 1, 4); // the stone front wall
-    ctx.fillStyle = '#c0392b'; ctx.beginPath(); ctx.arc(u, ny + nh + 1.4, 1.5, 0, 7); ctx.fill();
-    ctx.fillStyle = '#2c4f8a'; ctx.beginPath(); ctx.arc(u, ny + nh + 1.4, 0.8, 0, 7); ctx.fill(); // the rose window
-    ctx.fillStyle = '#5a3a20'; ctx.beginPath(); ctx.moveTo(u - 1.3, ny + nh + 4); ctx.lineTo(u - 1.3, ny + nh + 3); ctx.arc(u, ny + nh + 3, 1.3, Math.PI, 0); ctx.lineTo(u + 1.3, ny + nh + 4); ctx.fill();
-    // the spire, rising from the front corner and leaning back over the roof as seen from above
-    const bx = nx + nw - 1, by = ny + nh - 2;
-    ctx.fillStyle = '#bfb397'; ctx.fillRect(bx - 2.5, by - 1, 5, 7);
-    ctx.fillStyle = '#4a5560'; ctx.beginPath(); ctx.moveTo(bx - 2.8, by - 1); ctx.lineTo(bx, by - 13); ctx.lineTo(bx + 2.8, by - 1); ctx.fill();
-    ctx.fillStyle = 'rgba(255,255,255,.18)'; ctx.beginPath(); ctx.moveTo(bx - 2.8, by - 1); ctx.lineTo(bx, by - 13); ctx.lineTo(bx - 0.6, by - 1); ctx.fill();
-    ctx.fillStyle = '#e8c25a'; ctx.fillRect(bx - 0.25, by - 16, 0.5, 3); ctx.fillRect(bx - 1, by - 15.2, 2, 0.5);
-    tree(ctx, x + 5, y + 9, 2.6, '#2f5a30'); tree(ctx, x + TILE - 5, y + 20, 2.6, '#2f5a30');
-    if (zoom > 1.2) { person(ctx, u - 4, y + TILE - 2.5, '#2e2a26'); person(ctx, u + 5, y + TILE - 2, '#7a3a8a'); }
+    // ⛪ a Gothic cathedral, front wall toward you like the town's houses: twin towers with tall spires and gold
+    // crosses, a pointed gable between them with a stained-glass rose window, a pointed doorway, tall lancet windows,
+    // and the long nave roof running back with lower aisle roofs and buttresses either side
+    ctx.fillStyle = '#7fb85a'; ctx.fillRect(x + 2, y + 2, TILE - 4, TILE - 4); // the close: a lawn all round
+    const fy = y + 21, fb = y + TILE - 4; // front wall top and foot
+    ctx.fillStyle = 'rgba(20,16,10,.16)'; ctx.fillRect(u - 10, y + 4, 21, fb - y - 3); // one soft shadow, down and right
+    // aisles: lower slate roofs either side of the nave, buttresses standing out between their windows
+    for (const sx of [-1, 1]) {
+      const ax = sx < 0 ? u - 11 : u + 5;
+      ctx.fillStyle = sx < 0 ? '#5c6874' : '#4a5560'; ctx.fillRect(ax, y + 7, 6, fy - y - 7);
+      ctx.fillStyle = '#cfc4a8'; for (let k = 0; k < 3; k++) ctx.fillRect(sx < 0 ? ax - 1 : ax + 5, y + 8.5 + k * 4, 2, 1.6); // buttresses
+    }
+    // the nave: a tall roof with its ridge, lit on the left
+    ctx.fillStyle = '#56626e'; ctx.fillRect(u - 5, y + 3, 10, fy - y - 3);
+    ctx.fillStyle = '#6a7684'; ctx.fillRect(u - 5, y + 3, 5, fy - y - 3);
+    ctx.fillStyle = '#3a444e'; ctx.fillRect(u - 0.3, y + 3, 0.6, fy - y - 3);
+    ctx.fillStyle = '#e8c25a'; ctx.fillRect(u - 0.3, y + 1.4, 0.6, 2); // a little crossing spire at the back
+    // the west front: pale stone, a pointed gable with the rose window, the doorway
+    ctx.fillStyle = '#e4dac2'; ctx.fillRect(u - 6, fy, 12, fb - fy);
+    ctx.beginPath(); ctx.moveTo(u - 6, fy + 0.2); ctx.lineTo(u, fy - 4.5); ctx.lineTo(u + 6, fy + 0.2); ctx.fill();
+    ctx.strokeStyle = 'rgba(120,104,80,.5)'; ctx.lineWidth = 0.3; ctx.beginPath(); ctx.moveTo(u - 6, fy + 0.2); ctx.lineTo(u, fy - 4.5); ctx.lineTo(u + 6, fy + 0.2); ctx.stroke();
+    const ry = fy + 1.4; // rose window: coloured glass round a gold centre
+    ctx.fillStyle = '#5a4e3e'; ctx.beginPath(); ctx.arc(u, ry, 2.5, 0, 7); ctx.fill();
+    ['#c0392b', '#2c4f8a', '#e8c25a', '#2c4f8a', '#c0392b', '#5a9a4a'].forEach((c, k) => { ctx.fillStyle = c; ctx.beginPath(); ctx.moveTo(u, ry); ctx.arc(u, ry, 2.1, k * 1.047, (k + 1) * 1.047); ctx.fill(); });
+    ctx.fillStyle = '#e8c25a'; ctx.beginPath(); ctx.arc(u, ry, 0.6, 0, 7); ctx.fill();
+    ctx.fillStyle = '#4a3624'; ctx.beginPath(); ctx.moveTo(u - 1.6, fb); ctx.lineTo(u - 1.6, fb - 2.6); ctx.quadraticCurveTo(u - 1.6, fb - 4.4, u, fb - 4.8); ctx.quadraticCurveTo(u + 1.6, fb - 4.4, u + 1.6, fb - 2.6); ctx.lineTo(u + 1.6, fb); ctx.fill(); // pointed doorway
+    // twin towers, each with lancet windows, a spire and a gold cross
+    for (const tx of [u - 8.5, u + 8.5]) {
+      ctx.fillStyle = '#ddd2b8'; ctx.fillRect(tx - 3, fy - 5, 6, fb - fy + 5);
+      ctx.fillStyle = 'rgba(255,255,255,.25)'; ctx.fillRect(tx - 3, fy - 5, 1, fb - fy + 5); // lit edge
+      ctx.fillStyle = '#3e3a44'; for (const wy of [fy - 3, fy + 2.5]) { ctx.beginPath(); ctx.moveTo(tx - 0.7, wy + 3); ctx.lineTo(tx - 0.7, wy + 0.8); ctx.lineTo(tx, wy); ctx.lineTo(tx + 0.7, wy + 0.8); ctx.lineTo(tx + 0.7, wy + 3); ctx.fill(); }
+      ctx.fillStyle = '#4a5560'; ctx.beginPath(); ctx.moveTo(tx - 3.3, fy - 5); ctx.lineTo(tx, fy - 16); ctx.lineTo(tx + 3.3, fy - 5); ctx.fill();
+      ctx.fillStyle = '#5e6a76'; ctx.beginPath(); ctx.moveTo(tx - 3.3, fy - 5); ctx.lineTo(tx, fy - 16); ctx.lineTo(tx, fy - 5); ctx.fill(); // the lit side of the spire
+      ctx.fillStyle = '#e8c25a'; ctx.fillRect(tx - 0.25, fy - 19, 0.5, 3); ctx.fillRect(tx - 1, fy - 18.2, 2, 0.5);
+    }
+    tree(ctx, x + 4.5, y + 9, 2.2, '#2f5a30'); tree(ctx, x + TILE - 4.5, y + 9, 2.2, '#2f5a30');
+    if (zoom > 1.2) { person(ctx, u - 3.5, y + TILE - 2.2, '#2e2a26'); person(ctx, u + 4, y + TILE - 2, '#7a3a8a'); }
   }
   else if (p.k === 'exhibition') {
     // 🏛 the Royal Exhibition Hall: a crystal palace of glass and white iron with a great dome in the middle, red and
     // gold banners on top, a fountain in front and visitors walking about
     const hx = x + 2.5, hw = TILE - 5, hy = y + 7, hh = 13;
-    ctx.fillStyle = 'rgba(20,16,10,.3)'; ctx.fillRect(hx + 1.5, hy + 1.5, hw, hh);
+    ctx.fillStyle = 'rgba(20,16,10,.16)'; ctx.fillRect(hx + 1, hy + 1, hw, hh);
     const gl = ctx.createLinearGradient(0, hy, 0, hy + hh);
     gl.addColorStop(0, '#d6eef8'); gl.addColorStop(1, '#9cc6dc');
     ctx.fillStyle = gl; ctx.fillRect(hx, hy, hw, hh);
@@ -233,7 +250,6 @@ function drawPark(ctx: Ctx, g: Game, p: Park, zoom: number, tm: number) {
     for (const yy of [hy + hh * 0.4, hy + hh * 0.7]) { ctx.beginPath(); ctx.moveTo(hx, yy); ctx.lineTo(hx + hw, yy); ctx.stroke(); }
     ctx.strokeRect(hx, hy, hw, hh);
     // the great dome over the middle
-    ctx.fillStyle = 'rgba(20,16,10,.25)'; ctx.beginPath(); ctx.ellipse(u + 1, hy + 3, 8, 7, 0, Math.PI, 0); ctx.fill();
     const dg = ctx.createRadialGradient(u - 3, hy - 3, 1, u, hy + 2, 9);
     dg.addColorStop(0, '#f4fbff'); dg.addColorStop(1, '#8cbad4');
     ctx.fillStyle = dg; ctx.beginPath(); ctx.ellipse(u, hy + 2, 7.5, 7, 0, Math.PI, 0); ctx.closePath(); ctx.fill();
