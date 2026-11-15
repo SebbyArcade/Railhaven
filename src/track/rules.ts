@@ -3,7 +3,7 @@ import { isRevealed } from '../world/fog.ts';
 import { T } from '../world/terrain.ts';
 
 /** Track prices carried over from the old game: grass and forest $5, hills $15, tunnels $250 (after the Foundry). Bridges by distance from land. */
-export const TRACK_COST = { flat: 5, hills: 15, tunnel: 250, bridge: [0, 500, 1500, 3500], double: 10 };
+export const TRACK_COST = { flat: 5, hills: 15, tunnel: 250, bridge: [0, 500, 1500, 3500], double: 40 };
 /** Bridges cost this much a minute for each square over water, to keep up (the old game's rule). */
 export const BRIDGE_UPKEEP = 25;
 const bridgeCache = new WeakMap<object, number>();
