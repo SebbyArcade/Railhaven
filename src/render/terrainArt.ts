@@ -25,13 +25,31 @@ export function seaDepthMap(w: World): Float32Array {
   return out;
 }
 
-export interface ArtCtx { w: World; se: number; depth: Float32Array; hasTrack(i: number): boolean }
+export interface ArtCtx { w: World; se: number; depth: Float32Array; hasTrack(i: number): boolean; /** 0 forest, 1 stumps, 2 saplings */ stump?(i: number): number }
 
 /** Draw the still parts of one square at (X, Y): ground, grass tufts, shores, trees, hills and mountains. */
 export function drawSquare(c: C2D, a: ArtCtx, x: number, y: number, X: number, Y: number, detail: boolean) {
   const { w, se } = a, n = w.n, i = y * n + x, t = w.terr[i]!, H = (p: number, q: number, s = 0) => hash(w.seed, p, q, s);
   const water = (p: number, q: number) => p >= 0 && q >= 0 && p < n && q < n && w.terr[q * n + p] === 0;
-  const hv = H(x, y, 9);
+  const hv = H(x, y, 9), cutDown = t === 2 ? a.stump?.(i) ?? 0 : 0;
+  if (cutDown) { // a cut-down forest square: cleared ground with stumps, then saplings
+    c.fillStyle = GRASS[se]![Math.floor(hv * 3)]!; c.fillRect(X, Y, TILE + 0.6, TILE + 0.6);
+    c.fillStyle = 'rgba(90,62,36,.18)'; c.fillRect(X + 2, Y + 2, TILE - 4, TILE - 4);
+    if (!detail) return;
+    for (let k = 0; k < 4; k++) {
+      const tx = X + 6 + H(x, y, k) * 20, ty = Y + 8 + H(y, x, k) * 18;
+      if (cutDown === 1) {
+        c.fillStyle = 'rgba(0,0,0,.22)'; c.beginPath(); c.ellipse(tx + 1, ty + 1.5, 3.2, 1.6, 0, 0, 7); c.fill();
+        c.fillStyle = '#7a5532'; c.beginPath(); c.ellipse(tx, ty, 2.6, 1.6, 0, 0, 7); c.fill();
+        c.fillStyle = '#d7b98a'; c.beginPath(); c.ellipse(tx, ty - 0.4, 1.8, 1, 0, 0, 7); c.fill();
+      } else {
+        c.fillStyle = '#5a3e24'; c.fillRect(tx - 0.5, ty - 1, 1, 3);
+        c.fillStyle = se === 2 ? '#d48a2c' : se === 3 ? '#9fb3a6' : '#6fae44'; c.beginPath(); c.arc(tx, ty - 2.5, 2.6, 0, 7); c.fill();
+      }
+    }
+    if (k3(H(x, y, 5))) { c.fillStyle = '#8a6440'; c.fillRect(X + 8, Y + 22, 9, 2.2); c.fillRect(X + 9, Y + 19.6, 8, 2.2); } // a small log pile
+    return;
+  }
   c.fillStyle = t === 1 ? GRASS[se]![Math.floor(hv * 3)]! : t === 2 ? FOREST_BASE[se]! : t === 0 && w.deep[i] ? '#1d5f83' : TERRAIN_COL[t]!;
   c.fillRect(X, Y, TILE + 0.6, TILE + 0.6);
   if (t === 0) {
@@ -61,6 +79,8 @@ export function drawSquare(c: C2D, a: ArtCtx, x: number, y: number, X: number, Y
     c.fillStyle = 'rgba(0,0,0,.2)'; c.beginPath(); c.moveTo(X + TILE / 2, Y + 9); c.lineTo(X + TILE - 3, Y + TILE - 4); c.lineTo(X + TILE / 2, Y + TILE - 4); c.fill();
   }
 }
+
+const k3 = (v: number) => v < 0.35;
 
 /** Round, pine and birch trees; pines next to hills and mountains. */
 function drawTree(c: C2D, a: ArtCtx, tx: number, ty: number, x: number, y: number, k: number) {

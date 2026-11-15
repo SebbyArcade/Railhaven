@@ -17,8 +17,8 @@ export class TerrainCache {
   private art: ArtCtx;
   season = 0;
 
-  constructor(private w: World, hasTrack: (i: number) => boolean) {
-    this.art = { w, se: 0, depth: seaDepthMap(w), hasTrack };
+  constructor(private w: World, hasTrack: (i: number) => boolean, stump?: (i: number) => number) {
+    this.art = { w, se: 0, depth: seaDepthMap(w), hasTrack, stump };
   }
 
   /** Forget baked images touching these squares (terrain or track changed). */

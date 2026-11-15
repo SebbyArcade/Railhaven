@@ -1,5 +1,5 @@
 import type { Game, Site } from '../state.ts';
-import { bufOf, type Building, capOf, GOODS, type Good, INDUSTRIES, type IndustryKind, inputsOf, isFactory, isLinked, lockedText, outputOf, shareAt } from '../buildings/industries.ts';
+import { bufOf, type Building, capOf, GOODS, type Good, INDUSTRIES, type IndustryKind, inputsOf, isFactory, isLinked, lockedText, outputOf, shareAt, forestOf, stumpsOf } from '../buildings/industries.ts';
 import { factoryState } from '../economy/production.ts';
 import { FOUND_PRICE, orderDone, orderOf, reward, sizeName, steadyGoods, stepOf, townLinked, upgradePrice } from '../economy/towns.ts';
 import { type Dest, destinationsOf, destName, type Ship, shipPlan, siteOf } from '../economy/shipping.ts';
@@ -199,7 +199,11 @@ function buildingCard(g: Game, b: Building, page?: string): string {
     h += `<h3>② Sends out</h3>`;
   } else {
     const share = shareAt(g, b);
-    if (share < 1) h += `<div class="warn">${b.kind === 'wood' ? '🌲 Few trees' : '🌱 Few fields'} left around it (${Math.round(share * 100)}% output): track and buildings next to it cover them</div>`;
+    if (b.kind === 'wood') {
+      const f = forestOf(g, b).length, st = stumpsOf(g, b), next = st.length ? Math.max(0, Math.ceil(Math.min(...st.map(i => g.s.stumps![i]!)) - g.s.t)) : 0;
+      h += `<div class="row"><b class="ico">🌲</b><div class="grow"><div class="line"><span>Forest to cut</span><span>${f} square${f === 1 ? '' : 's'}</span></div>${bar(f / 6, f >= 6 ? '#5cc46a' : '#e8a33c')}<small>${st.length ? `🌱 ${st.length} growing back · next in ${next} s${b.lvl >= 2 ? '' : ' · level 2 regrows 3× faster'}` : 'Each forest square gives 80 wood, then grows back'}</small></div></div>`;
+      if (share < 1) h += `<div class="warn">🌲 Few trees left to cut (${Math.round(share * 100)}% output)${f === 0 ? ': it waits for the forest to grow back' : ''}</div>`;
+    } else if (share < 1) h += `<div class="warn">🌱 Few fields left around it (${Math.round(share * 100)}% output): track and buildings next to it cover them</div>`;
   }
   h += `<div class="row"><b class="ico">📦</b><div class="grow"><div class="line"><span>${G.name} ready</span><span>${Math.floor(b.stock)} / ${cap}</span></div>${bar(b.stock / cap, b.stock >= cap ? '#e0584a' : '#5cc46a')}${b.stock >= cap ? '<small>Full: it stops making more until a train collects</small>' : ''}</div></div>`;
   const ship = plan.get(b.id);

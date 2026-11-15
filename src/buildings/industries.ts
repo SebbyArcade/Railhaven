@@ -129,11 +129,20 @@ function around(g: Game, b: Pick<Building, 'x' | 'y' | 'horizontal' | 'side'>, r
 /** How much of its full output the place gives (forest, fields or pasture around it), 0-1. `extra`: squares about to be built on. */
 export function shareAt(g: Game, b: Pick<Building, 'x' | 'y' | 'horizontal' | 'side' | 'kind'>, extra?: Set<number>): number {
   const t = g.world.terr, taken = takenSquares(g), free = (i: number) => !taken.has(i) && !extra?.has(i);
-  if (b.kind === 'wood') return Math.min(1, around(g, b, 2).filter(i => t[i] === T.Forest && free(i)).length / 6);
+  if (b.kind === 'wood') return Math.min(1, around(g, b, 2).filter(i => t[i] === T.Forest && free(i) && !g.s.stumps?.[i]).length / 6);
   if (b.kind === 'farm') return Math.min(1, around(g, b, 1).filter(i => t[i] === T.Grass && free(i)).length / 6);
   if (b.kind === 'wool') return Math.min(1, around(g, b, 1).filter(i => t[i] === T.Grass && free(i)).length / 6);
   return 1;
 }
+
+/** Forest squares a lumber camp can cut now (within 2 squares, not covered, not cut down), most cut first. */
+export function forestOf(g: Game, b: Building): number[] {
+  const t = g.world.terr, taken = takenSquares(g), cut = g.s.cut ?? {};
+  return around(g, b, 2).filter(i => t[i] === T.Forest && !taken.has(i) && !g.s.stumps?.[i]).sort((p, q) => (cut[q] ?? 0) - (cut[p] ?? 0) || p - q);
+}
+
+/** Forest squares around a lumber camp that are cut down and growing back. */
+export const stumpsOf = (g: Game, b: Building) => around(g, b, 2).filter(i => g.s.stumps?.[i] !== undefined);
 
 /** The squares a wheat or sheep farm works (its fields or pasture): free grass next to it, at most six. */
 export function fieldSquares(g: Game, b: Building): number[] {
