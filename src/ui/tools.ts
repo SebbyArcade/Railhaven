@@ -27,7 +27,7 @@ export type Mode = 'pan' | 'rail' | 'double' | 'remove' | 'train' | 'build' | 's
 
 export const MODE_HINT: Record<Mode, string> = {
   pan: '',
-  rail: '🛤 Drag outward from your track (from Ashford at first). To join a town, follow its arrows: track straight across its square, past it, or ending right beside it. ✓ Build when done.',
+  rail: '🛤 Drag out from your track (Ashford at first). Join a town along its arrows: across its square, past it, or ending beside it. Your line waits while you scroll. ✓ Build when done.',
   double: '═ Tap single track for a 🔁 passing loop, or drag along your track to double it. Trains keep right like cars: one lane each way. 🚉 Stations and buildings have two tracks already.',
   remove: '✂ Tap a track square to remove it.',
   train: '🚂 Trains roll out of the engine shed and run themselves: each takes the best waiting load where it is needed.',
@@ -76,6 +76,8 @@ export class Tools {
   scout: { path: number[]; boat: boolean; name: string } | null = null;
   /** Map mode: the circle a map would cover */
   mapPv: { x: number; y: number; r: number; near: string } | null = null;
+  /** just built: the tool has closed, and for a few seconds the bar offers to carry on (🛤 Keep building) and ↶ Undo */
+  again: Again | null = null;
 
   constructor(private g: () => Game) {}
 
@@ -84,13 +86,37 @@ export class Tools {
     this.cancel();
   }
 
+  /** the "Keep building" offer, while it is still showing */
+  againOn(): Again | null {
+    if (this.again && (performance.now() > this.again.until || this.mode !== 'pan')) this.again = null;
+    return this.again;
+  }
+
+  /** After a build the tool closes (the map pans freely again); the bar offers to carry on for a few seconds. */
+  private closeAfter(a: Omit<Again, 'until'>) {
+    this.mode = 'pan'; this.cancel();
+    this.again = { ...a, until: performance.now() + AGAIN_MS };
+  }
+
+  /** 🛤 Keep building: reopen the tool that just closed (rails carry on from the end of the line just built).
+   *  Returns 'menu' when the build menu should open (main.ts owns it). */
+  resume(): 'menu' | '' {
+    const a = this.againOn(); if (!a) return '';
+    this.again = null;
+    if (a.mode === 'menu') return 'menu';
+    this.mode = a.mode; this.cancel();
+    if (a.mode === 'rail' && a.end !== undefined && isAnchor(this.g(), a.end)) { this.plan = { path: [a.end] }; toast('🛤 Carry on from the end of your line: drag from it, or tap where it goes next'); }
+    else if (a.mode === 'rail') toast('🛤 Drag from your track to the building\'s loading track');
+    return '';
+  }
+
   /** Open Map mode with the circle centred on (x, y): a town or dock on the railway. */
   openMap(x: number, y: number): string {
     const m = mapAt(this.g(), x, y); if (typeof m === 'string') return m;
     this.mode = 'map'; this.cancel(); this.mapPv = m; return '';
   }
 
-  cancel() { if (this.mode !== 'map') this.mapPv = null; this.scout = null; this.plan = null; this.dbl.clear(); this.removeAt = null; this.preview = null; this.previewErr = ''; this.dragOff = null; if (this.mode !== 'build') this.buildKind = null; }
+  cancel() { this.again = null; if (this.mode !== 'map') this.mapPv = null; this.scout = null; this.plan = null; this.dbl.clear(); this.removeAt = null; this.preview = null; this.previewErr = ''; this.dragOff = null; if (this.mode !== 'build') this.buildKind = null; }
 
   /** choose what to build: glowing squares show where it fits */
   chooseBuild(k: IndustryKind): { x: number; y: number } | null {
@@ -192,13 +218,17 @@ export class Tools {
       this.dragOff = [(i % n) - this.preview.x, ((i / n) | 0) - this.preview.y]; return true;
     }
     if (this.mode === 'rail') {
-      if (this.plan && this.plan.path.includes(i)) { this.plan.path = this.plan.path.slice(0, this.plan.path.indexOf(i) + 1); return true; }
+      const pl = this.plan, end = pl?.path.at(-1);
+      if (pl && end !== undefined) { // a line is being drawn: it stays put until ✓ Build or ✕. Only its own end (or its new squares) paints; any other drag pans
+        if (i === end || (pl.path.includes(i) && !g.track.has(i))) { pl.path = pl.path.slice(0, pl.path.indexOf(i) + 1); return true; }
+        if (Math.abs((i % n) - (end % n)) <= 1 && Math.abs(((i / n) | 0) - ((end / n) | 0)) <= 1) { this.dragOver(i); return true; } // fingers are wide
+        return false;
+      }
       const p = startPlan(g, i);
       if (p) { this.plan = p; return true; }
       // a drag that starts just beside the end of the line or the track still paints (fingers are wide)
       const near = this.nearStart(i); if (near === null) return false;
-      if (this.plan && this.plan.path.length > 1 && this.plan.path.at(-1) !== near) return false; // keep the line being drawn
-      if (!this.plan || this.plan.path.at(-1) !== near) this.plan = { path: [near] };
+      this.plan = { path: [near] };
       this.dragOver(i); return true;
     }
     if (this.mode === 'double') { if (!g.track.has(i)) return false; this.twinNoted = false; this.markDouble(i); return true; }
@@ -258,10 +288,11 @@ export class Tools {
     const g = this.g(), n = g.world.n;
     if (this.mode === 'rail') {
       const last = this.plan?.path.at(-1);
-      if (last !== undefined && !g.track.has(i)) { this.extendTo(i); return true; } // tap anywhere: the line runs there
+      // a line is being drawn: a tap anywhere runs it on from its end (it never starts a new line: ✕ does that)
+      if (last !== undefined && last !== i) { this.extendTo(i); return true; }
       if (isAnchor(g, i)) {
-        if (this.plan && this.plan.path.length > 1 && last !== i) { this.extendTo(i); return true; } // joining back onto the track
         if (g.track.get(i)?.links === 15 && (!this.plan || this.plan.path.length <= 1)) { this.plan = null; this.flipCrossing(i); return true; } // a four-way square: crossing ⇄ junction
+        if (last === i) return true;
         this.plan = { path: [i] }; toast('Now tap where the line should go (or drag)'); return true;
       }
       if (!this.plan && g.s.sites.some(s => s.kind === 'plot' && s.y * n + s.x === i)) return false; // the flag: its card opens
@@ -347,7 +378,7 @@ export class Tools {
   canUndo(): boolean {
     if (this.undoBuilding()) return true;
     const g = this.g(), b = this.lastStroke;
-    if (!b || this.mode !== 'rail') return false;
+    if (!b || (this.mode !== 'rail' && !this.againOn())) return false;
     const fresh = new Set(b.before.filter(([, o]) => !o).map(([i]) => i));
     return !g.s.trains.some(t => t.trail.some(s => g.net.pieces[s.piece]!.squares.some(q => fresh.has(q))));
   }
@@ -358,21 +389,23 @@ export class Tools {
       const { paid, before, shed } = this.lastBuild!, err = removeBuilding(g, ub); if (err) { toast(err); return; }
       restoreShed(g, shed); // the shed goes back where it stood if the building moved it
       takeBackYard(g, before);
-      g.s.money += paid - refundOf(ub); this.lastBuild = null;
+      g.s.money += paid - refundOf(ub); this.lastBuild = null; this.again = null;
       trackChanged(g); g.terrainDirty?.([...footprint(g.world.n, ub), ...before.map(([i]) => i)]);
       toast(`${INDUSTRIES[ub.kind].icon} ${INDUSTRIES[ub.kind].name} taken back · ${fmtMoney(paid)} back`); return;
     }
     const b = this.lastStroke;
     if (!b) return;
     if (!this.canUndo()) { toast('A train is on that track'); return; }
-    undoStroke(g, b); this.lastStroke = null; this.plan = null;
+    undoStroke(g, b); this.lastStroke = null; this.plan = null; this.again = null;
     trackChanged(g); g.terrainDirty?.(b.before.map(([i]) => i));
     toast(`Undone · ${fmtMoney(b.cost)} back`);
   }
 
   // ---- the confirm bar
   bar(): { text: string; ok: string; can: boolean; turn?: boolean; near?: boolean } | null {
-    const g = this.g();
+    const g = this.g(), a = this.againOn();
+    if (a && !this.card) return { text: a.text, ok: a.ok, can: true };
+    if (this.mode === 'rail' && this.plan && this.plan.path.length === 1) return { text: '🛤 Line starts here: drag from it, or tap where it goes', ok: '✓ Build', can: false };
     if (this.mode === 'rail' && this.plan && this.plan.path.length > 1) {
       const e = planError(g, this.plan), n = this.plan.path.filter(i => !g.track.has(i)).length, wet = this.plan.path.filter(i => !g.track.has(i) && g.world.terr[i] === 0).length;
       return { text: e || `${n} new square${n === 1 ? '' : 's'} · ${fmtMoney(planCost(g, this.plan))}${wet ? ` · 🌉 then ${fmtMoney(wet * BRIDGE_UPKEEP)}/min upkeep` : ''}${harmText(harmOf(g, this.plan.path.filter(i => !g.track.has(i))))}`, ok: '✓ Build', can: !e };
@@ -417,17 +450,19 @@ export class Tools {
   private doConfirm() {
     const g = this.g();
     if (this.mode === 'rail' && this.plan) {
+      const fresh = this.plan.path.filter(i => !g.track.has(i)).length, end = this.plan.path.at(-1)!;
       const b = buildPlan(g, this.plan); if (typeof b === 'string') { toast(b); return; }
       this.lastBuild = null; // new track: a building can no longer be taken back
       this.lastStroke = b.revealed ? null : b;
       if (b.revealed) toast('New land uncovered! (Track that uncovers land can\'t be undone)');
       trackChanged(g); g.terrainDirty?.(this.plan.path);
-      this.plan = { path: [this.plan.path.at(-1)!] };
+      this.closeAfter({ mode: 'rail', end, text: `✅ ${fresh ? `${fresh} square${fresh === 1 ? '' : 's'} built` : 'Track joined'}`, ok: '🛤 Keep building' });
     } else if (this.mode === 'double') {
       const add = [...this.dbl].filter(i => g.track.has(i) && !g.track.get(i)!.dbl && !g.net.twin?.has(i)), c = add.length * TRACK_COST.double;
       if (c > g.s.money) { toast('Not enough money'); return; }
       g.s.money -= c; for (const i of add) g.track.get(i)!.dbl = true; this.lastStroke = null; this.lastBuild = null;
       trackChanged(g); this.dbl.clear();
+      this.closeAfter({ mode: 'double', text: `✅ ${add.length} square${add.length === 1 ? '' : 's'} doubled`, ok: '═ Double more' });
     } else if (this.mode === 'build' && this.preview) {
       const fog0 = g.s.fog.slice(), m0 = g.s.money, ys = yardSquares(g.world.n, this.preview), st = this.preview.horizontal ? 1 : g.world.n;
       const before = [ys[0]! - st, ...ys, ys.at(-1)! + st].map(i => [i, g.track.get(i)?.links ?? null] as [number, number | null]); // the yard's squares and the squares past its ends, as they were
@@ -435,9 +470,12 @@ export class Tools {
       const b = build(g, this.preview); if (typeof b === 'string') { toast(b); return; }
       this.lastBuild = { id: b.id, paid: m0 - g.s.money, at: performance.now(), before, shed: shed0 };
       trackChanged(g); g.terrainDirty?.(footprint(g.world.n, b));
-      if (!g.s.fog.every((v, k) => v === fog0[k])) { this.lastBuild = null; toast(`${INDUSTRIES[b.kind].icon} ${INDUSTRIES[b.kind].name} built: it uncovered new land, so it can't be undone`, 3500); this.preview = null; this.previewErr = ''; this.glowKey = ''; return; }
-      toast(isLinked(g, b) ? `${INDUSTRIES[b.kind].icon} ${INDUSTRIES[b.kind].name} built · ↶ Undo if it's the wrong spot` : `${INDUSTRIES[b.kind].icon} Built! Now lay track from your railway to one end of its yard · ↶ Undo if it's the wrong spot`);
+      const linked = isLinked(g, b), name = `${INDUSTRIES[b.kind].icon} ${INDUSTRIES[b.kind].name}`;
+      const next: Omit<Again, 'until'> = linked ? { mode: 'menu', text: `✅ ${name} built`, ok: '🏗 Build more' } : { mode: 'rail', text: `✅ ${name} built · now join it to your railway`, ok: '🛤 Lay its track' };
       this.preview = null; this.previewErr = ''; this.glowKey = '';
+      if (!g.s.fog.every((v, k) => v === fog0[k])) { this.lastBuild = null; toast(`${name} built: it uncovered new land, so it can't be undone`, 3500); this.closeAfter(next); return; }
+      toast(linked ? `${name} built · ↶ Undo if it's the wrong spot` : `${INDUSTRIES[b.kind].icon} Built! Now lay track from your railway to one end of its yard · ↶ Undo if it's the wrong spot`);
+      this.closeAfter(next);
     } else if (this.mode === 'train') {
       const t = buyTrain(g); if (typeof t === 'string') { toast(t); return; }
       this.selected = t.id; toast(`🚂 Train ${t.id} is out of the shed and looking for a load`);
@@ -456,6 +494,10 @@ export class Tools {
     }
   }
 }
+
+/** how long the "Keep building" offer shows after a build */
+const AGAIN_MS = 8000;
+type Again = { mode: 'rail' | 'double' | 'menu'; end?: number; text: string; ok: string; until: number };
 
 /** Towns and buildings that would no longer be on the railway if square i were removed, in words ('' if none). */
 export function cutText(g: Game, i: number): string {
