@@ -78,13 +78,14 @@ export function planError(g: Game, p: PaintPlan): string {
     const e = stationLinkError(withPath(g, p.path.slice(0, k)), g.world.n, g.s.sites, p.path[k - 1]!, p.path[k]!, g.world.terr) || yardLinkError(g, p.path[k - 1]!, p.path[k]!);
     if (e) return e;
   }
-  if (cost > g.s.money) return `Need $${Math.ceil(cost - g.s.money).toLocaleString('en-US')} more`;
+  // the island rule comes before the price: a crossing that can never be built must not read as "save up for it"
   const water = p.path.filter(i => !g.world.terr[i]);
   if (water.length) {
-    const set = new Set([...g.track.keys(), ...p.path]);
-    const e = bridgeJoinsIslands(g, water, j => set.has(j));
+    const set = new Set([...g.track.keys(), ...p.path]), land = p.path.filter(i => g.world.terr[i]);
+    const e = bridgeJoinsIslands(g, water, j => set.has(j), land.length ? g.world.islandOf[land.at(-1)!] : undefined);
     if (e) return e;
   }
+  if (cost > g.s.money) return `Need $${Math.ceil(cost - g.s.money).toLocaleString('en-US')} more`;
   return '';
 }
 
