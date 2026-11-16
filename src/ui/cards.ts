@@ -1,6 +1,7 @@
 import { hallOf } from '../buildings/stations.ts';
 import type { Game, Site } from '../state.ts';
 import { fallsMul, POI, POI_RARITY, poisOf, RARITY } from '../world/explore.ts';
+import { isleCard, reportsHtml, scoutCard } from './discover.ts';
 import { buildingSquares, yardSquares, bufOf, growsTracks, stripError, tracksOf, type Building, capOf, GOODS, type Good, INDUSTRIES, type IndustryKind, inputsOf, isFactory, isLinked, lockedText, outputOf, shareAt, forestOf, stumpsOf } from '../buildings/industries.ts';
 import { factoryState } from '../economy/production.ts';
 import { hasProject, nextParkPrice, orderMul, PARK_PRICE, parkSpot, parksOf, payMul, projectsFor, projectsOf, rewardMul } from '../buildings/parks.ts';
@@ -24,7 +25,7 @@ import { ordersHtml, placeName } from './orders.ts';
 import { mapHtml, type MapView } from './mapviews.ts';
 import { mapCost, MAP_R, MAP_R_SEA } from '../world/maps.ts';
 
-export type Card = { kind: 'shed'; id: 0 } | { kind: 'fleet'; id: 0; page?: string } | { kind: 'plot'; id: number } | { kind: 'town'; id: number; page?: string } | { kind: 'bld'; id: number; page?: string } | { kind: 'train'; id: number } | { kind: 'story'; id: 0; page?: string } | { kind: 'game'; id: number; page?: string } | { kind: 'orders'; id: 0 } | { kind: 'map'; id: 0 } | { kind: 'ship'; id: number } | { kind: 'ships'; id: 0 } | { kind: 'find'; id: number; more?: number };
+export type Card = { kind: 'shed'; id: 0 } | { kind: 'fleet'; id: 0; page?: string } | { kind: 'plot'; id: number } | { kind: 'town'; id: number; page?: string } | { kind: 'bld'; id: number; page?: string } | { kind: 'train'; id: number } | { kind: 'story'; id: 0; page?: string } | { kind: 'game'; id: number; page?: string } | { kind: 'orders'; id: 0 } | { kind: 'map'; id: 0 } | { kind: 'ship'; id: number } | { kind: 'ships'; id: 0 } | { kind: 'find'; id: number; more?: number } | { kind: 'scout'; id: number } | { kind: 'isle'; id: number; fresh?: boolean };
 
 /** the kind that makes each good */
 const makerOf = (k: Good) => (Object.keys(INDUSTRIES) as IndustryKind[]).find(m => INDUSTRIES[m].makes === k);
@@ -59,6 +60,8 @@ export function cardHtml(g: Game, c: Card, view?: MapView | null): string | null
   if (c.kind === 'ships') return shipsCard(g);
   if (c.kind === 'plot') { const p = siteOf(g, c.id); return p?.kind === 'plot' ? plotCard(g, p) : null; }
   if (c.kind === 'find') return findCard(g, c.id, c.more ?? 0);
+  if (c.kind === 'scout') return c.id ? scoutCard(g, c.id) : reportsHtml(g);
+  if (c.kind === 'isle') return isleCard(g, c.id, !!c.fresh);
   if (c.kind === 'town') { const t = siteOf(g, c.id); return t?.kind === 'town' ? townCard(g, t, c.page) : null; }
   if (c.kind === 'bld') { const b = g.s.buildings?.find(x => x.id === c.id); return b ? buildingCard(g, b, c.page) : null; }
   const t = g.s.trains.find(x => x.id === c.id); return t ? trainCard(g, t) : null;
