@@ -145,6 +145,7 @@ export function importLegacy(o: any): ImportResult {
     if (!best) { refund += value; missed.push(INDUSTRIES[kind].name); continue; }
     const pay = priceOf(g, kind, islandAtYard(g, best)); g.s.money += pay;
     const b = build(g, best); if (typeof b === 'string') { g.s.money -= pay; refund += value; missed.push(INDUSTRIES[kind].name); continue; }
+    delete b.built; // it already stood in the old game: no builders' scene
     b.paid = value; b.lvl = Math.max(1, Math.min(3, ob.lvl ?? 1)); b.stock = Math.min(capOf(b), Math.max(0, ob.stock ?? 0));
     if (ob.inp && isFactory(kind)) for (const [k, v] of Object.entries(ob.inp)) (b.inbuf ??= {})[k as Good] = Math.min(30 + 20 * b.lvl, v as number);
     if (kind === 'dock' && ob.fish) b.fish = Math.min(3, ob.fish);

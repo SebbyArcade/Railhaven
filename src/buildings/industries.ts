@@ -129,6 +129,18 @@ export interface Building {
   tracks?: number;
   /** docks: goods waiting for a ship to another dock */
   outq?: import('../ships/ships.ts').SeaLoad[];
+  /** game time it was put up: the builders' scene plays for BUILD_SHOW seconds after (looks and sound only) */
+  built?: number;
+}
+
+/** How long the builders' scene (cranes, dust, workers, hammers) plays after a building is put up. The building works
+ *  from the first moment: the scene is only for show, so building never slows the game down. */
+export const BUILD_SHOW = 5;
+/** How far along the builders' scene is (0 just placed, 1 done), or null when it is not being built now. */
+export function buildingUp(g: Game, b: Building): number | null {
+  if (b.built === undefined || b.id < 0) return null;
+  const p = (g.s.t - b.built) / BUILD_SHOW;
+  return p >= 0 && p < 1 ? p : null;
 }
 
 export const YARD_LEN = 4;
@@ -355,7 +367,7 @@ export function build(g: Game, p: ReturnType<typeof placementsAt>[number]): Buil
   if (price > g.s.money) return `Need $${(price - g.s.money).toLocaleString('en-US')} more`;
   g.s.money -= price;
   const dep = depositUnder(g, p);
-  const b: Building = { id: g.s.nextId++, ...p, lvl: 1, stock: 0, paid: price, ...(dep ? { dep: dep.id } : {}) };
+  const b: Building = { id: g.s.nextId++, ...p, lvl: 1, stock: 0, paid: price, built: g.s.t, ...(dep ? { dep: dep.id } : {}) };
   (g.s.buildings ??= []).push(b);
   // the yard's own track: four squares in a line
   const n = g.world.n, sq = yardSquares(n, b);
