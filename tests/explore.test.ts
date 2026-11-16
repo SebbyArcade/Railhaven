@@ -63,6 +63,16 @@ describe('landmarks and wrecks', () => {
     void a;
   });
 
+  it('track at the corner of the dashed square (2 squares out diagonally) counts; 3 squares out does not', () => {
+    const g = newGame(4242), n = g.world.n;
+    const hut = poisOf(g).find(p => p.kind === 'ruins' && g.world.islandOf[p.y * n + p.x] === g.world.home)!;
+    g.s.fog.fill(255);
+    g.linked = new Set([(hut.y + 3) * n + hut.x + 3]); checkPois(g);
+    expect(hut.got).toBeFalsy();
+    g.linked = new Set([(hut.y + 2) * n + hut.x + 2]); checkPois(g);
+    expect(hut.got).toBe(true);
+  });
+
   it('a ship or boat passing a wreck salvages it once', () => {
     const g = newGame(4242), w = poisOf(g).find(p => p.kind === 'wreck')!;
     const m = g.s.money;

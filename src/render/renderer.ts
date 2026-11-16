@@ -24,7 +24,7 @@ import { drawTrack } from './track.ts';
 import { drawTrains } from './trains.ts';
 import { drawMishaps, drawStorm, stormFlash } from './events.ts';
 import { drawShips } from './ships.ts';
-import { drawExplore, drawScouting, drawMaps } from './explore.ts';
+import { drawExplore, drawPoiZones, drawScouting, drawMaps } from './explore.ts';
 import { islandSpec, SPEC_TEXT } from '../world/specialty.ts';
 import type { Tools } from '../ui/tools.ts';
 import { bodyPoint } from '../trains/train.ts';
@@ -106,6 +106,7 @@ export class Renderer {
     drawStorm(ctx, g, tm);
     drawFog(ctx, g, x0, y0, x1, y1, cam.z, tm);
     drawScouting(ctx, g, this.tools, tm, cam.z); // scout routes run into the fog: draw them over it
+    drawPoiZones(ctx, g, this.tools, tm, (x, y) => x >= x0 - 12 && x <= x1 + 12 && y >= y0 - 12 && y <= y1 + 12, cam.z); // landmark take-over squares and reach, over the fog
     drawMaps(ctx, g, this.tools, tm, cam.z);
     this.drawIslandNames(ctx, cam.z);
     ctx.restore();
