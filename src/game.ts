@@ -113,7 +113,7 @@ function surveyLandings(g: Game) {
     const found = g.s.sites.filter(s => s.kind === 'dep' && s.hidden && g.world.islandOf[s.y * n + s.x] === k);
     for (const s of found) s.hidden = false; // marked over the fog (render/explore.ts), not cleared round each: he found the holes random
 
-    if (found.length) say(g, `🔎 The landing crew surveyed ${g.world.islands[k!]?.name ?? 'the island'}: ${[...new Set(found.map(s => s.res === 'iron' ? '🧲 iron' : s.res === 'oil' ? '🛢 oil' : s.res))].join(' and ')} found`, { kind: 'isle', id: k! });
+    if (found.length) say(g, `🔎 The landing crew surveyed ${g.world.islands[k!]?.name ?? 'the island'}: ${[...new Set(found.map(s => s.res === 'iron' ? '🧲 iron' : s.res === 'oil' ? '🛢 oil' : s.res))].join(' and ')} found in its hills: lay track or send scouts there to find it`, { kind: 'isle', id: k! });
   }
 }
 
