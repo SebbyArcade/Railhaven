@@ -44,7 +44,7 @@ describe('Rails: the line being drawn stays put', () => {
 });
 
 describe('Tools close after building', () => {
-  it('rails: back to panning, with Keep building that carries on from the end', () => {
+  it('rails: back to panning, with Keep building that lets a new line start anywhere', () => {
     const { g, tools, A } = setup();
     tools.mode = 'rail'; tools.dragStart(A); for (let k = 1; k <= 3; k++) tools.dragOver(A + k);
     tools.confirm();
@@ -53,7 +53,8 @@ describe('Tools close after building', () => {
     expect(tools.bar()?.ok).toBe('🛤 Keep building');
     expect(tools.canUndo()).toBe(true);
     expect(tools.resume()).toBe('');
-    expect(tools.mode).toBe('rail'); expect(tools.plan!.path).toEqual([A + 3]);
+    expect(tools.mode).toBe('rail'); expect(tools.plan).toBe(null);
+    expect(tools.dragStart(A + 1)).toBe(true); expect(tools.plan!.path).toEqual([A + 1]); // a new line from the middle of the old one
   });
 
   it('a building: back to panning, and the bar offers what comes next', () => {
