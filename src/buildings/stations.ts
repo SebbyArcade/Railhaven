@@ -40,8 +40,8 @@ export function hallOf(track: TrackMap, n: number, town: Site, terr: Uint8Array,
     if (ok(h)) return h;
     const ends = [0, 1, 2, 3].filter(d => sq.links & bit(d as Dir));
     if (ends.length === 1) { // the line stops on the town square: the platforms may run back along the line instead
-      const d = ends[0] as Dir, back = make(n, town, town.x + DX[d], town.y + DY[d], horizontal);
-      if (dry(back)) return back;
+      const d = ends[0] as Dir, back = make(n, town, town.x + DX[d], town.y + DY[d], horizontal), along = horizontal ? bit(0) | bit(2) : bit(1) | bit(3);
+      if (dry(back) && back.squares.every(i => i === c || track.get(i)?.links === along)) return back; // straight platforms only
     }
     return null; // no room: platforms on a building's loading track or out over the sea would make no sense
   }

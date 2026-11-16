@@ -10,6 +10,7 @@ import { buildingSide, labelAt, stationDoor } from './stations.ts';
 import { isRevealed } from '../world/fog.ts';
 import { footprint } from '../buildings/industries.ts';
 import { TILE } from '../world/terrain.ts';
+import { bestSpot, joinGap } from '../track/joins.ts';
 import { bush, cottage, fence, person } from './art.ts';
 
 const RES_ICON: Record<string, string> = { coal: '⚫', stone: '🪨', iron: '🧲', oil: '🛢', wood: '🪵', farm: '🌾', gold: '🪙', gems: '💎', cocoa: '🫘', rubber: '🌿' };
@@ -93,7 +94,12 @@ function drawTown(ctx: CanvasRenderingContext2D, g: Game, s: Site, tm: number, z
   const label = (off ? '🔌 ' : cap ? '👑 ' : '') + (s.name ?? ''), tw = ctx.measureText(label).width + 12;
   // the board sits in the middle of the town: below the town square, or among the houses round a station beside it
   const Hb = fs * 1.75 + 14;
-  const { LX, BT } = labelAt(g.s.seed, s, hall, g.world.n, tw, Hb);
+  let { LX, BT } = labelAt(g.s.seed, s, hall, g.world.n, tw, Hb);
+  if (off) { // the gold squares and the station outline that would link it: keep the board off them (above the town when they run below)
+    const gap = joinGap(g, s), n = g.world.n, way = gap ? [...gap.squares, ...gap.hall] : bestSpot(g, s)?.spot.squares ?? [];
+    const under = (dy: number) => way.some(i => Math.abs(i % n - s.x) <= 3 && ((i / n) | 0) - s.y === dy);
+    if (under(1) || under(2)) { if (!under(-1) && !under(-2)) BT = s.y * TILE - 8 - Hb; }
+  }
   ctx.fillStyle = 'rgba(58,40,24,.92)'; ctx.fillRect(LX - tw / 2, BT, tw, fs + 6);
   if (off) { ctx.strokeStyle = '#f08c3c'; ctx.lineWidth = 1.6; ctx.setLineDash([4, 3]); ctx.strokeRect(LX - tw / 2, BT, tw, fs + 6); ctx.setLineDash([]); }
   else { ctx.strokeStyle = '#c99a5b'; ctx.lineWidth = 1; ctx.strokeRect(LX - tw / 2, BT, tw, fs + 6); }

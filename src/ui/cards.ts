@@ -76,8 +76,9 @@ function townCard(g: Game, t: Site, page?: string): string {
   if (page === 'parks' || page === 'projects') return h + townPage(g, t, page);
   if (!linked) {
     const gap = joinGap(g, t)?.squares, go = `<button class="mini" data-act="railtown" data-x="${t.x}" data-y="${t.y}">🛤 Lay track ›</button>`;
-    h += gap ? `<div class="warn">🔌 Not on the railway yet: your track is only ${gap.length === 1 ? '1 square' : `${gap.length} squares`} short. Lay track from the gold arrow over the dashed ${gap.length === 1 ? 'square' : 'squares'} to link it ${go}</div>`
-      : `<div class="warn">🔌 Not on the railway yet: ${hallOf(g.track, g.world.n, t, g.world.terr, yardSet(g)) ? 'join your line to either end of its station' : 'lay track straight across its square, past it beside it, or ending right beside it'} (🛤 Rails shows where with arrows) ${go}</div>`;
+    const j = joinGap(g, t);
+    h += gap && j ? `<div class="warn">🔌 Not on the railway yet: your track is only ${gap.length === 1 ? '1 square' : `${gap.length} squares`} short (about ${fmtMoney(j.cost)}). Lay track from the gold arrow over the dashed ${gap.length === 1 ? 'square' : 'squares'}: its 🚉 station goes on the pale outline ${go}</div>`
+      : `<div class="warn">🔌 Not on the railway yet: ${hallOf(g.track, g.world.n, t, g.world.terr, yardSet(g)) ? 'join your line to either end of its station' : 'lay track from your line into its 🚉 station outline'} (🛤 Rails shows it, with an arrow where track comes in) ${go}</div>`;
   }
   const done = orderDone(g, t);
   h += `<h3>📋 ${done ? 'Order filled!' : `Wants these to grow into a ${sizeName(L + 1)}`}</h3>`;
