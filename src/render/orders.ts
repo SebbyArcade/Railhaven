@@ -1,5 +1,6 @@
 import type { Game } from '../state.ts';
-import { buildingSquares, GOODS, type Good, INDUSTRIES, yardSquares } from '../buildings/industries.ts';
+import type { Building } from '../buildings/industries.ts';
+import { buildingSquares, GOODS, type Good, INDUSTRIES, isLinked, yardSquares } from '../buildings/industries.ts';
 import { orderDone, orderOf, townLinked } from '../economy/towns.ts';
 import { type Ship, siteOf } from '../economy/shipping.ts';
 import { TILE } from '../world/terrain.ts';
@@ -62,5 +63,68 @@ export function drawAlerts(ctx: CanvasRenderingContext2D, g: Game, ids: Set<numb
     ctx.fillStyle = '#fff4e8'; ctx.beginPath(); ctx.arc(X, Y, r, 0, 7); ctx.fill();
     ctx.strokeStyle = '#d8442f'; ctx.lineWidth = 1.8 * s; ctx.stroke();
     ctx.fillStyle = '#d8442f'; ctx.font = `800 ${11 * s}px system-ui`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('!', X, Y + 0.5);
+  }
+}
+
+/** Where a building's tags sit: the middle of its footprint, in world pixels. */
+function centreOf(g: Game, b: Building) {
+  const n = g.world.n, sq = buildingSquares(n, b); let x = 0, y = 0;
+  for (const i of sq) { x += i % n; y += (i / n) | 0; }
+  return { X: (x / sq.length + 0.5) * TILE, Y: (y / sq.length + 0.5) * TILE };
+}
+
+/** A rounded tag of fixed size on screen, centred at X,Y (world pixels). */
+function tag(ctx: CanvasRenderingContext2D, X: number, Y: number, zoom: number, text: string, edge: string, col = '#f6e7c6', bg = 'rgba(30,24,16,.88)') {
+  ctx.save(); ctx.translate(X, Y); ctx.scale(1 / zoom, 1 / zoom);
+  ctx.font = '700 11px system-ui'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  const w = ctx.measureText(text).width + 12, h = 18;
+  ctx.fillStyle = bg; ctx.beginPath(); ctx.roundRect(-w / 2, -h / 2, w, h, 9); ctx.fill();
+  ctx.strokeStyle = edge; ctx.lineWidth = 1.5; ctx.stroke();
+  ctx.fillStyle = col; ctx.fillText(text, 0, 0.5);
+  ctx.restore();
+}
+
+/** ⭐ A gold tag over each place with a rush on: the good and how many are still to come. */
+export function drawRushTags(ctx: CanvasRenderingContext2D, g: Game, zoom: number, tm: number) {
+  const seen = new Map<string, number>();
+  for (const r of g.s.rush ?? []) {
+    let X: number, Y: number;
+    if (r.to.kind === 'town') { const t = siteOf(g, r.to.id); if (!t) continue; X = (t.x + 0.5) * TILE; Y = (t.y - 1.1) * TILE - 7.5 * Math.max(1, 1 / zoom * 1.4) - 14 / zoom; }
+    else { const b = g.s.buildings?.find(x => x.id === r.to.id); if (!b) continue; ({ X, Y } = centreOf(g, b)); Y -= 1.3 * TILE; }
+    const key = `${r.to.kind}${r.to.id}`, k = seen.get(key) ?? 0; seen.set(key, k + 1);
+    tag(ctx, X, Y - k * 22 / zoom, zoom * (1 + 0.04 * Math.sin(tm * 4)), `⭐ ${GOODS[r.good].icon} ${Math.max(0, r.left)}`, '#ffd27a', '#ffd27a', 'rgba(42,29,12,.92)');
+  }
+}
+
+/** ⏳ A small hourglass at the top corner of each building whose goods wait for a free train. */
+export function drawWaitBadges(ctx: CanvasRenderingContext2D, g: Game, ids: Set<number>, zoom: number) {
+  if (!ids.size) return;
+  for (const b of g.s.buildings ?? []) {
+    if (!ids.has(b.id)) continue;
+    const n = g.world.n, sq = buildingSquares(n, b); let x1 = 0, y0 = Infinity;
+    for (const i of sq) { x1 = Math.max(x1, i % n); y0 = Math.min(y0, (i / n) | 0); }
+    const X = (x1 + 0.85) * TILE, Y = (y0 + 0.15) * TILE, s = 1 / zoom;
+    ctx.save(); ctx.translate(X, Y); ctx.scale(s, s);
+    ctx.fillStyle = 'rgba(0,0,0,.3)'; ctx.beginPath(); ctx.arc(1, 1.5, 9, 0, 7); ctx.fill();
+    ctx.fillStyle = '#fff4dc'; ctx.beginPath(); ctx.arc(0, 0, 9, 0, 7); ctx.fill();
+    ctx.strokeStyle = '#e8a33c'; ctx.lineWidth = 1.8; ctx.stroke();
+    ctx.font = '11px system-ui'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('⏳', 0, 0.5);
+    ctx.restore();
+  }
+}
+
+/** 📦 Under every dock on the railway with goods in it: the total and the top goods, readable at any zoom. */
+export function drawDockTags(ctx: CanvasRenderingContext2D, g: Game, zoom: number, skip?: number) {
+  const ships = (g.s.ships ?? []).length;
+  for (const b of g.s.buildings ?? []) {
+    if (b.kind !== 'dock' || b.id === skip || !isLinked(g, b)) continue;
+    const m = new Map<Good, number>(); let out = 0;
+    for (const q of b.outq ?? []) { m.set(q.good, (m.get(q.good) ?? 0) + q.n); out += q.n; }
+    for (const [k, v] of Object.entries(b.landed ?? {}) as [Good, number][]) if (v >= 1) m.set(k, (m.get(k) ?? 0) + v);
+    const all = [...m].filter(([, v]) => v >= 1).sort((p, q) => q[1] - p[1]); if (!all.length) continue;
+    const tot = Math.floor(all.reduce((a, [, v]) => a + v, 0)), top = all.slice(0, zoom < 0.7 ? 2 : 3);
+    const text = `📦 ${tot} · ${top.map(([k, v]) => `${GOODS[k].icon}${Math.floor(v)}`).join(' ')}${all.length > top.length ? ` +${all.length - top.length}` : ''}`;
+    const { X, Y } = centreOf(g, b);
+    tag(ctx, X, Y + 1.2 * TILE, zoom, text, out > 0 && !ships ? '#e0584a' : '#6bb8e8');
   }
 }

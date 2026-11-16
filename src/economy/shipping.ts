@@ -127,6 +127,13 @@ export function shipPlan(g: Game, skip?: Train): Plan {
       out.set(p.s.sk, { to: p.to, why: p.f ? 'factory' : 'order', d: p.d, rush: true });
       want -= trainCap(g);
     }
+    // 🚢 nothing on its railway makes it: makers on another island send it to their dock first, and ships carry it over
+    if (want > 0 && !pairs.some(p => p.s.k === r.good && p.to.kind === r.to.kind && p.to.id === r.to.id)) {
+      const before = new Set(out.keys());
+      const only: Targets = (from, k, d0, dist, push) => targets(from, k, d0, dist, p => { if (p.to.kind === r.to.kind && p.to.id === r.to.id) push(p); });
+      seaNeeds(g, srcs.filter(s => s.k === r.good && !out.has(s.sk) && !isDock(s.b)), out, only, () => want);
+      for (const [k, v] of out) if (!before.has(k)) v.rush = true;
+    }
   }
   // pinned buildings: the player chose where their goods go
   for (const s of srcs) {

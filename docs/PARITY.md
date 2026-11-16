@@ -43,7 +43,7 @@ that makes sense. Details for each line: `legacy/CHANGES.md` (search the version
 - [x] Pay per unit grows with distance (PAY .41), no passive income, train upkeep
 - [x] Railway level from orders filled (to level 10), unlocks (levels, bonus, factory unlocks; level 4 and 6: buildings grow to level 4 and 5; level 5 and 8: express engines +15% each; level 7: longer trains +20% cargo; levels 5, 7 and 9 also need 2, 3 and 4 islands reached, a level already reached is kept)
 - [ ] Engine shed: buy trains (price curve, done), fleet upgrades (done: wagons, engines, repairs; to do with islands: tenders, wagon types, per island)
-- [x] Rush a good (max 3, fee 30%)
+- [x] Rush a good (max 3; paid up front: 30% of the delivery pay, ×1.5 by ship, $150 min, ×1.25/1.5/2 for 1st/2nd/3rd at once; ＋20/−20 on factory rushes; refund on stop; ship rushes; Orders board list; map tags)
 - [x] Remove building (half refund), sell stock, building prices rise per extra of a kind, building levels 1-3
 - [x] No-fail safety net (top-up to the next useful step when broke with nothing earning, at most every 3 min)
 

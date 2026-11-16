@@ -3,6 +3,7 @@ import { inStorm, STORM_SLOW } from '../world/events.ts';
 import { type Building, buildingSquares, type Good, yardSquares } from '../buildings/industries.ts';
 import { dockRange, isDock, islandOfB, linkedDocks, seaDist } from './docks.ts';
 import { lightMul, salvageAt } from '../world/explore.ts';
+import { destIsland } from '../economy/upgrades.ts';
 
 /**
  * Cargo ships. Goods for another island go maker → dock (by train) → ship → far dock, where that island's trains
@@ -144,6 +145,13 @@ function passOn(at: Building, q: SeaLoad) {
   if (w) w.n += q.n; else at.outq.push({ good: q.good, n: q.n, to: q.then });
 }
 
+/** Is a load at a dock rushed (⭐ a rush for that good waits on the island it is going to)? */
+function rushedFor(g: Game): (q: SeaLoad) => boolean {
+  const R = g.s.rush ?? []; if (!R.length) return () => false;
+  const isl = R.map(r => ({ k: r.good, i: destIsland(g, r.to) }));
+  return q => { const d = dockOf(g, q.then ?? q.to); if (!d) return false; const i = islandOfB(g, d); return isl.some(x => x.k === q.good && x.i === i); };
+}
+
 /** Move the ships: unload and load at docks, sail the routes. */
 export function tickShips(g: Game, dt: number) {
   const ships = g.s.ships; if (!ships?.length) return;
@@ -167,13 +175,17 @@ export function tickShips(g: Game, dt: number) {
     if ((s.wait -= dt) > 0) continue;
     const routes = lanesFrom(g, at.id, L());
     // load for the route with the most goods waiting
-    const wait = waitingAt(at); let best = -1, bn = 0;
-    for (const r of routes) { const n = wait.get(r.id) ?? 0; if (n > bn) { bn = n; best = r.id; } }
-    if (best >= 0 && bn < shipCap(g) / 2 && (s.held = (s.held ?? 0) + dt) < SHIP_HOLD) continue; // wait a little for a fuller load
+    // ⭐ a route carrying rushed goods goes first, and sails at once
+    const wait = waitingAt(at), hot = rushedFor(g); let best = -1, bn = 0, hb = false;
+    for (const r of routes) {
+      const n = wait.get(r.id) ?? 0, h = n > 0 && (at.outq ?? []).some(q => q.to === r.id && hot(q));
+      if ((h && !hb) || (h === hb && n > bn)) { bn = n; best = r.id; hb = h; }
+    }
+    if (best >= 0 && !hb && bn < shipCap(g) / 2 && (s.held = (s.held ?? 0) + dt) < SHIP_HOLD) continue; // wait a little for a fuller load
     if (best >= 0) {
       s.held = 0;
       let room = shipCap(g) - s.hold.reduce((a, q) => a + q.n, 0);
-      for (const q of at.outq ?? []) {
+      for (const q of [...(at.outq ?? [])].sort((p, q) => +hot(q) - +hot(p))) {
         if (q.to !== best || room <= 0) continue;
         const n = Math.min(q.n, room); q.n -= n; room -= n;
         const h = s.hold.find(x => x.to === best && x.good === q.good && x.then === q.then); if (h) h.n += n; else s.hold.push({ good: q.good, n, to: best, ...(q.then !== undefined ? { then: q.then } : {}) });
@@ -187,7 +199,7 @@ export function tickShips(g: Game, dt: number) {
     let far: Building | null = null, fn = 0;
     for (const r of routes) {
       const d = dockOf(g, r.id)!; if (ships.some(o => o !== s && (o.to === d.id || (o.to === undefined && o.at === d.id)))) continue;
-      const n = [...waitingAt(d).values()].reduce((a, b) => a + b, 0); if (n > fn) { fn = n; far = d; }
+      const n = [...waitingAt(d).values()].reduce((a, b) => a + b, 0) + ((d.outq ?? []).some(hot) ? 1e4 : 0); if (n > fn) { fn = n; far = d; }
     }
     far ??= farther(g, ships, s, at, L()); // none next door: head toward the nearest dock further along the routes with goods waiting
     if (far) sail(g, s, at, far); else s.wait = SHIP_IDLE;

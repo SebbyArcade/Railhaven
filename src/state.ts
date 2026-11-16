@@ -81,7 +81,7 @@ export interface GameState {
   /** Engine shed fleet upgrade levels */
   fleet?: Partial<Record<'wag' | 'eng' | 'rep', number>>;
   /** goods being rushed (at most three) */
-  rush?: { to: { kind: 'town' | 'bld'; id: number }; good: import('./buildings/industries.ts').Good; left: number }[];
+  rush?: import('./economy/upgrades.ts').Rush[];
   rlv?: number;
   /** the Railway level whose ⛵ "needs islands" note was last shown (shown once per level) */
   sailNag?: number;
