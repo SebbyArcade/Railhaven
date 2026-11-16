@@ -61,6 +61,10 @@ export interface CargoShip {
   wait: number;
   /** seconds it has waited at this dock for a fuller load */
   held?: number;
+  /** which berth along the pier it left from (so it pulls away from where it lay) */
+  slot?: number;
+  /** which way it lies at its berth (radians), so it doesn't spin round when it ties up */
+  face?: number;
 }
 
 /** A sea route: two docks on the railway, on different islands, where one reaches the other by sea. */
@@ -137,6 +141,7 @@ export function waitingAt(b: Building): Map<number, number> {
 }
 
 function sail(g: Game, s: CargoShip, from: Building, to: Building) {
+  s.slot = berthSlot(g, s, s.at); s.face = shipPlace(g, s).a;
   s.to = to.id; s.path = seaPath(g, from, to); s.pos = 0;
   if (s.path.length < 2) { s.to = undefined; s.path = undefined; s.wait = SHIP_IDLE; }
 }
@@ -165,7 +170,7 @@ export function tickShips(g: Game, dt: number) {
       const to = dockOf(g, s.to);
       if (!to || !s.path) { s.to = undefined; s.path = undefined; continue; }
       { const p = shipPlace(g, s); s.pos += shipSpeed(g) * lightMul(g, p.x, p.y) * (inStorm(g, p.x, p.y) ? STORM_SLOW : 1) * dt; salvageAt(g, Math.round(p.x), Math.round(p.y)); }
-      if (s.pos >= s.path.length - 1) { s.at = s.to; s.to = undefined; s.path = undefined; s.pos = 0; s.wait = SHIP_LOAD; }
+      if (s.pos >= s.path.length - 1) { s.pos = s.path.length - 1; s.face = shipPlace(g, s).a; s.at = s.to; s.to = undefined; s.path = undefined; s.pos = 0; s.wait = SHIP_LOAD; }
       continue;
     }
     const at = dockOf(g, s.at);
@@ -235,19 +240,74 @@ function farther(g: Game, ships: CargoShip[], s: CargoShip, at: Building, lanes:
 /** How far out from the middle of the pier deck a moored ship lies, in squares: just past its edge, in the water. */
 export const BERTH_OUT = 0.62;
 
-export function shipPlace(g: Game, s: CargoShip): { x: number; y: number; a: number } {
+/** Which berth a ship lies at (or will): its place among the ships moored at the dock. */
+function berthSlot(g: Game, s: CargoShip, dock: number): number {
+  const moored = (g.s.ships ?? []).filter(o => o.to === undefined && o.at === dock), k = moored.indexOf(s);
+  return k >= 0 ? k : moored.length;
+}
+
+/** The berth: alongside the pier, in the water, just past the deck edge on the side away from the loading track. */
+function berthAt(g: Game, d: Building, slot: number): { x: number; y: number; a: number; ox: number; oy: number } {
   const n = g.world.n;
-  if (s.to !== undefined && s.path && s.path.length > 1) {
-    const k = Math.min(s.path.length - 2, Math.floor(s.pos)), f = s.pos - k, p = s.path[k]!, q = s.path[k + 1]!;
-    const x = (p % n) + ((q % n) - (p % n)) * f, y = ((p / n) | 0) + (((q / n) | 0) - ((p / n) | 0)) * f;
-    return { x, y, a: Math.atan2(((q / n) | 0) - ((p / n) | 0), (q % n) - (p % n)) };
-  }
-  const d = dockOf(g, s.at); if (!d) return { x: 0, y: 0, a: 0 };
-  const sea = pierSea(g, d), i = sea[Math.min(sea.length - 1, 1 + (g.s.ships!.filter(o => o.to === undefined && o.at === s.at).indexOf(s) % 3))] ?? buildingSquares(n, d)[1]!;
+  const sea = pierSea(g, d), i = sea[Math.min(sea.length - 1, 1 + (slot % 3))] ?? buildingSquares(n, d)[1]!;
   const ang = d.horizontal ? 0 : Math.PI / 2;
-  // alongside the pier, in the water: just past the deck edge on the side away from the loading track
   const ys = yardSquares(n, d), y0 = ys.find(q => q === i - 1 || q === i + 1 || q === i - n || q === i + n);
   const out = y0 !== undefined ? i + (i - y0) : -1, k = out >= 0 && out < n * n && !g.world.terr[out] ? BERTH_OUT : 0;
   const dx = y0 === undefined ? 0 : (i % n) - (y0 % n), dy = y0 === undefined ? 0 : ((i / n) | 0) - ((y0 / n) | 0);
-  return { x: (i % n) + dx * k, y: ((i / n) | 0) + dy * k, a: ang };
+  return { x: (i % n) + dx * k, y: ((i / n) | 0) + dy * k, a: ang, ox: dx, oy: dy }; // ox, oy: out from the pier
+}
+
+/** Squares at each end of a crossing where the ship curves between the open-water path and its berth. */
+export const BERTH_TURN = 3;
+
+export function shipPlace(g: Game, s: CargoShip): { x: number; y: number; a: number } {
+  const n = g.world.n;
+  if (s.to !== undefined && s.path && s.path.length > 1) {
+    const path = s.path, L = path.length - 1;
+    const raw = (pos: number) => {
+      pos = Math.max(0, Math.min(L, pos));
+      const k = Math.min(L - 1, Math.floor(pos)), f = pos - k, p = path[k]!, q = path[k + 1]!;
+      return [(p % n) + ((q % n) - (p % n)) * f, ((p / n) | 0) + (((q / n) | 0) - ((p / n) | 0)) * f] as const;
+    };
+    // the path is square by square: the ship follows a rounded line through it (an average over one square each way),
+    // so it sweeps round corners instead of turning on the spot
+    const W = [-1, -0.75, -0.5, -0.25, 0, 0.25, 0.5, 0.75, 1];
+    const smooth = (pos: number) => { let x = 0, y = 0; for (const o of W) { const r = raw(pos + o); x += r[0]; y += r[1]; } return [x / W.length, y / W.length] as const; };
+    const at = (pos: number) => {
+      const [x, y] = smooth(pos), a0 = smooth(pos - 0.3), a1 = smooth(pos + 0.3);
+      return { x, y, a: Math.atan2(a1[1] - a0[1], a1[0] - a0[0]) };
+    };
+    // he asked (2026-11-16): ships glide in and out alongside the pier, not drive into the dock and jump to the berth.
+    // Near each end the ship follows a smooth curve between the sea path and the berth, ending parallel to the pier.
+    const m = Math.min(BERTH_TURN, L / 2), from = dockOf(g, s.at), to = dockOf(g, s.to);
+    type Pt = { x: number; y: number; a: number };
+    /** Hermite curve from p (heading pa) to q (heading qa): position and heading at t in 0..1. */
+    const herm = (p: Pt, q: Pt, t: number, k = 1): Pt => {
+      const c = Math.hypot(q.x - p.x, q.y - p.y) * k, t2 = t * t, t3 = t2 * t;
+      const tx0 = Math.cos(p.a) * c, ty0 = Math.sin(p.a) * c, tx1 = Math.cos(q.a) * c, ty1 = Math.sin(q.a) * c;
+      const h00 = 2 * t3 - 3 * t2 + 1, h10 = t3 - 2 * t2 + t, h01 = -2 * t3 + 3 * t2, h11 = t3 - t2;
+      const d00 = 6 * t2 - 6 * t, d10 = 3 * t2 - 4 * t + 1, d01 = -6 * t2 + 6 * t, d11 = 3 * t2 - 2 * t;
+      return { x: h00 * p.x + h10 * tx0 + h01 * q.x + h11 * tx1, y: h00 * p.y + h10 * ty0 + h01 * q.y + h11 * ty1,
+        a: Math.atan2(d00 * p.y + d10 * ty0 + d01 * q.y + d11 * ty1, d00 * p.x + d10 * tx0 + d01 * q.x + d11 * tx1) };
+    };
+    /** Between the berth and the point `m` squares into the crossing: berth heading along the pier, whichever way faces
+     *  onward (pulling away: the way it lay; if that faces away from its way out it swings round through open water). */
+    const ease = (berth: ReturnType<typeof berthAt>, mid: Pt, t: number, arriving: boolean): Pt => {
+      const vx = arriving ? berth.x - mid.x : mid.x - berth.x, vy = arriving ? berth.y - mid.y : mid.y - berth.y;
+      let a = berth.a; if (Math.cos(a) * vx + Math.sin(a) * vy < 0) a += Math.PI;
+      if (arriving) return herm(mid, { x: berth.x, y: berth.y, a }, t);
+      const face = s.face ?? a, start = { x: berth.x, y: berth.y, a: face };
+      if (Math.cos(face) * vx + Math.sin(face) * vy >= 0) return herm(start, mid, t);
+      // swing round: out into the water beside the pier first, turned side on, then on to the crossing
+      const w = { x: berth.x + berth.ox * 1.1 + Math.cos(face) * 0.6, y: berth.y + berth.oy * 1.1 + Math.sin(face) * 0.6, a: Math.atan2(berth.oy, berth.ox) };
+      const l1 = Math.hypot(w.x - start.x, w.y - start.y) * 1.3, l2 = Math.hypot(mid.x - w.x, mid.y - w.y), f = l1 / (l1 + l2);
+      return t < f ? herm(start, w, t / f, 1.3) : herm(w, mid, (t - f) / (1 - f));
+    };
+    if (to && m > 0 && s.pos > L - m) return ease(berthAt(g, to, berthSlot(g, s, to.id)), at(L - m), (s.pos - (L - m)) / m, true);
+    if (from && m > 0 && s.pos < m) return ease(berthAt(g, from, s.slot ?? 0), at(m), s.pos / m, false);
+    return at(s.pos);
+  }
+  const d = dockOf(g, s.at); if (!d) return { x: 0, y: 0, a: 0 };
+  const b = berthAt(g, d, berthSlot(g, s, s.at));
+  return s.face !== undefined && Math.abs(Math.sin(s.face - b.a)) < 0.1 ? { ...b, a: s.face } : b;
 }

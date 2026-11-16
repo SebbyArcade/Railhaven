@@ -311,7 +311,10 @@ export class Tools {
       const p = bodyPoint(g.net, t, u);
       if (Math.hypot(p.x - wx, p.y - wy) < 10) { this.selected = this.selected === t.id ? null : t.id; this.card = this.selected === null ? null : { kind: 'train', id: t.id }; return true; }
     }
+    const n = g.world.n, sq = Math.floor(wy / 32) * n + Math.floor(wx / 32);
     for (const s of g.s.ships ?? []) { // ships: a tap near the hull opens its card
+      // a tap on the dock itself opens the dock, even with a ship moored right beside it (he kept getting the ship)
+      if (s.to === undefined) { const d = g.s.buildings?.find(b => b.id === s.at); if (d && footprint(n, d).includes(sq)) continue; }
       const p = shipPlace(g, s);
       if (Math.hypot((p.x + 0.5) * 32 - wx, (p.y + 0.5) * 32 - wy) < 16) { this.selected = null; this.card = this.card?.kind === 'ship' && this.card.id === s.id ? null : { kind: 'ship', id: s.id }; return true; }
     }
