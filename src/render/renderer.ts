@@ -18,7 +18,7 @@ import { buildingSquares, footprint, type IndustryKind, isLinked, outputOf, yard
 import { buildNoGo, railNoGo } from '../buildings/nogo.ts';
 import { turnSquares } from '../ui/tools.ts';
 import { townLinked } from '../economy/towns.ts';
-import { joinGap } from '../track/joins.ts';
+import { bestSpot, joinGap } from '../track/joins.ts';
 import { TerrainCache } from './terrainCache.ts';
 import { drawWaterLive } from './terrainArt.ts';
 import { drawTrack } from './track.ts';
@@ -30,7 +30,7 @@ import { islandSpec, SPEC_TEXT } from '../world/specialty.ts';
 import type { Tools } from '../ui/tools.ts';
 import { bodyPoint } from '../trains/train.ts';
 import { type Plan, shipPlan } from '../economy/shipping.ts';
-import { drawAlerts, drawDockTags, drawMakeTags, drawRushTags, drawShipArrow, drawTownBadges, drawWaitBadges, MAKE_ZOOM } from './orders.ts';
+import { drawAlerts, drawDockTags, drawMakeTags, drawRushTags, drawGhostHall, drawShipArrow, drawTownBadges, drawWaitBadges, MAKE_ZOOM } from './orders.ts';
 import { stuckList, waitingForTrain } from '../ui/orders.ts';
 import { drawView, ViewCache } from './views.ts';
 import { seasonOf } from '../world/season.ts';
@@ -316,15 +316,24 @@ export class Renderer {
       }
       const gap = joinGap(g, s);
       if (gap) { // your track comes close: the gold squares (drawn with the town badges) are the way in, nothing else
-        const top = Math.min(s.y, ...gap.squares.map(i => (i / n) | 0));
-        pill((s.x + 0.5) * TILE, (top - 0.45) * TILE, `🛤 Join ${s.name ?? 'the town'}: lay track over the gold squares`, '#ffd27a');
+        const rows = [...gap.squares, ...gap.hall].map(i => (i / n) | 0), below = rows.some(r => r > s.y) && !rows.some(r => r < s.y);
+        const py = below ? Math.max(...rows) + 1.45 : Math.min(s.y, ...rows) - 0.45; // the town's board goes above when the way in runs below
+        pill((s.x + 0.5) * TILE, py * TILE, `🛤 Join ${s.name ?? 'the town'}: lay track over the gold squares`, '#ffd27a');
         continue;
       }
-      glow(c);
-      for (const j of [c + 1, c - 1, c + n, c - n]) if (open(j) && !g.track.has(j)) arrow(j, c);
-      ctx.setLineDash([5 * k, 4 * k]); ctx.strokeStyle = `rgba(255,214,120,${0.5 + 0.4 * p})`; ctx.lineWidth = 2 * k;
-      ctx.beginPath(); ctx.arc((s.x + 0.5) * TILE, (s.y + 0.5) * TILE, TILE * 1.6, 0, 7); ctx.stroke(); ctx.setLineDash([]);
-      pill((s.x + 0.5) * TILE, (s.y - 1.4) * TILE, `🛤 Join ${s.name ?? 'the town'}: lay track to an arrow`, '#ffd27a');
+      // your track is still far off: every place its station can stand, with arrows where a line comes in
+      // the spot facing it is outlined with its way in, and a faint line points back to your nearest track
+      const pick = bestSpot(g, s);
+      if (pick) {
+        const [e, inner] = pick.end, fx = (pick.from % n + 0.5) * TILE, fy = ((pick.from / n | 0) + 0.5) * TILE, ex = (e % n + 0.5) * TILE, ey = ((e / n | 0) + 0.5) * TILE;
+        ctx.save(); ctx.setLineDash([3 * k, 6 * k]); ctx.lineDashOffset = -tm * 10; ctx.strokeStyle = `rgba(255,214,120,${0.45 + 0.3 * p})`; ctx.lineWidth = 2.5 * k;
+        ctx.beginPath(); ctx.moveTo(fx, fy); ctx.lineTo(ex, ey); ctx.stroke(); ctx.restore();
+        drawGhostHall(ctx, n, pick.spot.squares, p); glow(e); arrow(e, inner);
+        const rows = pick.spot.squares.map(i => (i / n) | 0), py = rows.some(r => r > s.y) ? Math.max(...rows) + 1.45 : Math.min(s.y, ...rows) - 0.6;
+        pill((s.x + 0.5) * TILE, py * TILE, `🛤 Join ${s.name ?? 'the town'}: lay track along the dots, in at the arrow`, '#ffd27a');
+      } else {
+        glow(c); pill((s.x + 0.5) * TILE, (s.y - 1.4) * TILE, `🛤 Join ${s.name ?? 'the town'}: lay track up to it`, '#ffd27a');
+      }
     }
     for (const b of g.s.buildings ?? []) { // loose buildings: the two squares just past their loading track
       if (b.kind === 'dock' || isLinked(g, b)) continue;

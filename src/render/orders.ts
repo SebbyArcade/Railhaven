@@ -53,6 +53,7 @@ function drawUnlinked(ctx: CanvasRenderingContext2D, g: Game, t: Site, tm: numbe
       ctx.strokeStyle = `rgba(255,214,120,${0.65 + 0.35 * p})`; ctx.strokeRect(x + 3, y + 3, TILE - 6, TILE - 6);
     }
     ctx.setLineDash([]);
+    drawGhostHall(ctx, n, gap.hall, p);
     // a gold arrow from the railway square where the new track starts into the first missing square
     const a = gap.from, b = gap.squares[0]!, ang = Math.atan2(((b / n) | 0) - ((a / n) | 0), b % n - a % n);
     ctx.translate((a % n + 0.5) * TILE + Math.cos(ang) * TILE * 0.5, (((a / n) | 0) + 0.5) * TILE + Math.sin(ang) * TILE * 0.5); ctx.rotate(ang);
@@ -60,6 +61,24 @@ function drawUnlinked(ctx: CanvasRenderingContext2D, g: Game, t: Site, tm: numbe
     ctx.beginPath(); ctx.moveTo(7, 0); ctx.lineTo(-5, -6); ctx.lineTo(-2, 0); ctx.lineTo(-5, 6); ctx.closePath(); ctx.fill(); ctx.stroke();
     ctx.restore();
   }
+}
+
+/** Where a town's station will stand: a pale platform outline over its three squares with a 🚉 in the middle. */
+export function drawGhostHall(ctx: CanvasRenderingContext2D, n: number, squares: readonly number[], p: number, faint = false) {
+  const xs = squares.map(i => i % n), ys = squares.map(i => (i / n) | 0);
+  const x0 = Math.min(...xs) * TILE + 2, y0 = Math.min(...ys) * TILE + 2, w = (Math.max(...xs) + 1) * TILE - 2 - x0, h = (Math.max(...ys) + 1) * TILE - 2 - y0;
+  ctx.save();
+  ctx.fillStyle = `rgba(255,236,190,${(faint ? 0.1 : 0.22) + 0.1 * p})`; ctx.strokeStyle = `rgba(255,214,120,${(faint ? 0.55 : 0.8) + 0.2 * p})`;
+  ctx.lineWidth = 2; ctx.setLineDash([6, 4]);
+  ctx.beginPath(); ctx.roundRect(x0, y0, w, h, 6); ctx.fill(); ctx.stroke(); ctx.setLineDash([]);
+  // two platform edges along the middle, like the real hall
+  const horiz = w > h; ctx.strokeStyle = `rgba(255,214,120,${faint ? 0.35 : 0.6})`; ctx.lineWidth = 1.5; ctx.beginPath();
+  if (horiz) for (const f of [0.38, 0.62]) { ctx.moveTo(x0 + 6, y0 + h * f); ctx.lineTo(x0 + w - 6, y0 + h * f); }
+  else for (const f of [0.38, 0.62]) { ctx.moveTo(x0 + w * f, y0 + 6); ctx.lineTo(x0 + w * f, y0 + h - 6); }
+  ctx.stroke();
+  ctx.font = '14px system-ui'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.globalAlpha = faint ? 0.7 : 1;
+  ctx.fillText('🚉', x0 + w / 2, y0 + h / 2 + 1);
+  ctx.restore();
 }
 
 /** A dashed arrow from a building to where it sends its goods (shown while its card is open). */

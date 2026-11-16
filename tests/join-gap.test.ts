@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { newGame, trackChanged } from '../src/game.ts';
 import { layPath } from '../src/track/edit.ts';
 import { buildPlan } from '../src/track/paint.ts';
-import { joinGap } from '../src/track/joins.ts';
+import { bestSpot, joinGap, stationSpots } from '../src/track/joins.ts';
 import { townLinked } from '../src/economy/towns.ts';
 import { reveal } from '../src/world/fog.ts';
 import type { Game, Site } from '../src/state.ts';
@@ -43,12 +43,36 @@ describe('the gold squares that join a town to the railway', () => {
     const { g, t, sq, line } = setup(), a = g.s.sites[0]!;
     layPath(g.track, g.world.n, line([[a.x, a.y], [a.x, a.y + 4], [a.x + 4, a.y + 4]])); trackChanged(g); // ends at (x+4), town at x+6
     expect(townLinked(g, t)).toBe(false);
-    expect(joinGap(g, t)).toEqual({ from: sq(a.x + 4, a.y + 4), squares: [sq(a.x + 5, a.y + 4)] });
+    expect(joinGap(g, t)).toMatchObject({ from: sq(a.x + 4, a.y + 4), squares: [sq(a.x + 5, a.y + 4)], cost: 5 });
   });
 
-  it('nothing is shown while the railway is far away', () => {
+  it('a longer way in, up to a dozen squares, with the station it makes', () => {
+    const { g, t, sq, line } = setup(), a = g.s.sites[0]!;
+    layPath(g.track, g.world.n, line([[a.x, a.y], [a.x - 2, a.y]])); trackChanged(g);
+    const j = joinGap(g, t)!;
+    expect(j).not.toBeNull();
+    expect(j.squares.length).toBeGreaterThan(4);
+    expect(j.squares.length).toBeLessThanOrEqual(12);
+    expect(j.hall).toHaveLength(3);
+    expect(Math.abs(j.hall[1]! % g.world.n - t.x) + Math.abs(((j.hall[1]! / g.world.n) | 0) - t.y)).toBeLessThanOrEqual(2);
+    expect(buildPlan(g, { path: [j.from, ...j.squares] })).not.toBeTypeOf('string'); trackChanged(g);
+    expect(townLinked(g, t)).toBe(true);
+    void sq;
+  });
+
+  it('farther off: no gold squares, but the station spot facing your track, its way in and your nearest track square', () => {
     const { g, t, line } = setup(), a = g.s.sites[0]!;
+    t.x += 10; t.y += 6; reveal(g, t.x, t.y, 6);
+    for (let y = t.y - 3; y <= t.y + 3; y++) for (let x = t.x - 3; x <= t.x + 3; x++) g.world.terr[y * g.world.n + x] = 1;
     layPath(g.track, g.world.n, line([[a.x, a.y], [a.x - 2, a.y]])); trackChanged(g);
     expect(joinGap(g, t)).toBeNull();
+    const spots = stationSpots(g, t);
+    expect(spots.length).toBe(6); // across the square both ways, and along all four sides
+    const pick = bestSpot(g, t)!;
+    expect(g.linked!.has(pick.from)).toBe(true);
+    expect(pick.spot.ends.some(e => e[0] === pick.end[0])).toBe(true);
+    // the end it picks is the one nearest your track
+    const n = g.world.n, dist = (e: number) => Math.min(...[...g.linked!].map(i => Math.abs(i % n - e % n) + Math.abs(((i / n) | 0) - ((e / n) | 0))));
+    for (const sp of spots) for (const [e] of sp.ends) expect(pick.d).toBeLessThanOrEqual(dist(e));
   });
 });

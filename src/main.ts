@@ -320,7 +320,7 @@ cardEl.onclick = e => {
     const p = game.s.sites.find(s => s.id === +b.dataset.id!)!, name = p.name;
     const why = foundTown(game, p);
     if (why) { toast(why); renderCard(); return; }
-    toast(`🏘 ${name} founded! Lay track onto it to link it`); openCard({ kind: 'town', id: p.id }); return;
+    toast(`🏘 ${name} founded! Tap 🛤 Rails to see where its station can go`); openCard({ kind: 'town', id: p.id }); return;
   }
   if (b.dataset.act === 'park' || b.dataset.act === 'project') {
     const t = game.s.sites.find(s => s.id === Number(b.dataset.id)); if (!t) return;
