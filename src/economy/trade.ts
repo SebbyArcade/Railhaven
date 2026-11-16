@@ -6,6 +6,7 @@ import { islandSpec } from '../world/specialty.ts';
 import { townLinked } from './towns.ts';
 import { type Plan, shipPlan } from './shipping.ts';
 import { islandOfTrain } from './dispatch.ts';
+import { railIsle } from '../track/isles.ts';
 
 /**
  * 👑 Regions and 🤝 trade orders, as in the old game. Every island with a town on the railway is a region with a
@@ -142,7 +143,7 @@ export function tickTrade(g: Game) {
     if (!capitalOf(g, k, towns)) continue;
     // regions a ship route joins to this one; those a ship already sails to first
     const near = [...seaNeighbours(g, k)].filter(r => R.has(r)).sort((a, b) => a - b);
-    const served = near.filter(r => shipServes(g, k, r) && g.s.trains.some(x => islandOfTrain(g, x) === r)); // and a train there to take goods to its dock
+    const served = near.filter(r => shipServes(g, k, r) && g.s.trains.some(x => islandOfTrain(g, x) === railIsle(g, r))); // and a train there to take goods to its dock
     const from = served.length ? served : near;
     const tr = (g.s.trade ??= {}), o = tr[k];
     if (o && o.got < o.need) {
@@ -173,11 +174,11 @@ export function tradeWhy(g: Game, t: Site, o: TradeOrder): string {
   if (!(g.s.ships ?? []).length) return 'No cargo ship yet: buy one at a dock';
   if (!shipServes(g, k, o.from)) return `No ship sails the routes between ${name(o.from)} and here: buy one at a dock on either island`;
   // trains can't cross the sea: each island needs its own to take goods to its dock and on from the landing
-  const trains = (i: number) => g.s.trains.filter(x => islandOfTrain(g, x) === i).length;
+  const trains = (i: number) => g.s.trains.filter(x => islandOfTrain(g, x) === railIsle(g, i)).length;
   if (!trains(o.from)) return `No train on ${name(o.from)} takes it to the dock: send one over (⚓ Dock → 🚂 Trains)`;
   if (!trains(k)) return `No train on ${name(k)} brings it from the landing: send one over (⚓ Dock → 🚂 Trains)`;
   const landed = (g.s.buildings ?? []).filter(d => isDock(d) && islandOfB(g, d) === k).reduce((a, d) => a + Math.floor(d.landed?.[o.good] ?? 0), 0);
-  if (landed >= 40 && g.s.trains.every(x => islandOfTrain(g, x) !== k || x.job)) return `${landed} wait at the landing and every train on ${name(k)} is busy: send another over`;
+  if (landed >= 40 && g.s.trains.every(x => islandOfTrain(g, x) !== railIsle(g, k) || x.job)) return `${landed} wait at the landing and every train on ${name(k)} is busy: send another over`;
   return '';
 }
 

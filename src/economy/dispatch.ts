@@ -6,7 +6,8 @@ import { type Building, GOODS, type Good, INDUSTRIES, isLinked, yardSquares } fr
 import { hallOf } from '../buildings/stations.ts';
 import { shedSiding } from '../buildings/shed.ts';
 import { bldDist, bldOf, destName, destSquares, dockKey, factoryRoom, payFor, type Plan, railDist, type Ship, shipPlan, siteOf } from './shipping.ts';
-import { isDock, islandName, islandOfB, linkedDocks } from '../ships/docks.ts';
+import { isDock, islandName, islandOfB, linkedDocks, railIsleName, railIsleOfB } from '../ships/docks.ts';
+import { railIsle, railIsleAt, sameRail } from '../track/isles.ts';
 import { type Ferry, freeSlot, seaBetween, seaPath, shipSpeed, tickShips } from '../ships/ships.ts';
 import { tickScouts } from '../world/explore.ts';
 import { reachedIslands, tickMissions } from '../progress/missions.ts';
@@ -22,7 +23,7 @@ export const LOAD_TIME = 4;
 /** Loading or unloading time for this train: 🚉 the Grand Station makes it 25% shorter on Ashford Isle. */
 export function loadTime(g: Game, t: Train): number {
   if (!hasGrandStation(g)) return LOAD_TIME;
-  const a = g.s.sites[0]; return a && islandOfTrain(g, t) === g.world.islandOf[a.y * g.world.n + a.x] ? LOAD_TIME * GRAND_LOAD : LOAD_TIME;
+  const a = g.s.sites[0]; return a && g.world.islandOf[headSquare(g, t)] === g.world.islandOf[a.y * g.world.n + a.x] ? LOAD_TIME * GRAND_LOAD : LOAD_TIME;
 }
 /** upkeep per second while a train moves (parked trains cost nothing), +3% per train beyond six */
 export const UPKEEP = 0.6;
@@ -117,9 +118,9 @@ function onYard(g: Game, dock: Building, id: number): Train | null {
  * among the docks on that island joined to the railway that have open water to the landing. Null if none.
  */
 export function departDock(g: Game, at: number, landing: Building): Building | null {
-  const isl = g.world.islandOf[at]; let best: Building | null = null, bd = Infinity;
+  const isl = railIsleAt(g, at); let best: Building | null = null, bd = Infinity;
   for (const d of linkedDocks(g)) {
-    if (d === landing || islandOfB(g, d) !== isl || d.closed) continue;
+    if (d === landing || railIsleOfB(g, d) !== isl || d.closed) continue;
     const r = bldDist(g, d)[at]!; if (r < 0 || r >= bd) continue;
     if (seaBetween(g, d, landing) < 0) continue;
     bd = r; best = d;
@@ -133,7 +134,7 @@ export function shipNewWhy(g: Game, landing: Building): string {
   const sd = g.s.shed ? shedSiding(g) : null;
   if (!sd) return 'Lay a straight bit of line near Ashford first: new trains leave from the engine shed beside it';
   if (departDock(g, sd.line, landing)) return '';
-  const home = linkedDocks(g).filter(d => islandOfB(g, d) === g.world.islandOf[sd.line]);
+  const home = linkedDocks(g).filter(d => railIsleOfB(g, d) === railIsleAt(g, sd.line));
   if (!home.length) return 'A new train sails from a ⚓ Dock on Ashford Isle: build one and join it to your line';
   if (!home.some(d => bldDist(g, d)[sd.line]! >= 0)) return "No dock on Ashford Isle is joined by rail to the engine shed: lay track from the shed's line to a dock's yard";
   return 'No dock on Ashford Isle has open water to this landing';
@@ -160,13 +161,13 @@ export const ferryDock = (g: Game, t: Train): Building | null => {
 /** ⛴ The crossing can't happen: the train stays where it is and looks for work there; the crossing is paid back. */
 function ferryOff(g: Game, t: Train, why: string) {
   delete t.ferry; g.s.money += FERRY_FEE;
-  news(g, `⛴ Train ${t.id} stays on ${islandName(g, islandOfTrain(g, t))}: ${why}. The crossing fee was paid back`);
+  news(g, `⛴ Train ${t.id} stays on ${railIsleName(g, islandOfTrain(g, t))}: ${why}. The crossing fee was paid back`);
 }
 
 /** Where a ferry ties up: its landing, or another landing on the same island if that one went. */
 function ferryLanding(g: Game, f: Ferry): Building | undefined {
   const to = bldOf(g, f.to ?? -1); if (to && isLinked(g, to)) return to;
-  return linkedDocks(g).find(d => islandOfB(g, d) === f.isl);
+  return linkedDocks(g).find(d => sameRail(g, islandOfB(g, d), f.isl));
 }
 
 /**
@@ -207,15 +208,18 @@ function tickFerries(g: Game, dt: number) {
   }
 }
 
-/** The island a train is on. */
-export const islandOfTrain = (g: Game, t: Train) => g.world.islandOf[headSquare(g, t)]!;
+/**
+ * The rail island a train is on: its island, joined with any island a 🌉 bridge links to it (trains drive across,
+ * so they need no boat between them). Compare it with railIsle()/railIsleOfB(), never a bare island number.
+ */
+export const islandOfTrain = (g: Game, t: Train) => railIsleAt(g, headSquare(g, t));
 
 /**
  * Trains with nothing to do on other islands that have a dock on the railway, the island with the most of them
  * first: they can be shipped over to a landing (trains can't cross the sea by themselves).
  */
 export function spareTrains(g: Game, dock: Building): Train[] {
-  const here = islandOfB(g, dock), ports = new Set((g.s.buildings ?? []).filter(b => isDock(b) && isLinked(g, b)).map(b => islandOfB(g, b)));
+  const here = railIsleOfB(g, dock), ports = new Set((g.s.buildings ?? []).filter(b => isDock(b) && isLinked(g, b)).map(b => railIsleOfB(g, b)));
   const idle = g.s.trains.filter(t => !t.job && !t.cargo && !t.broke && !t.ferry && parked(t) && islandOfTrain(g, t) !== here && ports.has(islandOfTrain(g, t)));
   const per = new Map<number, number>(); for (const t of idle) per.set(islandOfTrain(g, t), (per.get(islandOfTrain(g, t)) ?? 0) + 1);
   return idle.sort((a, b) => per.get(islandOfTrain(g, b))! - per.get(islandOfTrain(g, a))!);
@@ -233,11 +237,11 @@ export function shipTrainTo(g: Game, dock: Building): Train | string {
 
 /** Other islands (with a dock on the railway) whose trains can be shipped over to this landing: train counts, most first. */
 export function trainIslands(g: Game, dock: Building): { island: number; name: string; n: number; free: number; booked: number }[] {
-  const here = islandOfB(g, dock), ports = new Set((g.s.buildings ?? []).filter(b => isDock(b) && isLinked(g, b)).map(b => islandOfB(g, b)));
+  const here = railIsleOfB(g, dock), ports = new Set((g.s.buildings ?? []).filter(b => isDock(b) && isLinked(g, b)).map(b => railIsleOfB(g, b)));
   const per = new Map<number, { island: number; name: string; n: number; free: number; booked: number }>();
   for (const t of g.s.trains) {
     const i = islandOfTrain(g, t); if (i === here || !ports.has(i)) continue;
-    const e = per.get(i) ?? { island: i, name: islandName(g, i), n: 0, free: 0, booked: 0 }; per.set(i, e);
+    const e = per.get(i) ?? { island: i, name: railIsleName(g, i), n: 0, free: 0, booked: 0 }; per.set(i, e);
     e.n++; if (t.moveTo !== undefined || t.ferry) e.booked++; else if (!t.job && !t.cargo && !t.broke && !t.sellAfter) e.free++;
   }
   return [...per.values()].sort((a, b) => b.n - a.n);
@@ -254,8 +258,8 @@ const readyToCross = (t: Train) => !t.cargo && t.job?.phase !== 'loading' && !t.
 export function bringTrainFrom(g: Game, dock: Building, island: number): Train | 'later' | string {
   if (!isLinked(g, dock)) return 'This landing is not reached by your docks yet';
   if (FERRY_FEE > g.s.money) return `Need $${(FERRY_FEE - g.s.money).toLocaleString('en-US')} more for the crossing`;
-  const ts = g.s.trains.filter(t => islandOfTrain(g, t) === island && t.moveTo === undefined && !t.ferry && !t.sellAfter);
-  if (!ts.length) return `No train on ${islandName(g, island)} can go: every one there is already booked or sold`;
+  const ts = g.s.trains.filter(t => islandOfTrain(g, t) === railIsle(g, island) && t.moveTo === undefined && !t.ferry && !t.sellAfter);
+  if (!ts.length) return `No train on ${railIsleName(g, railIsle(g, island))} can go: every one there is already booked or sold`;
   // first choice: one waiting for work; then one on its way to load (it drops that job), then one carrying goods, broken last
   const rank = (t: Train) => (!t.job && !t.cargo && !t.broke ? 0 : readyToCross(t) ? 1 : t.cargo && !t.broke ? 2 : 3);
   const pick = [...ts].sort((a, b) => rank(a) - rank(b))[0]!;
@@ -281,7 +285,7 @@ function crossNow(g: Game, dock: Building, from: Train): Train | null {
 function tickMoves(g: Game) {
   for (const t of g.s.trains.filter(x => x.moveTo !== undefined && readyToCross(x))) {
     const dock = (g.s.buildings ?? []).find(b => b.id === t.moveTo);
-    if (!dock || !isLinked(g, dock) || islandOfTrain(g, t) === islandOfB(g, dock)) { cancelMove(g, t); continue; }
+    if (!dock || !isLinked(g, dock) || islandOfTrain(g, t) === railIsleOfB(g, dock)) { cancelMove(g, t); continue; }
     const n = crossNow(g, dock, t);
     if (n) news(g, `⛴ Train ${n.id} crossed by boat to ${islandName(g, islandOfB(g, dock))} and is looking for a load`);
   }
@@ -533,11 +537,11 @@ export function fleetByIsland(g: Game): IslandFleet[] {
   const per = new Map<number, Train[]>();
   for (const t of g.s.trains) { const k = islandOfTrain(g, t); per.set(k, [...(per.get(k) ?? []), t]); }
   const docks = (g.s.buildings ?? []).filter(b => isDock(b) && isLinked(g, b));
-  const isl = new Set<number>([g.world.home, ...per.keys(), ...docks.map(b => islandOfB(g, b))]);
+  const isl = new Set<number>([g.world.home, ...per.keys(), ...docks.map(b => railIsleOfB(g, b))]);
   const out: IslandFleet[] = [];
   for (const k of isl) {
-    const dock = docks.find(b => islandOfB(g, b) === k), home = k === g.world.home;
-    const f: IslandFleet = { island: k, name: k < 0 ? 'On bridges' : islandName(g, k), trains: per.get(k) ?? [], buyAt: home ? 'shed' : dock ?? null, price: trainPrice(g) + (home ? 0 : FERRY_FEE) };
+    const dock = docks.find(b => railIsleOfB(g, b) === k), home = k === g.world.home;
+    const f: IslandFleet = { island: k, name: railIsleName(g, k), trains: per.get(k) ?? [], buyAt: home ? 'shed' : dock ?? null, price: trainPrice(g) + (home ? 0 : FERRY_FEE) };
     if (!home && dock && spareTrains(g, dock).length) f.shipTo = dock;
     if (k < 0 && !f.trains.length) continue;
     out.push(f);
@@ -547,14 +551,14 @@ export function fleetByIsland(g: Game): IslandFleet[] {
 
 /** Buy a train for an island: from the engine shed at home, or by boat to a landing elsewhere. */
 export function buyTrainFor(g: Game, island: number): Train | string {
-  if (island === g.world.home) return buyTrain(g);
-  const dock = (g.s.buildings ?? []).find(b => isDock(b) && isLinked(g, b) && islandOfB(g, b) === island);
+  if (railIsle(g, island) === g.world.home) return buyTrain(g);
+  const dock = (g.s.buildings ?? []).find(b => isDock(b) && isLinked(g, b) && railIsleOfB(g, b) === railIsle(g, island));
   if (!dock) return 'Trains reach this island by boat: build a dock or landing on it first';
   return buyTrainAt(g, dock);
 }
 
 /** The train to sell first on an island: one with no work, then an empty one, then one that delivers its load first. */
 export function trainToSell(g: Game, island: number): Train | undefined {
-  const ts = g.s.trains.filter(t => islandOfTrain(g, t) === island && !t.sellAfter && !t.broke && t.moveTo === undefined && !t.ferry);
+  const ts = g.s.trains.filter(t => islandOfTrain(g, t) === railIsle(g, island) && !t.sellAfter && !t.broke && t.moveTo === undefined && !t.ferry);
   return ts.find(t => !t.job && !t.cargo) ?? ts.find(t => !t.cargo && t.job?.phase !== 'loading') ?? ts[0];
 }

@@ -3,7 +3,7 @@ import type { Train } from '../trains/train.ts';
 import { isRev } from '../track/route.ts';
 import { isLinked, yardSquares } from '../buildings/industries.ts';
 import { hallsOf } from '../buildings/stations.ts';
-import { isDock, islandName, islandOfB } from '../ships/docks.ts';
+import { isDock, railIsleName, railIsleOfB } from '../ships/docks.ts';
 import { headSquare, islandOfTrain } from './dispatch.ts';
 import { passingLoop } from '../track/loops.ts';
 
@@ -55,14 +55,14 @@ export function jams(g: Game): Jam[] {
     }
     const h = headSquare(g, trains[0]!), x = h % n, y = Math.floor(h / n);
     const idle = g.s.trains.filter(t => !t.job && islandOfTrain(g, t) === isl).length;
-    const work = (g.s.buildings ?? []).filter(b => !isDock(b) && isLinked(g, b) && islandOfB(g, b) === isl).length;
+    const work = (g.s.buildings ?? []).filter(b => !isDock(b) && isLinked(g, b) && railIsleOfB(g, b) === isl).length;
     const jam: Jam = { trains, squares: [...sq], x, y, island: isl, near: nearestTown(g, x, y)?.name ?? 'your line' };
     for (const i of [...sq].sort((a, b) => Math.hypot(a % n - x, Math.floor(a / n) - y) - Math.hypot(b % n - x, Math.floor(b / n) - y)).reverse()) {
       const l = passingLoop(g, i); if (typeof l !== 'string') { jam.loop = l; break; }
     }
     if (idle >= 3 && idle > work) {
-      const dock = (g.s.buildings ?? []).find(b => isDock(b) && isLinked(g, b) && islandOfB(g, b) === isl);
-      jam.crowded = { idle, island: islandName(g, isl), ...(dock ? { dock: dock.id } : {}) };
+      const dock = (g.s.buildings ?? []).find(b => isDock(b) && isLinked(g, b) && railIsleOfB(g, b) === isl);
+      jam.crowded = { idle, island: railIsleName(g, isl), ...(dock ? { dock: dock.id } : {}) };
     }
     out.push(jam);
   }
