@@ -89,5 +89,15 @@ export function generateSites(w: World): { sites: Site[]; mountains: number[] } 
       put(res === 'oil' ? () => true : (x, y) => isMountainFoot(w, x, y), dep(res, far > 75));
     }
   });
+  // every town needs stone to grow into a Town: when the home island's only outcrop is far out, add one nearer
+  // Ashford (its own random stream, so towns and other deposits stay where the seed always put them)
+  if (!sites.some(s => s.kind === 'dep' && s.res === 'stone' && homeOnly(s.x, s.y) && Math.hypot(s.x - C, s.y - C) <= 18)) {
+    const r2 = new Rng(w.seed * 104729 + 31);
+    for (let k = 0; k < 4000; k++) {
+      const a = r2.next() * 6.283, d = 8 + r2.next() * 10, x = Math.round(C + Math.cos(a) * d), y = Math.round(C + Math.sin(a) * d);
+      if (!isLand(w, x, y) || w.terr[y * n + x] === T.Mountain || !free(x, y) || !homeOnly(x, y) || !isMountainFoot(w, x, y)) continue;
+      dep('stone')(x, y); break;
+    }
+  }
   return { sites, mountains };
 }
