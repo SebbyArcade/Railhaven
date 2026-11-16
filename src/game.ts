@@ -48,7 +48,9 @@ function makeNetwork(track: TrackMap, n: number, sites: Site[], buildings: Build
     for (const i of sq) { if (track.has(i)) { dbl.add(i); if (ln) lanes.set(i, ln); } still.add(i); yard.add(i); }
     for (const i of [sq[0]! - step, sq.at(-1)! + step]) { const t = track.get(i); still.add(i); yard.add(i); if (t && (t.links & ~along) === 0) { dbl.add(i); if (ln) lanes.set(i, ln); } }
   }
-  return buildNetwork(track, n, { forceDouble: i => dbl.has(i), noWide: i => still.has(i), lanes: i => lanes.get(i), crossOk: i => ends.has(i) && !yard.has(i), stationEnd: i => ends.has(i), stubToEdge: i => inHall.has(i) || inYard.has(i) });
+  const net = buildNetwork(track, n, { forceDouble: i => dbl.has(i), noWide: i => still.has(i), lanes: i => lanes.get(i), crossOk: i => ends.has(i) && !yard.has(i), stationEnd: i => ends.has(i), stubToEdge: i => inHall.has(i) || inYard.has(i) });
+  net.twin = dbl;
+  return net;
 }
 
 function assemble(s: GameState): Game {

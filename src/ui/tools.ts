@@ -15,6 +15,9 @@ import { badSquares, bestPlacement, build, footprint, INDUSTRIES, type IndustryK
 import { refundOf, removeBuilding } from '../economy/upgrades.ts';
 import { townLinked } from '../economy/towns.ts';
 import { hallOf } from '../buildings/stations.ts';
+
+/** said when a double-track drag or tap reaches a station platform or a building's loading tracks */
+const TWIN_NOTE = '🚉 Stations and buildings already have two tracks: those squares are skipped';
 import { placeName } from './orders.ts';
 import { buyMap, findsText, mapAt, mapCost, mapFinds, mappedShare, rumours, talkOf } from '../world/maps.ts';
 
@@ -25,7 +28,7 @@ export type Mode = 'pan' | 'rail' | 'double' | 'remove' | 'train' | 'build' | 's
 export const MODE_HINT: Record<Mode, string> = {
   pan: '',
   rail: '🛤 Drag outward from your track (from Ashford at first). To join a town, follow its arrows: track straight across its square, past it, or ending right beside it. ✓ Build when done.',
-  double: '═ Tap single track for a 🔁 passing loop, or drag along your track to double it. Trains keep right like cars: one lane each way.',
+  double: '═ Tap single track for a 🔁 passing loop, or drag along your track to double it. Trains keep right like cars: one lane each way. 🚉 Stations and buildings have two tracks already.',
   remove: '✂ Tap a track square to remove it.',
   train: '🚂 Trains roll out of the engine shed and run themselves: each takes the best waiting load where it is needed.',
   build: '🏗 Drag the picture where you want it. Blue row = loading track: your rails join it in line, at either end (gold arrows). Tap a ⟳ corner to turn it, double-tap it to build. ↶ Undo takes it back.',
@@ -38,6 +41,8 @@ export class Tools {
   mode: Mode = 'pan';
   plan: PaintPlan | null = null;
   dbl = new Set<number>();
+  /** the "already two tracks" note was shown during this drag */
+  private twinNoted = false;
   removeAt: number | null = null;
   /** the building just built: Undo takes it back with a full refund (until the next build, or for a minute) */
   lastBuild: { id: number; paid: number; at: number; before: [number, number | null][]; shed?: Shed | null } | null = null;
@@ -172,6 +177,12 @@ export class Tools {
     if (best!.refused) this.refuse(best!.refused.square, best!.refused.why);
   }
 
+  /** a dragged square joins the double-track selection, unless it has two tracks already (said once per drag) */
+  private markDouble(i: number) {
+    if (!this.g().net.twin?.has(i)) { this.dbl.add(i); return; }
+    if (!this.twinNoted) { this.twinNoted = true; toast(TWIN_NOTE, 4000); }
+  }
+
   private refuse(square: number, why: string) { this.flash = { square, until: performance.now() + 900 }; toast(why); }
 
   // ---- painting
@@ -190,7 +201,7 @@ export class Tools {
       if (!this.plan || this.plan.path.at(-1) !== near) this.plan = { path: [near] };
       this.dragOver(i); return true;
     }
-    if (this.mode === 'double') { if (!g.track.has(i)) return false; this.dbl.add(i); return true; }
+    if (this.mode === 'double') { if (!g.track.has(i)) return false; this.twinNoted = false; this.markDouble(i); return true; }
     if (this.mode === 'scout') {
       if (this.scout && this.scout.path.includes(i)) { this.scout.path = this.scout.path.slice(0, this.scout.path.indexOf(i) + 1); return true; }
       const st = this.scoutStartAt(i); if (st) { this.scout = { path: [st.sq], boat: st.boat, name: st.name }; return true; }
@@ -230,7 +241,7 @@ export class Tools {
       extendPlan(g, this.plan, i);
       if (this.plan.refused) { this.refuse(this.plan.refused.square, this.plan.refused.why); this.plan.refused = undefined; }
     }
-    if (this.mode === 'double' && g.track.has(i)) this.dbl.add(i);
+    if (this.mode === 'double' && g.track.has(i)) this.markDouble(i);
     if (this.mode === 'scout' && this.scout && this.scout.path.at(-1) !== i) this.scoutTo(i);
   }
 
@@ -258,10 +269,11 @@ export class Tools {
     }
     if (this.mode === 'double') {
       if (!g.track.has(i)) return true;
+      if (g.net.twin?.has(i)) { this.dbl.delete(i); toast(TWIN_NOTE, 4000); return true; }
       if (!this.dbl.size && !g.track.get(i)!.dbl) { // a first tap on single track: a passing loop, long enough for your trains
         const loop = passingLoop(g, i);
         if (typeof loop === 'string') { this.dbl.add(i); toast(`${loop}. This square is marked: tap or drag more squares to double`, 4000); return true; }
-        for (const q of loop) this.dbl.add(q);
+        for (const q of loop) if (!g.net.twin?.has(q)) this.dbl.add(q);
         toast(`🔁 Passing loop: ${loop.length} squares. A train waits on one track while another passes on the other. Tap ✓ Double`, 4000); return true;
       }
       if (this.dbl.has(i)) this.dbl.delete(i); else this.dbl.add(i);
@@ -366,8 +378,9 @@ export class Tools {
       return { text: e || `${n} new square${n === 1 ? '' : 's'} · ${fmtMoney(planCost(g, this.plan))}${wet ? ` · 🌉 then ${fmtMoney(wet * BRIDGE_UPKEEP)}/min upkeep` : ''}${harmText(harmOf(g, this.plan.path.filter(i => !g.track.has(i))))}`, ok: '✓ Build', can: !e };
     }
     if (this.mode === 'double' && this.dbl.size) {
-      const add = [...this.dbl].filter(i => g.track.has(i) && !g.track.get(i)!.dbl), c = add.length * TRACK_COST.double;
-      return { text: `Double ${add.length} square${add.length === 1 ? '' : 's'} · ${fmtMoney(c)}`, ok: '✓ Double', can: add.length > 0 && c <= g.s.money };
+      const add = [...this.dbl].filter(i => g.track.has(i) && !g.track.get(i)!.dbl && !g.net.twin?.has(i)), c = add.length * TRACK_COST.double;
+      if (!add.length) return { text: '✓ Already two tracks here: nothing to double', ok: '✓ Double', can: false };
+      return { text: `Double ${add.length} square${add.length === 1 ? '' : 's'} · ${fmtMoney(c)}`, ok: '✓ Double', can: c <= g.s.money };
     }
     if (this.mode === 'remove' && this.removeAt !== null) return this.removeCut ? { text: `⚠ This cuts ${this.removeCut} off the railway`, ok: '✂ Remove anyway', can: true } : { text: 'Remove this track square?', ok: '✂ Remove', can: true };
     if (this.mode === 'train') {
@@ -411,7 +424,7 @@ export class Tools {
       trackChanged(g); g.terrainDirty?.(this.plan.path);
       this.plan = { path: [this.plan.path.at(-1)!] };
     } else if (this.mode === 'double') {
-      const add = [...this.dbl].filter(i => g.track.has(i) && !g.track.get(i)!.dbl), c = add.length * TRACK_COST.double;
+      const add = [...this.dbl].filter(i => g.track.has(i) && !g.track.get(i)!.dbl && !g.net.twin?.has(i)), c = add.length * TRACK_COST.double;
       if (c > g.s.money) { toast('Not enough money'); return; }
       g.s.money -= c; for (const i of add) g.track.get(i)!.dbl = true; this.lastStroke = null; this.lastBuild = null;
       trackChanged(g); this.dbl.clear();

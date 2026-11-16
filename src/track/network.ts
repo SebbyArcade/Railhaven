@@ -36,6 +36,9 @@ export interface Network {
   passing: boolean[];
   /** which side of its square's centre line a piece runs, seen travelling a→b: 1 left lane, -1 right lane, 0 middle */
   side: number[];
+  /** squares that always have two tracks without being doubled (station platforms, building loading tracks and the
+   *  squares just past their ends): doubling them would add nothing */
+  twin?: Set<number>;
 }
 
 const bit = (d: Dir) => 1 << d;
