@@ -328,7 +328,7 @@ export class Renderer {
       if (b.kind === 'dock' || isLinked(g, b)) continue;
       const ys = yardSquares(n, b), st = b.horizontal ? 1 : n;
       for (const e of [ys[0]! - st, ys.at(-1)! + st]) if (!g.track.has(e)) glow(e);
-      const m = ys[1]!; pill((m % n + 1) * TILE, ((m / n) | 0) * TILE - 6 * k, '🛤 join at either end of the loading track', '#bfe4ff');
+      const m = ys[1]!; pill((m % n + 1) * TILE, ((m / n) | 0) * TILE - 6 * k, '🛤 rails from either gold end to your track', '#bfe4ff');
     }
   }
 
