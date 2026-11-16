@@ -97,6 +97,10 @@ export interface GameState {
   maps?: import('./world/maps.ts').AreaMap[];
   /** scouts out exploring */
   scouts?: import('./world/explore.ts').Scout[];
+  /** 🧭 scout reports, the last few (newest last) */
+  reports?: import('./world/explore.ts').ScoutReport[];
+  /** islands whose arrival card was shown (missing: an older game, filled in quietly with the islands already reached) */
+  isles?: number[];
   /** guided lesson reached (new games start at 0; absent = no lessons), game time the last one was done, lesson bar folded */
   tut?: number; lesAt?: number; lesMin?: boolean;
   /** missions with Mira, and the act shown */
@@ -159,6 +163,10 @@ export interface Game {
   mineOk?: Map<string, { at: number; ok: boolean }>;
   /** landmarks just spotted, waiting for their discovery card (not saved) */
   found?: number[];
+  /** scout reports just filed, waiting for their card (not saved) */
+  reported?: number[];
+  /** islands just reached, waiting for their arrival card (not saved) */
+  arrived?: number[];
   /** set by the renderer: squares whose baked terrain must be redrawn (track hides trees) */
   terrainDirty?: (squares: number[]) => void;
   /** forest squares already redrawn as saplings */

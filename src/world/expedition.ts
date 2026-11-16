@@ -3,6 +3,7 @@ import type { Game, GameState, Resource, Site } from '../state.ts';
 import type { Building } from '../buildings/industries.ts';
 import { chartSea, isDock, linkedDocks } from '../ships/docks.ts';
 import { reveal } from './fog.ts';
+import { frontierPois, poisOf } from './explore.ts';
 import { isLand, MAP_N, RING_W, T } from './terrain.ts';
 import { isMountainFoot, TOWN_NAMES } from './sites.ts';
 import { buildWorld, loadGame, prepareSave } from '../game.ts';
@@ -115,6 +116,7 @@ export function sendExpedition(g: Game, b: Building): Expedition | string {
   const g2 = loadGame(s);
   const fresh = firstNew < 0 ? [] : ringSites(g2, ring, firstNew);
   s.sites.push(...fresh);
+  if (firstNew >= 0) poisOf(g2).push(...frontierPois(g2, poisOf(g2), firstNew)); // landmarks on the new islands too
   // the expedition's charts: a glimpse of each new island's shore round its town, the rest waits in the fog
   for (const t of fresh) if (t.kind === 'town') reveal(g2, t.x, t.y, 5);
   for (const d of s.buildings ?? []) if (isDock(d)) d.chart = 0; // docks chart the wider sea again

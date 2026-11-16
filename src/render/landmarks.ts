@@ -179,5 +179,44 @@ export function drawLandmark(c: C, p: Poi, tm: number) {
       person(c, -10, 5, '#b8603a', tm, 0.3);
       break;
     }
+    case 'shaft': { // an old timber headframe over a mine shaft: a winding wheel, a spoil heap, a rusty ore cart on a bit of track, lamps
+      grassPatch(c, 20, 9, 'rgba(130,115,90,.45)');
+      ell(c, -12, 6, 9, 4, '#8a7d6a'); ell(c, -13, 4.5, 6.5, 3, '#9c8f7a'); for (const [u, v] of [[-16, 5], [-10, 3.5], [-13, 7], [-8, 6]]) ell(c, u, v, 1.1, 0.8, '#6e6456'); // spoil heap
+      poly(c, sh, -4, 6, 12, 6, 14, 8.5, -2, 8.5);
+      rect(c, -3, 3, 12, 4, '#3a2f26'); rect(c, -2, 4, 10, 2.5, '#16120e'); // the shaft mouth with a dark hole
+      c.strokeStyle = '#6b4a2e'; c.lineWidth = 1.4; c.lineCap = 'round';
+      c.beginPath(); c.moveTo(-2, 4); c.lineTo(3, -18); c.lineTo(8, 4); c.moveTo(0, -4); c.lineTo(6, -4); c.moveTo(1, -11); c.lineTo(5, -11); c.moveTo(-1, 0); c.lineTo(5, -11); c.stroke(); // headframe legs and braces
+      c.lineCap = 'butt';
+      const a = tm * 1.5; c.save(); c.translate(3, -18); // the winding wheel, turning slowly
+      c.strokeStyle = '#4a4440'; c.lineWidth = 1; c.beginPath(); c.arc(0, 0, 4, 0, 7); c.stroke();
+      for (let k = 0; k < 4; k++) { const b = a + k * Math.PI / 4; c.beginPath(); c.moveTo(Math.cos(b) * 4, Math.sin(b) * 4); c.lineTo(-Math.cos(b) * 4, -Math.sin(b) * 4); c.stroke(); }
+      c.restore(); ell(c, 3, -18, 1, 1, '#2e2a26');
+      c.strokeStyle = 'rgba(60,55,50,.9)'; c.lineWidth = 0.5; c.beginPath(); c.moveTo(3, -14); c.lineTo(3, 4); c.stroke(); // the rope down the shaft
+      for (const u of [10, 14, 18, 22]) rect(c, u - 1, 9.5, 0.8, 2.6, '#6b4a2e'); rect(c, 9, 10, 14, 0.5, '#7a7570'); rect(c, 9, 11.5, 14, 0.5, '#7a7570'); // a stub of track
+      poly(c, '#8a4f2c', 12, 5, 19, 5, 18, 9, 13, 9); poly(c, '#6e3d22', 12, 5, 19, 5, 19, 6, 12, 6); ell(c, 14, 9.6, 1, 1, '#2e2a26'); ell(c, 17.5, 9.6, 1, 1, '#2e2a26'); // ore cart
+      for (const [u, v] of [[14, 4.4], [16, 4], [17.6, 4.5]]) ell(c, u, v, 1.3, 1, '#4a4a52');
+      rect(c, -5, -1, 0.5, 3, '#3a3a3a'); ell(c, -4.75, -1.2, 1, 1, `rgba(255,210,120,${0.6 + 0.3 * Math.sin(tm * 3)})`); // lamp
+      pine(c, 19, -3, 0.8); bush(c, -19, -1, 2.6, '#6e8a4c');
+      person(c, 9, 13, '#5a5a6a', tm, 0.25);
+      break;
+    }
+    case 'camp': { // an explorer's camp: a canvas tent, a camp fire with smoke, a map table with a spyglass, crates and a flag
+      grassPatch(c, 20, 9, 'rgba(120,140,80,.45)');
+      poly(c, sh, -14, 5, 3, 5, 5, 8, -12, 8);
+      poly(c, '#e8dcc0', -15, 5, -6, -10, 3, 5); poly(c, '#cfc2a2', -6, -10, 3, 5, -2, 5); // tent
+      poly(c, '#5a4630', -9, 5, -6, -3, -3, 5); // its open door
+      c.strokeStyle = '#8a7a5a'; c.lineWidth = 0.5; c.beginPath(); c.moveTo(-6, -10); c.lineTo(-18, 7); c.moveTo(-6, -10); c.lineTo(6, 7); c.stroke(); // guy ropes
+      rect(c, -6.3, -15, 0.6, 6, '#6b4a2e'); const f = Math.sin(tm * 4) * 0.8; poly(c, '#c0392b', -5.7, -15, 0.5, -14 + f, -5.7, -12); // flag
+      for (const [u, v, w] of [[8, 0, 5], [12, 1, 4]] as const) { ell(c, u + 1, v + 4, w / 2 + 1, 1, sh); rect(c, u - w / 2, v, w, 3.5, '#a07a4a'); rect(c, u - w / 2, v, w, 0.7, '#c49a64'); rect(c, u - 0.2, v, 0.4, 3.5, '#6b4a2e'); } // crates
+      rect(c, 6, 6, 9, 0.8, '#7a5a3a'); rect(c, 7, 6.8, 0.6, 3, '#5a3c22'); rect(c, 13.4, 6.8, 0.6, 3, '#5a3c22'); // map table
+      rect(c, 7, 4.8, 6, 1.4, '#efe2be'); c.strokeStyle = 'rgba(160,90,50,.8)'; c.lineWidth = 0.35; c.beginPath(); c.moveTo(7.5, 5.8); c.lineTo(9.5, 5.2); c.lineTo(12, 5.6); c.stroke(); // the map on it
+      rect(c, 12.6, 4.4, 3, 0.6, '#b8902a');
+      for (let k = 0; k < 5; k++) ell(c, -1 + Math.cos(k * 1.26) * 2.6, 11 + Math.sin(k * 1.26) * 1.2, 0.9, 0.6, '#7a7068'); // fire ring
+      const fl = 0.8 + 0.2 * Math.sin(tm * 9); poly(c, '#e8742a', -2.2, 11, -1, 11 - 3 * fl, 0.2, 11); poly(c, '#ffd25a', -1.6, 11, -1, 11 - 1.8 * fl, -0.4, 11);
+      puff(c as never, -1, 7, tm, false, 0.6);
+      person(c, 4, 12, '#6a7a3a', tm, 0.25); person(c, 16, 10, '#8a5a3a', tm, 0.2);
+      pine(c, 20, -4, 0.9); bush(c, -19, 2, 3, '#5f8a44');
+      break;
+    }
   }
 }

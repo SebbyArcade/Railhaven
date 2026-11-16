@@ -35,6 +35,7 @@ import { gameReport } from './ui/report.ts';
 import { SEASONS, seasonOf } from './world/season.ts';
 import { buyFleet, FLEET, type FleetKey, fleetLvl, refundOf, removeBuilding, rushOf, sellOffer, sellStock, toggleRush, upgradeBuilding } from './economy/upgrades.ts';
 import { foundTown, sizeName, tickTowns, upgradeTown } from './economy/towns.ts';
+import { checkArrivals } from './progress/arrivals.ts';
 import { buyTrainAt, buyTrainFor, fleetByIsland, sellTrain, shipTrainTo, tickTrains, trainRefund, trainToSell } from './economy/dispatch.ts';
 import { moneyTip, type Tip } from './economy/advice.ts';
 import { buyShip, buyShipUp, SHIP_UP, type ShipUpKey, seaLanes, shipPlace, shipUpLvl } from './ships/ships.ts';
@@ -199,6 +200,10 @@ cardEl.onclick = e => {
     if (sq.length) { const n = game.world.n, c = game.s.camera; c.x = ((sq[0]! % n) + 0.5) * 32; c.y = (Math.floor(sq[0]! / n) + 0.5) * 32; }
     toast('═ The held-up stretch is marked: check it and tap ✓ Double, or tap squares to change it'); return;
   }
+  if (b.dataset.act === 'lookxy') { const x = +b.dataset.x!, y = +b.dataset.y!; closeCard(); lookAt(x, y); tools.flash = { square: y * game.world.n + x, until: performance.now() + 2500 }; return; }
+  if (b.dataset.act === 'report') { openCard({ kind: 'scout', id: +b.dataset.id! }); return; }
+  if (b.dataset.act === 'reports') { openCard({ kind: 'scout', id: 0 }); return; }
+  if (b.dataset.act === 'isle') { openCard({ kind: 'isle', id: +b.dataset.id! }); return; }
   if (b.dataset.act === 'lookpoi') { const p = poisOf(game).find(x => x.id === +b.dataset.id!); closeCard(); if (p) { lookAt(p.x, p.y); tools.flash = { square: p.y * game.world.n + p.x, until: performance.now() + 2500 }; } return; }
   if (b.dataset.act === 'areamap') { const why = tools.openMap(+b.dataset.x!, +b.dataset.y!); if (why) { toast(why); return; } closeCard(); const c = game.s.camera; c.x = (+b.dataset.x! + 0.5) * 32; c.y = (+b.dataset.y! + 0.5) * 32; c.z = Math.max(0.1, Math.min(c.z, 0.9 * Math.min(view.w, view.h) / (2 * (tools.mapPv?.r ?? 45) * 32))); return; }
   if (b.dataset.act === 'view') { setView((b.dataset.v || null) as MapView | null); closeCard(); return; }
@@ -596,8 +601,16 @@ function frame(now: number) {
   if (game.news?.length && now > newsAt && !(tools.card?.kind === 'story' && tools.card.page === 'act')) { toast(game.news.shift()!, 4000); newsAt = now + 4200; }
   if (Math.floor(now / 1000) !== lastCard) {
     lastCard = Math.floor(now / 1000);
+    checkArrivals(game); // islands just reached queue their arrival card
     const M = msOf(game); // a new act opens its card once nothing else is open
     if (M.actNew && !tools.card && tools.mode === 'pan' && !menuOpen) { M.actNew = false; openCard({ kind: 'story', id: 0, page: 'act' }); }
+    else if ((game.arrived?.length || game.reported?.length) && (lessonOn(game) || onHome())) { game.arrived = []; game.reported = []; }
+    else if (game.arrived?.length && !tools.card && tools.mode === 'pan' && !menuOpen) openCard({ kind: 'isle', id: game.arrived.shift()!, fresh: true }); // 🏝 a new island
+    else if (game.reported?.length && !tools.card && (tools.mode === 'pan' || tools.mode === 'scout') && !tools.scout && !menuOpen) { // 🧭 a scout is back: its report
+      const id = game.reported.pop()!; game.reported = [];
+      game.news = (game.news ?? []).filter(m => !/is back: the map is drawn/.test(m));
+      openCard({ kind: 'scout', id });
+    }
     else if (game.found?.length && (lessonOn(game) || onHome())) game.found = []; // no discovery cards during the lessons
     else if (game.found?.length && !tools.card && tools.mode === 'pan' && !menuOpen) { // a landmark just spotted: its discovery card
       const [id, ...rest] = game.found; game.found = [];
