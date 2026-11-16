@@ -79,7 +79,7 @@ export const orderDone = (g: Game, t: Site) => orderProgress(g, t) >= 1;
 export function steadyGoods(t: Site, g?: Game): Good[] {
   const out = [...new Set(LADDER.slice(0, Math.min(stepOf(t), LADDER.length)).flatMap(o => Object.keys(o) as Good[]))];
   if (g && isCoastal(g, t)) { out.push('fish'); if (stepOf(t) >= 2) out.push('shellfish'); }
-  if (g) for (const k of waitsAbroad(g, t) ? Object.keys(orderOf(g, t)) as Good[] : []) if (!out.includes(k) && !overseas(g, k)) out.push(k);
+  if (g) for (const k of waitsAbroad(g, t).length ? Object.keys(orderOf(g, t)) as Good[] : []) if (!out.includes(k) && !overseas(g, k)) out.push(k);
   return out;
 }
 
