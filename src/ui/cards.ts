@@ -17,11 +17,11 @@ import { RING_ISLANDS } from '../world/terrain.ts';
 import { lanesFrom, seaLanes, SHIP_HOLD, shipPrice, SHIP_UP, type ShipUpKey, shipCap, shipSpeed, shipUpLvl, waitingAt } from '../ships/ships.ts';
 import { catchOf, FISHING } from '../economy/upgrades.ts';
 import { islandSpec, SPEC_TEXT, specMul } from '../world/specialty.ts';
-import { FLEET, type FleetKey, fleetLvl, levelGain, levelPrice, lvlUnlockAt, MAX_LVL, maxLvlOf, MAX_RUSH, refundOf, RUSH_FEE, rushOf, sellOffer, trainCap, capOf as trainCapOf, fleetIsls } from '../economy/upgrades.ts';
+import { FLEET, type FleetKey, fleetLvl, levelGain, levelPrice, lvlUnlockAt, MAX_LVL, maxLvlOf, MAX_RUSH, refundOf, rushBySea, rushMakers, rushFee, rushOf, sellOffer, trainCap, capOf as trainCapOf, fleetIsls } from '../economy/upgrades.ts';
 import type { Train } from '../trains/train.ts';
 import { fmtMoney } from './hud.ts';
 import { storyHtml } from './story.ts';
-import { ordersHtml, placeName } from './orders.ts';
+import { ordersHtml, placeName, waitingForTrain } from './orders.ts';
 import { mapHtml, type MapView } from './mapviews.ts';
 import { mapCost, MAP_R, MAP_R_SEA } from '../world/maps.ts';
 
@@ -343,6 +343,11 @@ function buildingCard(g: Game, b: Building, page?: string): string {
     } else if (share < 1) h += `<div class="warn">🌱 Few fields left around it (${Math.round(share * 100)}% output): track and buildings next to it cover them</div>`;
   }
   h += `<div class="row"><b class="ico">📦</b><div class="grow"><div class="line"><span>${G.name} ready</span><span>${Math.floor(b.stock)} / ${cap}</span></div>${bar(b.stock / cap, b.stock >= cap ? '#e0584a' : '#5cc46a')}${b.stock >= cap ? '<small>Full: it stops making more until a train collects</small>' : ''}</div></div>`;
+  if (waitingForTrain(g, plan).has(b.id)) { // ⏳ plenty ready and somewhere to go, but every train on its island is busy
+    const isl = g.world.islandOf[b.y * g.world.n + b.x]!, f = fleetByIsland(g).find(x => x.island === isl);
+    h += `<div class="warn">⏳ ${Math.floor(b.stock)} ${G.icon} ${G.name.toLowerCase()} waiting for a free train · all your trains on ${esc(islandName(g, isl))} are busy</div>`;
+    if (f?.buyAt) h += `<button class="act" data-act="buyon" data-isl="${isl}" ${g.s.money >= f.price ? '' : 'disabled'}>🚂 Buy a train · ${fmtMoney(f.price)}</button>`;
+  }
   const ship = plan.get(b.id);
   // 'extra' to a town whose order still lists this good: the trains already on their way bring all the order needs
   const covered = (to?: Ship['to']) => { const t = to?.kind === 'town' ? g.s.sites.find(s => s.id === to.id) : undefined; return !!t && (orderOf(g, t)[k] ?? 0) > (t.got?.[k] ?? 0); };
@@ -386,11 +391,14 @@ function yardThrough(g: Game, b: Building): boolean {
   return !!((g.track.get(ys[0]!)?.links ?? 0) & (1 << a)) && !!((g.track.get(ys.at(-1)!)?.links ?? 0) & (1 << z));
 }
 
-/** A small button on an order or input row: rush it (its makers send here first, 30% fee), or stop rushing. */
+/** A small button on an order or input row: rush it (its makers send here first, paid up front), or stop rushing. */
 function rushBtn(g: Game, to: Dest, k: Good): string {
-  const on = !!rushOf(g, to, k), full = (g.s.rush ?? []).length >= MAX_RUSH;
-  if (!on && full) return '';
-  return `<button class="mini${on ? ' on' : ''}" data-act="rush" data-kind="${to.kind}" data-id="${to.id}" data-good="${k}">${on ? '⭐ Rushing · stop' : `⭐ Rush (−${Math.round(RUSH_FEE * 100)}% pay)`}</button>`;
+  const r = rushOf(g, to, k), full = (g.s.rush ?? []).length >= MAX_RUSH;
+  if (r) return `<button class="mini on" data-act="rush" data-kind="${to.kind}" data-id="${to.id}" data-good="${k}">⭐ ${r.left} to go · ✕ stop</button>`;
+  if (full || !rushMakers(g, k)) return '';
+  const f = rushFee(g, to, k), sea = rushBySea(g, to, k);
+  return `<button class="mini" data-act="rush" data-kind="${to.kind}" data-id="${to.id}" data-good="${k}" ${g.s.money >= f ? '' : 'disabled'}>⭐ Rush · ${fmtMoney(f)}${sea ? ' 🚢' : ''}</button>`
+;
 }
 
 /** ⚡ Faster ships and 📦 Bigger holds, for every ship at once. */

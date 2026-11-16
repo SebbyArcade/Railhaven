@@ -33,7 +33,7 @@ import { buyPark, buyProject, type ParkKind, parksOf, projectOf } from './buildi
 import { type MapView, VIEWS } from './ui/mapviews.ts';
 import { gameReport } from './ui/report.ts';
 import { SEASONS, seasonOf } from './world/season.ts';
-import { buyFleet, FLEET, type FleetKey, fleetLvl, refundOf, removeBuilding, rushOf, sellOffer, sellStock, toggleRush, upgradeBuilding } from './economy/upgrades.ts';
+import { buyFleet, FLEET, type FleetKey, fleetLvl, refundOf, removeBuilding, rushBySea, rushFee, rushMore, rushOf, sellOffer, sellStock, startRush, stopRush, upgradeBuilding } from './economy/upgrades.ts';
 import { foundTown, sizeName, tickTowns, upgradeTown } from './economy/towns.ts';
 import { checkArrivals } from './progress/arrivals.ts';
 import { buyTrainAt, buyTrainFor, fleetByIsland, bringTrainFrom, cancelMove, sellTrain, shipTrainTo, tickTrains, trainRefund, trainToSell } from './economy/dispatch.ts';
@@ -284,10 +284,20 @@ cardEl.onclick = e => {
     trackChanged(game); game.terrainDirty?.(footprint(game.world.n, bld)); closeCard();
     toast(`🗑 ${info(bld.kind).name} removed · +${fmtMoney(r)} back`); return;
   }
-  if (b.dataset.act === 'rush') {
-    const to = { kind: b.dataset.kind as 'town' | 'bld', id: +b.dataset.id! }, k = b.dataset.good as Good, on = !!rushOf(game, to, k);
-    const why = toggleRush(game, to, k); toast(why || (on ? '⭐ Rush stopped' : `⭐ Rushing ${GOODS[k].name.toLowerCase()}: its makers send here first`)); renderCard(); return;
+  if (b.dataset.act === 'rush') { // ⭐ start a rush (paid now) or stop one (the part not delivered comes back)
+    const to = { kind: b.dataset.kind as 'town' | 'bld', id: +b.dataset.id! }, k = b.dataset.good as Good;
+    if (rushOf(game, to, k)) { const back = stopRush(game, to, k); toast(back ? `⭐ Rush stopped: ${fmtMoney(back)} back for the part not delivered` : '⭐ Rush stopped'); renderCard(); return; }
+    const fee = rushFee(game, to, k), why = startRush(game, to, k);
+    toast(why || `⭐ Rushing ${GOODS[k].name.toLowerCase()} for ${fmtMoney(fee)}: its makers send here first${rushBySea(game, to, k) ? ', by ship from another island' : ''}`); renderCard(); return;
   }
+  if (b.dataset.act === 'rushamt') { // ＋20 / −20 on a factory rush
+    const to = { kind: b.dataset.kind as 'town' | 'bld', id: +b.dataset.id! }, k = b.dataset.good as Good, d = +b.dataset.d!, r = rushMore(game, to, k, d);
+    toast(typeof r === 'string' ? r : r >= 0 ? `⭐ ${d} more · ${fmtMoney(r)}` : `⭐ ${-d} fewer · ${fmtMoney(-r)} back`); renderCard(); return;
+  }
+  if (b.dataset.act === 'railto') { // 🔌 from the Orders board: Rails mode at a building that isn't joined yet
+    closeCard(); lookAt(+b.dataset.x!, +b.dataset.y!); tools.setMode('rail'); toast('🛤 Drag track from your line to one end of its yard'); return;
+  }
+  if (b.dataset.act === 'builddock') { closeCard(); startBuild('dock'); return; }
   if (b.dataset.act === 'shipup') { const k = b.dataset.k as ShipUpKey, why = buyShipUp(game, k); toast(why || `${SHIP_UP[k].icon} ${SHIP_UP[k].name}: ${SHIP_UP[k].text(shipUpLvl(game, k))}`); renderCard(); return; }
   if (b.dataset.act === 'fleet') { const k = b.dataset.k as FleetKey, isl = b.dataset.isl !== undefined ? +b.dataset.isl : game.world.home, why = buyFleet(game, k, isl); toast(why || `${FLEET[k].icon} ${FLEET[k].name}: ${FLEET[k].text(fleetLvl(game, k, isl))}`); renderCard(); return; }
   if (b.dataset.act === 'found') {

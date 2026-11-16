@@ -299,7 +299,7 @@ function unload(g: Game, t: Train) {
   if (j.to.kind === 'bld') {
     const f = bldOf(g, j.to.id)!, n = Math.min(c.n, Math.floor(factoryRoom(f, k)));
     (f.inbuf ??= {})[k] = (f.inbuf[k] ?? 0) + n;
-    let v = payFor(k, n, c.d, 'factory'); v -= rushDelivered(g, j.to, k, n, v); pay(g, v);
+    const v = payFor(k, n, c.d, 'factory'); pay(g, v); if (rushDelivered(g, j.to, k, n)) news(g, `⭐ Rush done: the ${INDUSTRIES[f.kind].name} got its ${GOODS[k].name.toLowerCase()}`);
     t.lastPay = { pay: Math.round(v), at: g.s.t, n, good: k, to: j.to };
     c.n -= n;
     if (c.n > 0) { j.to = nearestTown(g, t) ?? j.to; j.phase = 'toDrop'; sendLoaded(g, t); return; }
@@ -307,8 +307,8 @@ function unload(g: Game, t: Train) {
   }
   const town = siteOf(g, j.to.id)!;
   const p = deliverToTown(g, town, k, c.n, tradeRoom(g, town, k));
-  let v = (payFor(k, p.order + p.trade, c.d, 'order') + payFor(k, p.steady, c.d, 'steady') + payFor(k, p.surplus, c.d, 'extra')) * payMul(g, town); // 🏛 town projects pay more
-  v -= rushDelivered(g, j.to, k, p.order, v); pay(g, v);
+  const v = (payFor(k, p.order + p.trade, c.d, 'order') + payFor(k, p.steady, c.d, 'steady') + payFor(k, p.surplus, c.d, 'extra')) * payMul(g, town); // 🏛 town projects pay more
+  pay(g, v); if (rushDelivered(g, j.to, k, p.order)) news(g, `⭐ Rush done: ${town.name} got its ${GOODS[k].name.toLowerCase()}`);
   t.lastPay = { pay: Math.round(v), at: g.s.t, n: c.n, good: k, to: j.to };
   if (!town.filled && orderDone(g, town)) {
     town.filled = true;

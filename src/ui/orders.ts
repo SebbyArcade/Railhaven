@@ -1,13 +1,14 @@
 import type { Game, Site } from '../state.ts';
 import type { Building } from '../buildings/industries.ts';
-import { maxLvlOf } from '../economy/upgrades.ts';
+import { destIsland, MAX_RUSH, maxLvlOf, minLoad, type Rush, RUSH_MUL, rushBySea, RUSH_STEP } from '../economy/upgrades.ts';
 import { reachedIslands } from '../progress/missions.ts';
-import { capOf, GOODS, type Good, INDUSTRIES, isFactory, isLinked, shareAt } from '../buildings/industries.ts';
+import { capOf, GOODS, type Good, INDUSTRIES, inputsOf, type IndustryKind, isFactory, isLinked, shareAt } from '../buildings/industries.ts';
 import { factoryState } from '../economy/production.ts';
 import { capitalOf, tradeOf, tradeWhy } from '../economy/trade.ts';
 import { islandName } from '../ships/docks.ts';
 import { orderDone, orderOf, orderProgress, sizeName, stepOf, townLinked, upgradePrice } from '../economy/towns.ts';
-import { bldDist, destSquares, shipPlan } from '../economy/shipping.ts';
+import { bldDist, bldOf, destSquares, goodOf, type Plan, shipPlan, siteOf } from '../economy/shipping.ts';
+import { islandOfTrain } from '../economy/dispatch.ts';
 import { jams } from '../economy/jams.ts';
 import { isDock, islandOfB } from '../ships/docks.ts';
 import { TRACK_COST } from '../track/rules.ts';
@@ -28,17 +29,25 @@ export function placeName(g: Game, b: Building): string {
 }
 
 /** What needs the player: towns ready to grow, buildings off the railway, factories short of goods, full buildings, idle trains. */
-export interface Stuck { icon: string; text: string; btn: string; x: number; y: number; /** the building it is about */ bld?: number }
+export interface Stuck {
+  icon: string; text: string; btn: string; x: number; y: number; /** the building it is about */ bld?: number; name?: string;
+  /** buildings stuck for the same reason are shown as one group: the cause, said for several, and the button that fixes it */
+  cause?: string; many?: string; fix?: string;
+}
 export function stuckList(g: Game, plan = shipPlan(g)): Stuck[] {
   const out: Stuck[] = [];
   for (const t of g.s.sites) if (t.kind === 'town' && townLinked(g, t) && orderDone(g, t)) out.push({ icon: '⬆', text: `${esc(t.name ?? 'A town')} can grow into a ${sizeName(stepOf(t) + 1)} (${fmtMoney(upgradePrice(stepOf(t)))})`, btn: open('town', t.id, 'Open ›'), x: t.x, y: t.y });
   for (const b of g.s.buildings ?? []) {
     if (b.closed) continue; // ⛔ closed on purpose: not a problem
     const name = placeName(g, b);
-    if (!isLinked(g, b)) { out.push({ icon: '🔌', text: `The ${name} isn't on the railway: lay track to one end of its yard`, btn: open('bld', b.id), x: b.x, y: b.y, bld: b.id }); continue; }
-    if (isFactory(b.kind)) { const w = factoryState(g, b).waits; if (w.length) out.push({ icon: '⏳', text: `The ${name} waits for ${w.map(k => `${GOODS[k].icon} ${GOODS[k].name.toLowerCase()}`).join(' and ')}`, btn: open('bld', b.id), x: b.x, y: b.y, bld: b.id }); }
+    const rail = `<button class="mini" data-act="railto" data-x="${b.x}" data-y="${b.y}">🛤 Lay track ›</button>`;
+    if (!isLinked(g, b)) { out.push({ icon: '🔌', text: `The ${name} isn't on the railway: lay track to one end of its yard`, btn: rail, x: b.x, y: b.y, bld: b.id, name, cause: 'off', many: "aren't on the railway: lay track to one end of each yard", fix: rail }); continue; }
+    if (isFactory(b.kind)) { const w = factoryState(g, b).waits; if (w.length) { const gs = w.map(k => `${GOODS[k].icon} ${GOODS[k].name.toLowerCase()}`).join(' and '); out.push({ icon: '⏳', text: `The ${name} waits for ${gs}`, btn: open('bld', b.id), x: b.x, y: b.y, bld: b.id, name, cause: 'wait/' + w.join(), many: `wait for ${gs}` }); } }
     const k = INDUSTRIES[b.kind].makes as Good;
-    if (b.kind !== 'dock' && b.stock >= capOf(b) && !plan.get(b.id)) out.push({ icon: '📦', text: `The ${name} is full: no place on the railway needs ${GOODS[k].icon} ${GOODS[k].name.toLowerCase()} now`, btn: open('bld', b.id), x: b.x, y: b.y, bld: b.id });
+    if (b.kind !== 'dock' && b.stock >= capOf(b) && !plan.get(b.id)) {
+      const d = outDiag(g, b, k), sell = `<button class="mini" data-act="sell" data-id="${b.id}">💸 Sell ›</button>`;
+      out.push({ icon: '📦', text: `The ${name} is full: ${d.text}`, btn: d.btn || sell, x: b.x, y: b.y, bld: b.id, name, cause: 'full/' + k + d.text, many: `are full: ${d.text}`, fix: d.btn || open('bld', b.id) });
+    }
   }
   for (const x of bottlenecks(g, plan)) {
     if (!x.near.length) { // none of the makers is on those towns' railway
@@ -111,11 +120,11 @@ export function ordersHtml(g: Game): string {
     if (bl) h += `<div class="warn">⛵ Level ${bl.level} also needs ${bl.need} islands reached: you have ${bl.have}. Build a ⚓ Dock and land on another island</div>`;
     else if (LEVEL_ISLANDS[L + 1]) h += `<small class="why">⛵ Level ${L + 1} also needs ${LEVEL_ISLANDS[L + 1]} islands reached (Ashford Isle counts as one)</small>`;
   } else h += `<div class="gift">⭐ Top Railway level: every order still pays</div>`;
-  const stuck = stuckList(g);
+  const plan = shipPlan(g), stuck = stuckList(g, plan);
+  h += rushBox(g, plan);
   if (stuck.length) {
     h += `<h3>⚠ Needs you</h3>`;
-    for (const s of stuck.slice(0, 6)) h += `<div class="row"><b class="ico">${s.icon}</b><div class="grow"><small>${s.text}</small></div>${s.btn}</div>`;
-    if (stuck.length > 6) h += `<small class="why">and ${stuck.length - 6} more</small>`;
+    h += stuckRows(stuck, 6);
   }
   const towns = g.s.sites.filter((t): t is Site => t.kind === 'town' && townLinked(g, t)).sort((a, b) => orderProgress(g, b) - orderProgress(g, a));
   h += `<h3>🏘 Towns on your railway</h3>`;
@@ -135,5 +144,88 @@ export function ordersHtml(g: Game): string {
   }
   const off = g.s.sites.filter(t => t.kind === 'town' && (t.pop ?? 0) > 0 && !townLinked(g, t)).length;
   if (off) h += `<div class="note">🔌 ${off} more town${off > 1 ? 's' : ''} you've found ${off > 1 ? 'are' : 'is'} not on the railway yet</div>`;
+  return h;
+}
+
+/**
+ * Nothing on the railway takes a good: say who would (towns on another island, a factory that uses it) and what is
+ * missing to get it there, with the button that starts the fix.
+ */
+export function outDiag(g: Game, b: Building, k: Good): { text: string; btn: string } {
+  const G = `${GOODS[k].icon} ${GOODS[k].name.toLowerCase()}`, n = g.world.n, here = g.world.islandOf[b.y * n + b.x];
+  const far = g.s.sites.filter(t => t.kind === 'town' && townLinked(g, t) && g.world.islandOf[t.y * n + t.x] !== here && (orderOf(g, t)[k] ?? 0) > (t.got?.[k] ?? 0));
+  const dock = `<button class="mini" data-act="builddock">⚓ Build a dock ›</button>`;
+  if (far.length) {
+    const isl = islandName(g, g.world.islandOf[far[0]!.y * n + far[0]!.x]!), myDock = (g.s.buildings ?? []).some(d => d.kind === 'dock' && isLinked(g, d) && islandOfB(g, d) === here);
+    return { text: `${far.map(t => esc(t.name ?? 'a town')).slice(0, 2).join(' and ')} on ${esc(isl)} want ${G}, but no sea route goes there: ${myDock ? `build a ⚓ landing on ${esc(isl)} within your dock's reach` : 'build a ⚓ dock here and a landing there'}`, btn: dock };
+  }
+  const use = (Object.keys(INDUSTRIES) as IndustryKind[]).find(f => isFactory(f) && inputsOf(f).includes(k));
+  return { text: `no place on the railway needs ${G} now${use ? `: a ${INDUSTRIES[use].name} would use it, or sell it` : ': sell it'}`, btn: '' };
+}
+
+/** Buildings whose goods wait for a free train: plenty ready, somewhere to send them, no train coming, and every train on their island busy. */
+export function waitingForTrain(g: Game, plan: Plan): Set<number> {
+  const out = new Set<number>(), busy = new Map<number, boolean>(), n = g.world.n;
+  const allBusy = (isl: number) => { if (!busy.has(isl)) busy.set(isl, !g.s.trains.some(t => !t.job && islandOfTrain(g, t) === isl)); return busy.get(isl)!; };
+  for (const b of g.s.buildings ?? []) {
+    if (b.closed || b.kind === 'dock' || !plan.get(b.id) || b.stock < Math.max(20, minLoad(g)) || !isLinked(g, b)) continue;
+    if (g.s.trains.some(t => t.job?.src === b.id)) continue;
+    if (allBusy(g.world.islandOf[b.y * n + b.x]!)) out.add(b.id);
+  }
+  return out;
+}
+
+/** Where a rush's goods come from now, in plain words (red when nothing brings them). */
+export function rushRoute(g: Game, r: Rush, plan: Plan): { text: string; bad: boolean } {
+  let rail = 0, seaFrom = -1;
+  const isl = destIsland(g, r.to), docksIsl = (id: number) => { const d = bldOf(g, id); return d ? islandOfB(g, d) : -2; };
+  const look = (src: Building, k: Good, v: { to: { kind: string; id: number }; rush?: boolean; sea?: number; then?: number }) => {
+    if (!v.rush || k !== r.good) return;
+    if (v.sea === undefined) { if (v.to.kind === r.to.kind && v.to.id === r.to.id) rail++; }
+    else if (docksIsl(v.then ?? v.sea) === isl && seaFrom < 0) seaFrom = islandOfB(g, src);
+  };
+  for (const [id, v] of plan) { const b = bldOf(g, id); if (b) look(b, goodOf(b), v); }
+  for (const [key, v] of plan.docks) { const [id, k] = key.split('/'); const b = bldOf(g, +id!); if (b) look(b, k as Good, v); }
+  const afloat = (g.s.ships ?? []).some(s => s.hold.some(q => q.good === r.good && docksIsl(q.then ?? q.to) === isl));
+  if (rail) return { text: `🚂 ${rail === 1 ? 'a building sends' : `${rail} buildings send`} it here first`, bad: false };
+  if (seaFrom >= 0) return { text: `🚢 comes by ship from ${esc(islandName(g, seaFrom))}`, bad: false };
+  if (afloat) return { text: '🚢 on its way by ship', bad: false };
+  const trains = g.s.trains.filter(t => t.job && t.job.good === r.good && t.job.to.kind === r.to.kind && t.job.to.id === r.to.id).length;
+  if (trains) return { text: `🚂 ${trains === 1 ? 'a train is' : `${trains} trains are`} bringing it`, bad: false };
+  if ((g.s.rush ?? []).some(o => o !== r && o.good === r.good)) return { text: '⏳ its makers serve the earlier rush first', bad: false };
+  return rushBySea(g, r.to, r.good) ? { text: '🚢 nothing on this island makes it, and no dock route brings it', bad: true } : { text: 'nothing on your railway that reaches it makes it yet', bad: true };
+}
+
+/** ⭐ The rushes running, on top of the Orders board: progress, where they come from, ＋/− for factories, stop with refund. */
+function rushBox(g: Game, plan: Plan): string {
+  const R = g.s.rush ?? [], n = R.length;
+  let h = `<h3>⭐ Rushes ${n}/${MAX_RUSH}</h3>`;
+  if (!n) return h + `<div class="note">⭐ Open a town or factory and tap ⭐ Rush next to a good: every maker that reaches it sends there first, by ship too. Paid up front; what isn't delivered is refunded if you stop it.</div>`;
+  for (const r of R) {
+    const tot = Math.max(r.n ?? r.left, r.left), done = tot - Math.max(0, r.left), G = GOODS[r.good], rt = rushRoute(g, r, plan);
+    const place = r.to.kind === 'town' ? esc(siteOf(g, r.to.id)?.name ?? 'a town') : (() => { const b = bldOf(g, r.to.id); return b ? 'the ' + placeName(g, b) : 'a factory'; })();
+    const back = r.pu ? Math.round(r.pu * Math.min(Math.max(0, r.left), r.paid ?? 0) / 10) * 10 : 0, step = Math.round((r.pu ?? 0) * RUSH_STEP / 10) * 10;
+    const ab = `data-kind="${r.to.kind}" data-id="${r.to.id}" data-good="${r.good}"`;
+    h += `<div class="row"><b class="ico">${G.icon}</b><div class="grow"><div class="line"><span>⭐ ${G.name} to ${place}</span><span>${done} / ${tot}</span></div>${bar(done / Math.max(1, tot), '#ffd27a')}`
+      + `<small class="${rt.bad ? 'why' : ''}"${rt.bad ? ' style="color:#ff8a6a"' : ''}>${rt.text}</small><div class="chips">`
+      + (r.to.kind === 'bld' ? `<button class="mini" data-act="rushamt" data-d="-${RUSH_STEP}" ${ab}>−${RUSH_STEP}${step ? ` · ${fmtMoney(step)} back` : ''}</button><button class="mini" data-act="rushamt" data-d="${RUSH_STEP}" ${ab} ${g.s.money >= step ? '' : 'disabled'}>＋${RUSH_STEP}${step ? ` · ${fmtMoney(step)}` : ''}</button>` : '')
+      + `<button class="mini" data-act="rush" ${ab}>✕ Stop${back ? ` · ${fmtMoney(back)} back` : ''}</button></div></div>${open(r.to.kind, r.to.id, '›')}</div>`;
+  }
+  if (n < MAX_RUSH) h += `<small class="why">The more rushes run at once, the dearer the next: rush ${n + 1} costs ×${RUSH_MUL[n]}</small>`;
+  return h;
+}
+
+/** Stuck entries with the same cause folded into one row: what is wrong, which places (each tappable), and the fix. */
+function stuckRows(list: Stuck[], max: number): string {
+  const groups: Stuck[][] = [], by = new Map<string, Stuck[]>();
+  for (const s of list) { if (!s.cause) { groups.push([s]); continue; } const k = s.icon + s.cause; let gr = by.get(k); if (!gr) { gr = []; by.set(k, gr); groups.push(gr); } gr.push(s); }
+  let h = '';
+  for (const gr of groups.slice(0, max)) {
+    const s = gr[0]!;
+    if (gr.length === 1) { h += `<div class="row"><b class="ico">${s.icon}</b><div class="grow"><small>${s.text}</small></div>${s.btn}</div>`; continue; }
+    const names = gr.map(x => `<button class="mini" data-act="open" data-kind="bld" data-id="${x.bld}">📍 ${esc(x.name ?? 'Open')}</button>`).join('');
+    h += `<div class="row"><b class="ico">${s.icon}</b><div class="grow"><small>${gr.length} buildings ${s.many}</small><div class="chips">${names}</div></div>${s.fix ?? ''}</div>`;
+  }
+  if (groups.length > max) h += `<small class="why">and ${groups.length - max} more</small>`;
   return h;
 }

@@ -1,7 +1,7 @@
 import type { Game } from '../state.ts';
 import type { Train } from '../trains/train.ts';
-import { type Building, GOODS, type Good, growsTracks, INDUSTRIES, isFactory, stripError, tracksOf, yardSquares } from '../buildings/industries.ts';
-import { type Dest, siteOf, bldOf } from './shipping.ts';
+import { type Building, GOODS, type Good, growsTracks, INDUSTRIES, isFactory, isLinked, stripError, tracksOf, yardSquares } from '../buildings/industries.ts';
+import { type Dest, DF, PAY, siteOf, bldOf } from './shipping.ts';
 import { orderOf } from './towns.ts';
 
 // ---- building levels
@@ -141,8 +141,20 @@ export function fleetPerIsland(g: Game, reached: Iterable<number>) {
 
 // ---- rush a good
 
-export const MAX_RUSH = 3, RUSH_FEE = 0.3;
-export interface Rush { to: Dest; good: Good; left: number }
+/**
+ * ⭐ Rush: every maker of the good that reaches the place sends there first (by ship when only another island makes it).
+ * Paid up front: 30% of what the delivery normally pays (×1.5 when it must come by ship), at least $150, and dearer
+ * the more rushes run at once (1st ×1.25, 2nd ×1.5, 3rd ×2). The undelivered part is refunded when it is cancelled.
+ */
+export const MAX_RUSH = 3, RUSH_FEE = 0.3, RUSH_SEA = 1.5, RUSH_MIN = 150, RUSH_STEP = 20;
+export const RUSH_MUL = [1.25, 1.5, 2];
+export interface Rush {
+  to: Dest; good: Good;
+  /** units still to come */
+  left: number;
+  /** units asked for in all, price paid per unit, and how many of the units still to come are paid for (older saves have none) */
+  n?: number; pu?: number; paid?: number;
+}
 
 /** How many units a rush asks for: what the order still needs, or 50 for a factory. */
 export function rushNeed(g: Game, to: Dest, k: Good): number {
@@ -152,20 +164,76 @@ export function rushNeed(g: Game, to: Dest, k: Good): number {
 
 export const rushOf = (g: Game, to: Dest, k: Good) => (g.s.rush ?? []).find(r => r.to.kind === to.kind && r.to.id === to.id && r.good === k);
 
-/** Start (or stop) rushing a good to a place: its makers send there first; those deliveries pay 30% less. */
-export function toggleRush(g: Game, to: Dest, k: Good): string {
-  const cur = rushOf(g, to, k);
-  if (cur) { g.s.rush = g.s.rush!.filter(r => r !== cur); return ''; }
+/** The island a town or building stands on. */
+export function destIsland(g: Game, to: Dest): number {
+  if (to.kind === 'town') { const t = siteOf(g, to.id); return t ? g.world.islandOf[t.y * g.world.n + t.x]! : -1; }
+  const b = bldOf(g, to.id); return b ? g.world.islandOf[yardSquares(g.world.n, b)[0]!]! : -1;
+}
+
+/** No building of yours on that island makes the good: a rush has to come by ship. */
+export function rushBySea(g: Game, to: Dest, k: Good): boolean {
+  const isl = destIsland(g, to), n = g.world.n;
+  return !(g.s.buildings ?? []).some(b => b.kind !== 'dock' && INDUSTRIES[b.kind].makes === k && !b.closed && g.world.islandOf[yardSquares(n, b)[0]!] === isl && isLinked(g, b));
+}
+
+/** How many open buildings on the railway make the good (a rush needs at least one, on any island). */
+export const rushMakers = (g: Game, k: Good) => (g.s.buildings ?? []).filter(b => b.kind !== 'dock' && INDUSTRIES[b.kind].makes === k && !b.closed && isLinked(g, b)).length;
+
+/** Price per unit of a new rush (the next one to start: dearer when others already run). */
+export function rushUnitPrice(g: Game, to: Dest, k: Good): number {
+  const m = RUSH_MUL[Math.min(RUSH_MUL.length - 1, (g.s.rush ?? []).length)]!;
+  return GOODS[k].value * DF(20) * PAY * RUSH_FEE * (rushBySea(g, to, k) ? RUSH_SEA : 1) * m;
+}
+const r10 = (v: number) => Math.round(v / 10) * 10;
+/** What starting a rush costs now. */
+export const rushFee = (g: Game, to: Dest, k: Good) => Math.max(RUSH_MIN, r10(rushUnitPrice(g, to, k) * rushNeed(g, to, k)));
+
+/** Start a rush (paid up front). Returns why not, or '' when started. */
+export function startRush(g: Game, to: Dest, k: Good): string {
+  if (rushOf(g, to, k)) return '';
   if ((g.s.rush ?? []).length >= MAX_RUSH) return `At most ${MAX_RUSH} rushes at once: stop one first`;
   const n = rushNeed(g, to, k); if (n <= 0) return 'Nothing left to rush there';
-  (g.s.rush ??= []).push({ to, good: k, left: n });
+  if (!rushMakers(g, k)) { const m = Object.values(INDUSTRIES).find(d => d.makes === k); return `Nothing on your railway makes ${GOODS[k].name.toLowerCase()} yet${m ? `: build a ${m.name} first` : ''}`; }
+  const fee = rushFee(g, to, k);
+  if (g.s.money < fee) return `This rush costs $${fee.toLocaleString('en-US')}: you need $${Math.ceil(fee - g.s.money).toLocaleString('en-US')} more`;
+  g.s.money -= fee;
+  (g.s.rush ??= []).push({ to, good: k, left: n, n, pu: fee / n, paid: n });
   return '';
 }
 
-/** A delivery arrived: count it against a rush and return the fee to take off its pay. */
-export function rushDelivered(g: Game, to: Dest, k: Good, n: number, pay: number): number {
+/** Cancel a rush: the part not delivered yet is refunded. Returns the refund. */
+export function stopRush(g: Game, to: Dest, k: Good): number {
   const r = rushOf(g, to, k); if (!r) return 0;
-  r.left -= n;
-  if (r.left <= 0 || rushNeed(g, to, k) <= 0) { g.s.rush = g.s.rush!.filter(x => x !== r); g.s.rushDone = (g.s.rushDone ?? 0) + 1; }
-  return Math.round(pay * RUSH_FEE);
+  g.s.rush = g.s.rush!.filter(x => x !== r);
+  const back = r.pu ? r10(r.pu * Math.min(Math.max(0, r.left), r.paid ?? 0)) : 0;
+  g.s.money += back;
+  return back;
+}
+
+/** Start (or stop) rushing a good to a place. */
+export function toggleRush(g: Game, to: Dest, k: Good): string {
+  if (rushOf(g, to, k)) { stopRush(g, to, k); return ''; }
+  return startRush(g, to, k);
+}
+
+/** ＋20 / −20 on a factory rush, charged or refunded at the price paid. Returns why not, or the money: + paid, − given back. */
+export function rushMore(g: Game, to: Dest, k: Good, d: number): string | number {
+  const r = rushOf(g, to, k); if (!r || to.kind !== 'bld') return 'Only factory rushes change size';
+  const n = r.n ?? r.left, pu = r.pu ?? 0;
+  if (d > 0) {
+    const add = Math.min(d, 500 - n); if (add <= 0) return 'A rush asks for 500 at most';
+    const c = r10(pu * add); if (g.s.money < c) return `${add} more costs $${c.toLocaleString('en-US')}`;
+    g.s.money -= c; r.n = n + add; r.left += add; r.paid = (r.paid ?? 0) + add; return c;
+  }
+  const cut = Math.min(-d, r.left - 10); if (cut <= 0) return 'Nearly there: cancel it instead';
+  const b = r10(pu * Math.min(cut, r.paid ?? 0));
+  g.s.money += b; r.n = n - cut; r.left -= cut; r.paid = Math.max(0, (r.paid ?? 0) - cut); return -b;
+}
+
+/** A delivery arrived: count it against a rush. Returns true when that finished the rush. */
+export function rushDelivered(g: Game, to: Dest, k: Good, n: number): boolean {
+  const r = rushOf(g, to, k); if (!r || n <= 0) return false;
+  r.left -= n; r.paid = Math.max(0, Math.min(r.paid ?? 0, r.left));
+  if (r.left <= 0 || rushNeed(g, to, k) <= 0) { g.s.rush = g.s.rush!.filter(x => x !== r); g.s.rushDone = (g.s.rushDone ?? 0) + 1; return true; }
+  return false;
 }
