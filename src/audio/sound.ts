@@ -38,7 +38,7 @@ const SEASON_MUSIC = [
 const PENTA_MAJ = [0, 2, 4, 7, 9], PENTA_MIN = [0, 3, 5, 7, 10];
 /** Phones crackle when the sound card runs out of time, so the effects stay within a budget:
  *  only the loudest few things on screen make their sounds, and no more than this many effect sounds play at once. */
-export const MAX_SOURCES = 8, MAX_VOICES = 28;
+export const MAX_SOURCES = 8, MAX_VOICES = 28, MAX_CHUFFS = 2;
 /** Effects are scheduled this far ahead, so their soft start is never cut off by a busy frame (a cut-off start pops). */
 const LEAD = 0.06;
 /** Panning faster than this (screen pixels a second), or zooming, starts no new effect sounds: things rush in and out
@@ -138,7 +138,8 @@ export class Sound {
       this.cam = { ...c, t: now };
     }
     const busy = now < this.calmAt, seen = new Set<string>(), loud = [...sc.sources].sort((a, b) => b.vol - a.vol);
-    loud.forEach((h, i) => { seen.add(h.id); this.source(h, now + LEAD, !busy && i < MAX_SOURCES); }); // the rest keep their clocks, quietly
+    let chuffs = 0; // many trains chuffing out of step blur into a steady crackle: only the nearest few are heard
+    loud.forEach((h, i) => { seen.add(h.id); const train = h.kind === 'train' && !!h.rate; if (train) chuffs++; this.source(h, now + LEAD, !busy && i < MAX_SOURCES && (!train || chuffs <= MAX_CHUFFS)); }); // the rest keep their clocks, quietly
     for (const id of [...this.next.keys()]) if (!seen.has(id)) { this.next.delete(id); this.wasMoving.delete(id); }
   }
 
@@ -382,8 +383,9 @@ export class Sound {
     const v = h.vol, p = h.pan; let gap = 2;
     switch (h.kind) {
       case 'train': {
-        if (!h.rate) { if (Math.random() < 0.15) this.burst(now, 1.2, 0.05 * v, p, 'highpass', 3500); gap = rnd(1, 2); break; } // standing: a soft breath of steam now and then
-        this.burst(now, 0.12, 0.22 * v, p, 'bandpass', 900, 0.8); // chuff
+        // standing: a soft breath of steam now and then (a narrower, lower band than before: a high hiss sounds like static)
+        if (!h.rate) { if (Math.random() < 0.08) this.burst(now, 1, 0.03 * v, p, 'bandpass', 1800, 1.2); gap = rnd(1.5, 3); break; }
+        this.burst(now, 0.16, 0.16 * v, p, 'bandpass', 600, 1.4); // chuff: a soft, round puff (was a wide 900 Hz band, crackly)
         gap = 0.62 - 0.46 * h.rate;
         break;
       }
