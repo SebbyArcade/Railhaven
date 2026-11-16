@@ -109,6 +109,8 @@ export interface GameState {
   shipU?: Partial<Record<'spd' | 'hold', number>>;
   /** cargo ships */
   ships?: import('./ships/ships.ts').CargoShip[];
+  /** ⛴ boats carrying a new train over to another island */
+  ferries?: import('./ships/ships.ts').Ferry[];
   /** 🗺 expedition rings sent: the map has grown by this many rings of sea */
   rings?: number;
   /** town parks and town projects, one square each */

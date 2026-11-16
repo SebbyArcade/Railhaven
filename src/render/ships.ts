@@ -14,6 +14,10 @@ export function drawShips(ctx: CanvasRenderingContext2D, g: Game, tm: number, vi
     const p = shipPlace(g, s); if (!vis(p.x, p.y)) continue;
     drawShip(ctx, (p.x + 0.5) * TILE, (p.y + 0.5) * TILE, p.a, s, tm);
   }
+  for (const f of g.s.ferries ?? []) { // ⛴ a boat taking a new train over: the train stands on deck
+    const p = shipPlace(g, f); if (!vis(p.x, p.y)) continue;
+    drawShip(ctx, (p.x + 0.5) * TILE, (p.y + 0.5) * TILE, p.a, f, tm, true);
+  }
 }
 
 /**
@@ -59,8 +63,8 @@ function drawFishingBoats(ctx: CanvasRenderingContext2D, g: Game, b: Building, t
   }
 }
 
-function drawShip(ctx: CanvasRenderingContext2D, X: number, Y: number, a: number, s: CargoShip, tm: number) {
-  const bob = Math.sin(tm * 1.4 + s.id) * 0.5, moving = s.to !== undefined;
+function drawShip(ctx: CanvasRenderingContext2D, X: number, Y: number, a: number, s: CargoShip, tm: number, train = false) {
+  const bob = Math.sin(tm * 1.4 + s.id) * 0.5, moving = s.to !== undefined && (s.path?.length ?? 0) - 1 > s.pos;
   ctx.save(); ctx.translate(X, Y + bob); ctx.rotate(a);
   if (moving) { // wake
     ctx.strokeStyle = 'rgba(255,255,255,.35)'; ctx.lineWidth = 1;
@@ -73,6 +77,15 @@ function drawShip(ctx: CanvasRenderingContext2D, X: number, Y: number, a: number
   ctx.fillStyle = '#d8cdb4'; ctx.beginPath(); ctx.moveTo(-18, -4.4); ctx.lineTo(11, -4.4); ctx.quadraticCurveTo(18, 0, 11, 4.4); ctx.lineTo(-18, 4.4); ctx.closePath(); ctx.fill();
   // cargo: crates in two rows, coloured by good, as many as the hold is full
   const goods: Good[] = []; for (const q of s.hold) for (let k = 0; k < Math.ceil(q.n / 10); k++) goods.push(q.good);
+  if (train) { // two rails on deck, a little steam engine and its tender
+    ctx.strokeStyle = '#6a6058'; ctx.lineWidth = 0.5; for (const v of [-1.6, 1.6]) { ctx.beginPath(); ctx.moveTo(-6, v); ctx.lineTo(13, v); ctx.stroke(); }
+    ctx.fillStyle = '#3a2a20'; ctx.fillRect(-5.5, -2.4, 5, 4.8); // tender
+    ctx.fillStyle = '#1e1a18'; ctx.fillRect(-5, -1.6, 4, 3.2); // coal
+    ctx.fillStyle = '#2f5a3a'; ctx.fillRect(0.5, -2.6, 4, 5.2); // cab
+    ctx.fillStyle = '#26472f'; ctx.beginPath(); ctx.roundRect(4.5, -2, 7.5, 4, 1.8); ctx.fill(); // boiler
+    ctx.fillStyle = '#1e1a18'; ctx.beginPath(); ctx.arc(10.4, 0, 1, 0, 7); ctx.fill(); // chimney
+    ctx.fillStyle = '#c8a040'; ctx.fillRect(4.5, -2, 0.6, 4); // brass band
+  }
   for (let k = 0; k < Math.min(8, goods.length); k++) {
     const u = -4 + (k >> 1) * 4, v = (k & 1) ? 0.4 : -3.4;
     ctx.fillStyle = CRATE[goods[k]!] ?? '#8a6a40'; ctx.fillRect(u, v, 3.4, 3);
