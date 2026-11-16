@@ -32,7 +32,7 @@ export const MODE_HINT: Record<Mode, string> = {
   pan: '',
   rail: '🛤 Drag out from your track (Ashford at first), or from a new building\'s gold end square to your track. Join a town along its arrows: across its square, past it, or ending beside it. Your line waits while you scroll. ✓ Build when done.',
   double: '═ Tap single track for a 🔁 passing loop, or drag along your track to double it. Trains keep right like cars: one lane each way. 🚉 Stations and buildings have two tracks already.',
-  remove: '✂ Tap a track square to remove it.',
+  remove: '✂ Tap track squares to pick them, or drag along your track to pick a run. Tap a picked square again to drop it.',
   train: '🚂 Trains roll out of the engine shed and run themselves: each takes the best waiting load where it is needed.',
   build: '🏗 Drag the picture where you want it. Blue row = loading track: your rails join it in line, at either end (gold arrows). Tap a ⟳ corner to turn it, double-tap it to build. ↶ Undo takes it back.',
   scout: '🔭 Tap a glowing town (scouts on foot: drag or tap their route) or dock (a boat: tap where it should sail, it finds its way over the water). A 🗺 map (on a town card) shows where to look.',
@@ -46,13 +46,18 @@ export class Tools {
   dbl = new Set<number>();
   /** the "already two tracks" note was shown during this drag */
   private twinNoted = false;
-  removeAt: number | null = null;
+  /** Remove mode: the track squares picked to remove together */
+  rm = new Set<number>();
+  /** a remove drag: whether it picks or drops squares, the square it is on, and whether it has left its first square */
+  private rmDrag: { add: boolean; at: number; moved: boolean } | null = null;
+  /** a drag just picked squares: the tap that ends it is not a toggle */
+  private rmSkipTap = false;
+  /** what removing the picked squares would cut off, for the picks it was worked out for */
+  private rmCutFor = ''; private rmCut = '';
   /** the building just built: Undo takes it back with a full refund (until the next build, or for a minute) */
   lastBuild: { id: number; paid: number; at: number; before: [number, number | null][]; shed?: Shed | null } | null = null;
   /** when the outline was last tapped (a second tap soon after builds it) */
   private outlineTapAt = 0;
-  /** what removing that square would cut off the railway ('' when nothing) */
-  removeCut = '';
   selected: number | null = null;
   /** the open card (town, building or train), shown on the map too */
   card: Card | null = null;
@@ -122,7 +127,7 @@ export class Tools {
     this.mode = 'map'; this.cancel(); this.mapPv = m; this.mapArm = 0; return '';
   }
 
-  cancel() { this.again = null; if (this.mode !== 'map') this.mapPv = null; this.scout = null; this.plan = null; this.dbl.clear(); this.removeAt = null; this.preview = null; this.previewErr = ''; this.dragOff = null; if (this.mode !== 'build') this.buildKind = null; }
+  cancel() { this.again = null; if (this.mode !== 'map') this.mapPv = null; this.scout = null; this.plan = null; this.dbl.clear(); this.rm.clear(); this.rmDrag = null; this.rmSkipTap = false; this.preview = null; this.previewErr = ''; this.dragOff = null; if (this.mode !== 'build') this.buildKind = null; }
 
   /** choose what to build: glowing squares show where it fits */
   /**
@@ -251,6 +256,10 @@ export class Tools {
       this.dragOver(i); return true;
     }
     if (this.mode === 'double') { if (!g.track.has(i)) return false; this.twinNoted = false; this.markDouble(i); return true; }
+    if (this.mode === 'remove') { // a drag that starts on track picks squares along it (or drops them, if it starts on a picked one); elsewhere it pans
+      if (!g.track.has(i)) return false;
+      this.rmDrag = { add: !this.rm.has(i), at: i, moved: false }; this.rmSkipTap = false; return true;
+    }
     if (this.mode === 'scout') {
       if (this.scout && this.scout.path.includes(i)) { this.scout.path = this.scout.path.slice(0, this.scout.path.indexOf(i) + 1); return true; }
       const st = this.scoutStartAt(i); if (st) { this.scout = { path: [st.sq], boat: st.boat, name: st.name }; return true; }
@@ -302,7 +311,24 @@ export class Tools {
       if (this.plan.refused) { this.refuse(this.plan.refused.square, this.plan.refused.why); this.plan.refused = undefined; }
     }
     if (this.mode === 'double' && g.track.has(i)) this.markDouble(i);
+    if (this.mode === 'remove' && this.rmDrag && i !== this.rmDrag.at) this.rmDragTo(i);
     if (this.mode === 'scout' && this.scout && this.scout.path.at(-1) !== i) this.scoutTo(i);
+  }
+
+  /** A remove drag moves on to square i: every track square on the way is picked (or dropped), even if the finger skipped some. */
+  private rmDragTo(i: number) {
+    const g = this.g(), n = g.world.n, d = this.rmDrag!, ax = d.at % n, ay = (d.at / n) | 0, bx = i % n, by = (i / n) | 0;
+    const steps = Math.max(Math.abs(bx - ax), Math.abs(by - ay)), mark = (q: number) => { if (!g.track.has(q)) return; if (d.add) this.rm.add(q); else this.rm.delete(q); };
+    if (!d.moved) { d.moved = true; this.rmSkipTap = true; mark(d.at); }
+    for (let k = 1; k <= steps; k++) mark(Math.round(ay + (by - ay) * k / steps) * n + Math.round(ax + (bx - ax) * k / steps));
+    d.at = i;
+  }
+
+  /** Towns and buildings that removing the picked squares would cut off the railway ('' when nothing; worked out once per pick). */
+  removeCut(): string {
+    const key = [...this.rm].join(',');
+    if (key !== this.rmCutFor) { this.rmCutFor = key; this.rmCut = this.rm.size ? cutText(this.g(), [...this.rm]) : ''; }
+    return this.rmCut;
   }
 
   /** Switch a four-way square between a flat crossing (lines go straight over) and a junction (trains may turn). Free. */
@@ -358,7 +384,12 @@ export class Tools {
       if (st) { this.scout = { path: [st.sq], boat: st.boat, name: st.name }; toast(st.boat ? `⛵ Now tap the sea where the boat should sail: ${fmtMoney(scoutCost(1, true))} a square` : `🚶 Now draw where the scout should walk from ${st.name}`); return true; }
       toast(scoutStarts(g).length ? 'Scouts leave from a glowing town or dock on your railway' : 'Join a town to your railway first: scouts leave from there'); return true;
     }
-    if (this.mode === 'remove') { this.removeAt = g.track.has(i) ? i : null; this.removeCut = this.removeAt === null ? '' : cutText(g, i); if (!g.track.has(i)) toast('No track here'); return true; }
+    if (this.mode === 'remove') {
+      const skip = this.rmSkipTap; this.rmSkipTap = false; this.rmDrag = null;
+      if (skip) return true; // the drag already picked its squares
+      if (this.rm.has(i)) this.rm.delete(i); else if (g.track.has(i)) this.rm.add(i); else toast('No track here');
+      return true;
+    }
     if (this.mode === 'train') return true;
     if (this.mode === 'map') { const m = mapAt(g, i % n, (i / n) | 0); if (typeof m === 'string') toast(m); else { this.mapPv = m; this.mapArm = 0; } return true; }
     return false;
@@ -447,7 +478,12 @@ export class Tools {
       if (!add.length) return { text: '✓ Already two tracks here: nothing to double', ok: '✓ Double', can: false };
       return { text: `Double ${add.length} square${add.length === 1 ? '' : 's'} · ${fmtMoney(c)}`, ok: '✓ Double', can: c <= g.s.money };
     }
-    if (this.mode === 'remove' && this.removeAt !== null) return this.removeCut ? { text: `⚠ This cuts ${this.removeCut} off the railway`, ok: '✂ Remove anyway', can: true } : { text: 'Remove this track square?', ok: '✂ Remove', can: true };
+    if (this.mode === 'remove' && this.rm.size) {
+      for (const i of [...this.rm]) if (!g.track.has(i)) this.rm.delete(i); // gone since (a building's undo, say)
+      const k = this.rm.size, what = k === 1 ? 'this track square' : `these ${k} track squares`, cut = this.removeCut();
+      if (!k) return null;
+      return cut ? { text: `⚠ Removing ${what} cuts ${cut} off the railway`, ok: '✂ Remove anyway', can: true } : { text: `Remove ${what}?`, ok: k === 1 ? '✂ Remove' : `✂ Remove ${k}`, can: true };
+    }
     if (this.mode === 'train') {
       const p = trainPrice(g);
       return { text: g.s.shed ? `🚂 Buy train ${g.s.trains.length + 1} · ${fmtMoney(p)}` : '🏚 Lay a straight bit of line near Ashford: the engine shed goes beside it', ok: '✓ Buy', can: !!g.s.shed && p <= g.s.money };
@@ -520,11 +556,19 @@ export class Tools {
       const r = buyMap(g, this.mapPv.x, this.mapPv.y); if (typeof r === 'string') { toast(r); return; }
       toast(r.finds.length ? `🗺 The map shows ${findsText(r.finds)}: each is a ? in the fog. Scout it (🔭) or lay track there` : `🗺 Nothing hides in this circle · ${fmtMoney(r.refund)} back. Try another spot`, 5000);
       this.mapPv = null; this.mode = 'pan';
-    } else if (this.mode === 'remove' && this.removeAt !== null) {
-      const i = this.removeAt;
-      if (g.s.trains.some(t => t.trail.some(s => g.net.pieces[s.piece]!.squares.includes(i)))) { toast('A train is on this track'); return; }
+    } else if (this.mode === 'remove' && this.rm.size) {
+      const sq = [...this.rm].filter(i => g.track.has(i));
+      const busy = sq.filter(i => g.s.trains.some(t => t.trail.some(s => g.net.pieces[s.piece]!.squares.includes(i))));
+      if (busy.length) { // nothing is removed while a train stands on any of it: the picks stay, so it can be tried again
+        this.flash = { square: busy[0]!, until: performance.now() + 900 };
+        toast(sq.length === 1 ? 'A train is on this track' : `A train is on ${busy.length === 1 ? 'one' : busy.length} of these squares: try again when it has passed, or tap ${busy.length === 1 ? 'it' : 'them'} to leave ${busy.length === 1 ? 'it' : 'them'} out`, 4000);
+        return;
+      }
       this.lastStroke = null; this.lastBuild = null;
-      removeSquare(g.track, g.world.n, i); trackChanged(g); g.terrainDirty?.([i]); this.removeAt = null;
+      const near = new Set<number>(); // the picked squares and their neighbours (removing a square can drop a dead-end neighbour too)
+      for (const i of sq) { near.add(i); for (const j of [i + 1, i - 1, i + g.world.n, i - g.world.n]) near.add(j); removeSquare(g.track, g.world.n, i); }
+      trackChanged(g); g.terrainDirty?.([...near]); this.rm.clear();
+      if (sq.length > 1) toast(`✂ ${sq.length} track squares removed`);
     }
   }
 }
@@ -537,9 +581,9 @@ const AGAIN_MS = 8000;
 type Again = { mode: 'rail' | 'double' | 'menu'; join?: boolean; text: string; ok: string; until: number };
 
 /** Towns and buildings that would no longer be on the railway if square i were removed, in words ('' if none). */
-export function cutText(g: Game, i: number): string {
+export function cutText(g: Game, squares: number | number[]): string {
   const track: typeof g.track = new Map([...g.track].map(([k, v]) => [k, { ...v }])), was = g.linked ?? new Set<number>(); // a copy: removing a square edits its neighbours
-  removeSquare(track, g.world.n, i);
+  for (const i of typeof squares === 'number' ? [squares] : squares) removeSquare(track, g.world.n, i);
   const after = linkedSquares({ ...g, track } as Game), n = g.world.n, names: string[] = [];
   for (const t of g.s.sites) if (t.kind === 'town' && townLinked(g, t)) { const h = hallOf(track, n, t, g.world.terr, yardSet(g)); if (!h || !after.has(h.squares[1])) names.push(t.name ?? 'a town'); }
   for (const b of g.s.buildings ?? []) { const y = yardSquares(n, b)[0]!; if (was.has(y) && !after.has(y)) names.push(`the ${placeName(g, b)}`); }

@@ -241,7 +241,7 @@ export class Renderer {
     };
     if (t.plan) for (const i of t.plan.path) box(i, this.g.track.has(i) ? 'rgba(255,214,120,.18)' : 'rgba(120,230,140,.28)', 'rgba(150,255,170,.85)');
     for (const i of t.dbl) box(i, 'rgba(120,190,255,.25)', 'rgba(150,210,255,.9)');
-    if (t.removeAt !== null) box(t.removeAt, 'rgba(255,90,70,.3)', 'rgba(255,120,100,.95)');
+    for (const i of t.rm) box(i, 'rgba(255,90,70,.3)', 'rgba(255,120,100,.95)');
     if (t.flash && performance.now() < t.flash.until) box(t.flash.square, 'rgba(255,60,40,.35)', 'rgba(255,80,60,1)');
     if (t.ring !== null) { // the lesson's gold ring
       const p = 0.5 + 0.5 * Math.sin(tm * 5), x = (t.ring % n + 0.5) * TILE, y = (((t.ring / n) | 0) + 0.5) * TILE;
