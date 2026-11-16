@@ -1,6 +1,7 @@
 import type { Game } from '../state.ts';
 import { type Building, buildingSquares, yardSquares } from '../buildings/industries.ts';
 import { reveal } from '../world/fog.ts';
+import { isleMembers, railIsle } from '../track/isles.ts';
 
 /**
  * Docks and landings. A dock is a 2×4 building whose pier stands over the water and whose yard is on the shore.
@@ -19,6 +20,17 @@ export const islandOfB = (g: Game, b: Building) => g.world.islandOf[yardSquares(
 
 /** An island's name in plain words (small islets have no name of their own). */
 export const islandName = (g: Game, k: number) => k === g.world.home ? 'Ashford Isle' : g.world.islands[k]?.name ?? 'Small island';
+
+/** The rail island a building stands on: its island, joined with any island a 🌉 bridge links to it by rail. */
+export const railIsleOfB = (g: Game, b: Building) => railIsle(g, islandOfB(g, b));
+
+/** A rail island's name: "Ashford Isle", or "Ashford Isle and Gull Rock" when a bridge joins them (small islets left out). */
+export function railIsleName(g: Game, k: number): string {
+  if (k < 0) return 'On bridges';
+  const named = isleMembers(g, k).filter(i => i === g.world.home || g.world.islands[i]?.name).map(i => islandName(g, i));
+  if (named.length <= 1) return named[0] ?? islandName(g, k);
+  return named.length === 2 ? `${named[0]} and ${named[1]}` : `${named[0]} and ${named.length - 1} more islands`;
+}
 
 /** Squares of water sailed from this dock's pier to every water square (-1 = can't reach). Cached per dock and level. */
 export function seaDist(g: Game, b: Building): Int32Array {

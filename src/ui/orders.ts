@@ -10,7 +10,8 @@ import { orderDone, orderOf, orderProgress, sizeName, stepOf, townLinked, upgrad
 import { bldDist, bldOf, destSquares, goodOf, type Plan, shipPlan, siteOf } from '../economy/shipping.ts';
 import { islandOfTrain } from '../economy/dispatch.ts';
 import { jams } from '../economy/jams.ts';
-import { isDock, islandOfB } from '../ships/docks.ts';
+import { isDock, islandOfB, railIsleOfB } from '../ships/docks.ts';
+import { railIsle, sameRail } from '../track/isles.ts';
 import { TRACK_COST } from '../track/rules.ts';
 import { LEVEL_ISLANDS, levelNow, RLV, UNLOCKS } from '../economy/dispatch.ts';
 import { fmtMoney } from './hud.ts';
@@ -72,7 +73,7 @@ export function stuckList(g: Game, plan = shipPlan(g)): Stuck[] {
   for (const j of jams(g)) {
     const n = j.trains.length, who = `${n} train${n > 1 ? 's are' : ' is'} held up near ${esc(j.near)}`;
     if (j.crowded) { // more trains than work and track on that island: ship spares away
-      const to = (g.s.buildings ?? []).filter(b => isDock(b) && isLinked(g, b) && islandOfB(g, b) !== j.island)
+      const to = (g.s.buildings ?? []).filter(b => isDock(b) && isLinked(g, b) && railIsleOfB(g, b) !== j.island)
         .sort((a, b) => +(islandOfB(g, b) === g.world.home) - +(islandOfB(g, a) === g.world.home))[0];
       out.push({ icon: '🚦', text: `${who}: ${esc(j.crowded.island)} has ${j.crowded.idle} trains with no work standing on its line. Ship spare trains to another island (⚓ Dock → 🚂 Trains there)`, btn: to ? `<button class="mini" data-act="open" data-kind="bld" data-id="${to.id}" data-page="trains">⛴ Ship ›</button>` : open('train', j.trains[0]!.id), x: j.x, y: j.y });
     } else if (j.squares.length) {
@@ -154,11 +155,11 @@ export function ordersHtml(g: Game): string {
  * missing to get it there, with the button that starts the fix.
  */
 export function outDiag(g: Game, b: Building, k: Good): { text: string; btn: string } {
-  const G = `${GOODS[k].icon} ${GOODS[k].name.toLowerCase()}`, n = g.world.n, here = g.world.islandOf[b.y * n + b.x];
-  const far = g.s.sites.filter(t => t.kind === 'town' && townLinked(g, t) && g.world.islandOf[t.y * n + t.x] !== here && (orderOf(g, t)[k] ?? 0) > (t.got?.[k] ?? 0));
+  const G = `${GOODS[k].icon} ${GOODS[k].name.toLowerCase()}`, n = g.world.n, here = g.world.islandOf[b.y * n + b.x]!;
+  const far = g.s.sites.filter(t => t.kind === 'town' && townLinked(g, t) && !sameRail(g, g.world.islandOf[t.y * n + t.x]!, here) && (orderOf(g, t)[k] ?? 0) > (t.got?.[k] ?? 0));
   const dock = `<button class="mini" data-act="builddock">⚓ Build a dock ›</button>`;
   if (far.length) {
-    const isl = islandName(g, g.world.islandOf[far[0]!.y * n + far[0]!.x]!), myDock = (g.s.buildings ?? []).some(d => d.kind === 'dock' && isLinked(g, d) && islandOfB(g, d) === here);
+    const isl = islandName(g, g.world.islandOf[far[0]!.y * n + far[0]!.x]!), myDock = (g.s.buildings ?? []).some(d => d.kind === 'dock' && isLinked(g, d) && sameRail(g, islandOfB(g, d), here));
     return { text: `${far.map(t => esc(t.name ?? 'a town')).slice(0, 2).join(' and ')} on ${esc(isl)} want ${G}, but no sea route goes there: ${myDock ? `build a ⚓ landing on ${esc(isl)} within your dock's reach` : 'build a ⚓ dock here and a landing there'}`, btn: dock };
   }
   const use = (Object.keys(INDUSTRIES) as IndustryKind[]).find(f => isFactory(f) && inputsOf(f).includes(k));
@@ -172,7 +173,7 @@ export function waitingForTrain(g: Game, plan: Plan): Set<number> {
   for (const b of g.s.buildings ?? []) {
     if (b.closed || b.kind === 'dock' || !plan.get(b.id) || b.stock < Math.max(20, minLoad(g)) || !isLinked(g, b)) continue;
     if (g.s.trains.some(t => t.job?.src === b.id)) continue;
-    if (allBusy(g.world.islandOf[b.y * n + b.x]!)) out.add(b.id);
+    if (allBusy(railIsle(g, g.world.islandOf[b.y * n + b.x]!))) out.add(b.id);
   }
   return out;
 }
@@ -184,11 +185,11 @@ export function rushRoute(g: Game, r: Rush, plan: Plan): { text: string; bad: bo
   const look = (src: Building, k: Good, v: { to: { kind: string; id: number }; rush?: boolean; sea?: number; then?: number }) => {
     if (!v.rush || k !== r.good) return;
     if (v.sea === undefined) { if (v.to.kind === r.to.kind && v.to.id === r.to.id) rail++; }
-    else if (docksIsl(v.then ?? v.sea) === isl && seaFrom < 0) seaFrom = islandOfB(g, src);
+    else if (sameRail(g, docksIsl(v.then ?? v.sea), isl) && seaFrom < 0) seaFrom = islandOfB(g, src);
   };
   for (const [id, v] of plan) { const b = bldOf(g, id); if (b) look(b, goodOf(b), v); }
   for (const [key, v] of plan.docks) { const [id, k] = key.split('/'); const b = bldOf(g, +id!); if (b) look(b, k as Good, v); }
-  const afloat = (g.s.ships ?? []).some(s => s.hold.some(q => q.good === r.good && docksIsl(q.then ?? q.to) === isl));
+  const afloat = (g.s.ships ?? []).some(s => s.hold.some(q => q.good === r.good && sameRail(g, docksIsl(q.then ?? q.to), isl)));
   if (rail) return { text: `🚂 ${rail === 1 ? 'a building sends' : `${rail} buildings send`} it here first`, bad: false };
   if (seaFrom >= 0) return { text: `🚢 comes by ship from ${esc(islandName(g, seaFrom))}`, bad: false };
   if (afloat) return { text: '🚢 on its way by ship', bad: false };

@@ -3,6 +3,7 @@ import type { Train } from '../trains/train.ts';
 import { aName, type Building, GOODS, type Good, growsTracks, INDUSTRIES, isFactory, isLinked, stripError, tracksOf, yardSquares } from '../buildings/industries.ts';
 import { type Dest, DF, PAY, siteOf, bldOf } from './shipping.ts';
 import { orderOf } from './towns.ts';
+import { isleMembers, railIsle, sameRail } from '../track/isles.ts';
 
 // ---- building levels
 
@@ -97,16 +98,19 @@ export const FLEET: Record<FleetKey, { icon: string; name: string; what: string;
   eng: { icon: '⚙', name: 'Stronger engines', what: 'every train runs faster', lv: [1, 1.25, 1.5, 1.8], price: [6000, 15000, 37500], text: l => `${['steam', 'fast steam', 'diesel', 'express diesel'][l]} · ×${[1, 1.25, 1.5, 1.8][l]} speed` },
   rep: { icon: '🔧', name: 'Repair works', what: 'well-kept trains cost less to run', lv: [1, 0.75, 0.55], price: [7500, 22500], text: l => `running cost −${[0, 25, 45][l]}%` },
 };
-/** An island's upgrade level (Ashford Isle when no island is given). */
-export const fleetLvl = (g: Game, k: FleetKey, isl = g.world.home) => g.s.fleetI?.[isl]?.[k] ?? 0;
+/**
+ * An island's upgrade level (Ashford Isle when no island is given). Islands joined by a 🌉 bridge share their
+ * upgrades (trains drive across): the best level any of them bought counts.
+ */
+export const fleetLvl = (g: Game, k: FleetKey, isl = g.world.home) => isl < 0 ? g.s.fleetI?.[isl]?.[k] ?? 0 : Math.max(0, ...isleMembers(g, isl).map(i => g.s.fleetI?.[i]?.[k] ?? 0));
 export const fleetMulOf = (g: Game, k: FleetKey, isl = g.world.home) => FLEET[k].lv[fleetLvl(g, k, isl)]!;
 
-/** The island a train works on: where its engine stands, or the last land it stood on while it crosses a bridge. */
+/** The island a train works on: where its engine stands, or the last land it stood on while it crosses a bridge (islands joined by bridges count as one). */
 const lastIsl = new WeakMap<Train, number>();
 export function fleetIsl(g: Game, t: Train): number {
   const head = t.trail.at(-1), sq = head ? g.net.pieces[head.piece]?.squares.at(-1) : undefined;
   const k = sq === undefined ? -1 : g.world.islandOf[sq]!;
-  if (k >= 0) { lastIsl.set(t, k); return k; }
+  if (k >= 0) { const r = railIsle(g, k); lastIsl.set(t, r); return r; }
   return lastIsl.get(t) ?? g.world.home;
 }
 
@@ -121,13 +125,13 @@ export function buyFleet(g: Game, k: FleetKey, isl = g.world.home): string {
   const l = fleetLvl(g, k, isl), p = FLEET[k].price[l];
   if (p === undefined) return 'Already at the top level';
   if (g.s.money < p) return `Need $${(p - Math.floor(g.s.money)).toLocaleString('en-US')} more`;
-  g.s.money -= p; ((g.s.fleetI ??= {})[isl] ??= {})[k] = l + 1;
+  g.s.money -= p; ((g.s.fleetI ??= {})[isl < 0 ? isl : railIsle(g, isl)] ??= {})[k] = l + 1;
   return '';
 }
 
 /** Islands with their own upgrades to show: Ashford Isle first, then every island already upgraded or with trains on it. */
 export function fleetIsls(g: Game): number[] {
-  const s = new Set<number>([g.world.home, ...Object.keys(g.s.fleetI ?? {}).map(Number)]);
+  const s = new Set<number>([g.world.home, ...Object.keys(g.s.fleetI ?? {}).map(Number).filter(k => k >= 0).map(k => railIsle(g, k))]);
   for (const t of g.s.trains) s.add(fleetIsl(g, t));
   return [...s].filter(k => k >= 0);
 }
@@ -170,10 +174,10 @@ export function destIsland(g: Game, to: Dest): number {
   const b = bldOf(g, to.id); return b ? g.world.islandOf[yardSquares(g.world.n, b)[0]!]! : -1;
 }
 
-/** No building of yours on that island makes the good: a rush has to come by ship. */
+/** No building of yours on that island (or an island joined to it by a bridge) makes the good: a rush has to come by ship. */
 export function rushBySea(g: Game, to: Dest, k: Good): boolean {
   const isl = destIsland(g, to), n = g.world.n;
-  return !(g.s.buildings ?? []).some(b => b.kind !== 'dock' && INDUSTRIES[b.kind].makes === k && !b.closed && g.world.islandOf[yardSquares(n, b)[0]!] === isl && isLinked(g, b));
+  return !(g.s.buildings ?? []).some(b => b.kind !== 'dock' && INDUSTRIES[b.kind].makes === k && !b.closed && sameRail(g, g.world.islandOf[yardSquares(n, b)[0]!]!, isl) && isLinked(g, b));
 }
 
 /** How many open buildings on the railway make the good (a rush needs at least one, on any island). */

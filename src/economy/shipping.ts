@@ -8,6 +8,7 @@ import { isDock, islandOfB } from '../ships/docks.ts';
 import { tradeRoom } from './trade.ts';
 import { lanesFrom, seaBound, seaLanes } from '../ships/ships.ts';
 import { isCrossing } from '../track/state.ts';
+import { sameRail } from '../track/isles.ts';
 
 /** Train load, and the least a train waits for before it sets off to collect (it leaves mostly full). */
 /** a train's load before any wagon upgrade (the real one is trainCap(g)) */
@@ -180,10 +181,11 @@ function seaNeeds(g: Game, srcs: { b: Building; k: Good; sk: string }[], out: Ma
     const dist = bldDist(g, s.b);
     let best: Ship | null = null, bt = Infinity, bk = '';
     for (const d1 of docks) {
-      if (islandOfB(g, d1) !== islandOfB(g, s.b)) continue;
+      if (!sameRail(g, islandOfB(g, d1), islandOfB(g, s.b))) continue; // a dock on this island, or one a bridge joins to it
       const d1d = dist[yardSquares(n, d1)[1]!]!; if (d1d < 0) continue;
       for (const r of lanesFrom(g, d1.id, lanes)) {
         const d2 = docks.find(b => b.id === r.id)!, k2 = `${d2.id}/${s.k}`;
+        if (sameRail(g, islandOfB(g, d2), islandOfB(g, s.b))) continue; // a bridge joins them: trains take it there
         if (!bound.has(k2)) bound.set(k2, seaBound(g, d2.id, s.k));
         targets(d2, s.k, 0, bldDist(g, d2), p => {
           if (p.t && !orderOf(g, p.t)[s.k] && !tradeRoom(g, p.t, s.k)) return; // towns: only open orders (and trade orders) draw goods across the sea
@@ -196,10 +198,10 @@ function seaNeeds(g: Game, srcs: { b: Building; k: Good; sk: string }[], out: Ma
     if (!best) { // two routes away: by way of a dock that has a route on to the island that needs them
       const home = islandOfB(g, s.b);
       for (const d1 of docks) {
-        if (islandOfB(g, d1) !== home) continue;
+        if (!sameRail(g, islandOfB(g, d1), home)) continue;
         const d1d = dist[yardSquares(n, d1)[1]!]!; if (d1d < 0) continue;
         for (const r of lanesFrom(g, d1.id, lanes)) for (const r2 of lanesFrom(g, r.id, lanes)) {
-          const d3 = docks.find(b => b.id === r2.id)!; if (d3.id === d1.id || islandOfB(g, d3) === home) continue;
+          const d3 = docks.find(b => b.id === r2.id)!; if (d3.id === d1.id || sameRail(g, islandOfB(g, d3), home)) continue;
           const k3 = `${d3.id}/${s.k}`;
           if (!bound.has(k3)) bound.set(k3, seaBound(g, d3.id, s.k));
           targets(d3, s.k, 0, bldDist(g, d3), p => {
