@@ -23,7 +23,7 @@ import { drawWaterLive } from './terrainArt.ts';
 import { drawTrack } from './track.ts';
 import { drawTrains } from './trains.ts';
 import { drawMishaps, drawStorm, stormFlash } from './events.ts';
-import { drawShips } from './ships.ts';
+import { drawSeaRoutes, drawShips } from './ships.ts';
 import { drawExplore, drawPoiZones, drawScouting, drawMaps } from './explore.ts';
 import { islandSpec, SPEC_TEXT } from '../world/specialty.ts';
 import type { Tools } from '../ui/tools.ts';
@@ -87,6 +87,9 @@ export class Renderer {
     this.drawTunnels(ctx, x0, y0, x1, y1); // after trains: they run into the hillside
     drawMishaps(ctx, g, tm, vis);
     for (const b of g.s.buildings ?? []) if (vis(b.y * n + b.x) && isRevealed(g, b.y * n + b.x)) drawBuildingTags(ctx, g, b, tm, cam.z); // names and stock over the trains
+    // 🚢 the Ships card shows every sea route; a ship's card shows its way ahead
+    if (this.tools?.card?.kind === 'ships') drawSeaRoutes(ctx, g, tm, cam.z);
+    else if (this.tools?.card?.kind === 'ship') { const id = this.tools.card.id, s = g.s.ships?.find(x => x.id === id); if (s) drawSeaRoutes(ctx, g, tm, cam.z, s); }
     drawShips(ctx, g, tm, (x, y) => x >= x0 - 2 && x <= x1 + 2 && y >= y0 - 2 && y <= y1 + 2 && !!isRevealed(g, Math.round(y) * n + Math.round(x)));
     drawExplore(ctx, g, this.tools, tm, (x, y) => x >= x0 - 2 && x <= x1 + 2 && y >= y0 - 2 && y <= y1 + 2, cam.z);
     if (tm - this.planAt > 1) { this.planAt = tm; this.plan = shipPlan(g); this.alerts = new Set(stuckList(g, this.plan).filter(x => x.bld !== undefined).map(x => x.bld!)); } // the plan changes slowly: once a second is plenty
