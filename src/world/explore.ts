@@ -10,7 +10,7 @@ import { townLinked } from '../economy/towns.ts';
  * a route the player draws, square by square; they uncover the land 3 squares either side as they go. A route that
  * meets the wrong ground under the fog ends there, and 90% of the unused part is paid back.
  *
- * Landmarks wait in the fog: old ruins (nearby industries make 10% more), lighthouses (ships near them sail 20%
+ * Landmarks wait in the fog: old ruins (nearby buildings make 10% more), lighthouses (ships near them sail 20%
  * faster), lookout hills (uncover far around) — each taken over once your track comes within 2 squares. Shipwrecks
  * lie off the coasts: a ship or scout boat passing by salvages them.
  */
@@ -20,14 +20,14 @@ import { townLinked } from '../economy/towns.ts';
 export type PoiKind = 'ruins' | 'lighthouse' | 'lookout' | 'wreck' | 'halt' | 'falls' | 'ranger' | 'mill';
 export interface Poi { id: number; kind: PoiKind; x: number; y: number; seen?: boolean; got?: boolean; pay?: number }
 export const POI: Record<PoiKind, { icon: string; name: string; perk: string }> = {
-  ruins: { icon: '🏛', name: 'Old ruins', perk: 'industries within 6 squares make 10% more' },
+  ruins: { icon: '🏛', name: 'Old ruins', perk: 'buildings with any part within 6 squares make 10% more' },
   lighthouse: { icon: '🗼', name: 'Lighthouse', perk: 'ships within 10 squares sail 20% faster' },
   lookout: { icon: '⛰', name: 'Lookout hill', perk: 'uncovers the land 10 squares around' },
   wreck: { icon: '⚓', name: 'Shipwreck', perk: 'a ship or scout boat passing by salvages it' },
   halt: { icon: '🏚', name: 'Old halt', perk: 'its old rails and fittings are salvaged: +$2,000' },
   falls: { icon: '💧', name: 'Silver Falls', perk: 'tourists come: town orders within 12 squares pay 10% bigger rewards' },
-  ranger: { icon: '🌲', name: 'Ranger hut', perk: 'lumber camps within 8 squares make 10% more' },
-  mill: { icon: '🌾', name: 'Old windmill', perk: 'wheat farms within 8 squares make 10% more' },
+  ranger: { icon: '🌲', name: 'Ranger hut', perk: 'lumber camps with any part within 8 squares make 10% more' },
+  mill: { icon: '🌾', name: 'Old windmill', perk: 'wheat farms with any part within 8 squares make 10% more' },
 };
 /** how special a find is, for its discovery card: 0 interesting, 1 rare, 2 legendary */
 export const POI_RARITY: Record<PoiKind, 0 | 1 | 2> = { ruins: 0, ranger: 0, mill: 0, lookout: 1, halt: 1, lighthouse: 1, wreck: 1, falls: 2 };
@@ -131,15 +131,18 @@ export function salvageAt(g: Game, x: number, y: number): number {
   return 0;
 }
 
-/** Output bonus from old ruins near a building (taken over ones only). */
-export function ruinsMul(g: Game, x: number, y: number): number {
-  return (g.s.pois ?? []).some(p => p.kind === 'ruins' && p.got && Math.hypot(p.x - x, p.y - y) <= RUINS_R) ? RUINS_BONUS : 1;
+/** Is any of these squares inside a landmark's reach circle (as drawn: r and a half squares from its middle)? */
+const touches = (p: Poi, sq: number[], n: number, r: number) => sq.some(i => Math.hypot(p.x - i % n, p.y - ((i / n) | 0)) <= r + 0.5);
+
+/** Output bonus from old ruins (taken over ones only) for a building any part of which is in their reach. */
+export function ruinsMul(g: Game, x: number, y: number, sq: number[] = [y * g.world.n + x]): number {
+  return (g.s.pois ?? []).some(p => p.kind === 'ruins' && p.got && touches(p, sq, g.world.n, RUINS_R)) ? RUINS_BONUS : 1;
 }
 
-/** Output bonus from a ranger hut (lumber camps) or old windmill (wheat farms) that is yours. */
-export function kindMul(g: Game, kind: string, x: number, y: number): number {
+/** Output bonus from a ranger hut (lumber camps) or old windmill (wheat farms) that is yours, any part in reach. */
+export function kindMul(g: Game, kind: string, x: number, y: number, sq: number[] = [y * g.world.n + x]): number {
   const k = kind === 'wood' ? 'ranger' : kind === 'farm' ? 'mill' : null; if (!k) return 1;
-  return (g.s.pois ?? []).some(p => p.kind === k && p.got && Math.hypot(p.x - x, p.y - y) <= KIND_R) ? KIND_BONUS : 1;
+  return (g.s.pois ?? []).some(p => p.kind === k && p.got && touches(p, sq, g.world.n, KIND_R)) ? KIND_BONUS : 1;
 }
 
 /** Reward bonus for a town near Silver Falls that is yours. */

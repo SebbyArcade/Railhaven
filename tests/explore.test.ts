@@ -59,6 +59,10 @@ describe('landmarks and wrecks', () => {
     g.s.fog.fill(255); checkPois(g);
     expect(ruin.got).toBe(true);
     expect(ruinsMul(g, ruin.x + 3, ruin.y)).toBe(1.1);
+    // he asked (2026-11-16): any part of a building in the circle counts, not just its corner square
+    const far = (ruin.y + 9) * n + ruin.x, edge = (ruin.y + 6) * n + ruin.x;
+    expect(ruinsMul(g, ruin.x, ruin.y + 9)).toBe(1);
+    expect(ruinsMul(g, ruin.x, ruin.y + 9, [far, edge])).toBe(1.1);
     expect((g.news ?? []).some(m => m.includes('Old ruins is yours'))).toBe(true);
     void a;
   });
