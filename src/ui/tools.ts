@@ -3,7 +3,7 @@ import { shipPlace } from '../ships/ships.ts';
 import type { Game } from '../state.ts';
 import { MAX_SCOUTS, scoutCost, scoutStarts, scoutStepError, sendScout } from '../world/explore.ts';
 import { trackChanged } from '../game.ts';
-import { type BuiltStroke, buildPlan, extendPlan, isAnchor, type PaintPlan, planCost, planError, startPlan, undoStroke } from '../track/paint.ts';
+import { type BuiltStroke, buildPlan, extendPlan, isAnchor, type PaintPlan, planCost, planError, startPlan, undoStroke, yardStart } from '../track/paint.ts';
 import { removeSquare } from '../track/edit.ts';
 import { passingLoop } from '../track/loops.ts';
 import { BRIDGE_UPKEEP, TRACK_COST } from '../track/rules.ts';
@@ -27,7 +27,7 @@ export type Mode = 'pan' | 'rail' | 'double' | 'remove' | 'train' | 'build' | 's
 
 export const MODE_HINT: Record<Mode, string> = {
   pan: '',
-  rail: '🛤 Drag out from your track (Ashford at first). Join a town along its arrows: across its square, past it, or ending beside it. Your line waits while you scroll. ✓ Build when done.',
+  rail: '🛤 Drag out from your track (Ashford at first), or from a new building\'s gold end square to your track. Join a town along its arrows: across its square, past it, or ending beside it. Your line waits while you scroll. ✓ Build when done.',
   double: '═ Tap single track for a 🔁 passing loop, or drag along your track to double it. Trains keep right like cars: one lane each way. 🚉 Stations and buildings have two tracks already.',
   remove: '✂ Tap a track square to remove it.',
   train: '🚂 Trains roll out of the engine shed and run themselves: each takes the best waiting load where it is needed.',
@@ -105,7 +105,7 @@ export class Tools {
     this.again = null;
     if (a.mode === 'menu') return 'menu';
     this.mode = a.mode; this.cancel();
-    if (a.mode === 'rail') toast(a.join ? '🛤 Drag from your track to the building\'s loading track' : '🛤 Start anywhere on your track: drag out from it, or tap it then tap where the line goes');
+    if (a.mode === 'rail') toast(a.join ? '🛤 Drag between your track and either end of the building\'s loading track' : '🛤 Start anywhere on your track: drag out from it, or tap it then tap where the line goes');
     return '';
   }
 
@@ -294,8 +294,10 @@ export class Tools {
         if (last === i) return true;
         this.plan = { path: [i] }; toast('Now tap where the line should go (or drag)'); return true;
       }
+      const ys = last === undefined ? yardStart(g, i) : null;
+      if (ys) { this.plan = { path: ys }; toast('🛤 Line starts at the building: tap or drag on to your track, then ✓ Build'); return true; }
       if (!this.plan && g.s.sites.some(s => s.kind === 'plot' && s.y * n + s.x === i)) return false; // the flag: its card opens
-      toast('New track must join your network: start from your track or from Ashford'); return true;
+      toast('Start from your track, Ashford, or an end of a new building\'s loading track'); return true;
     }
     if (this.mode === 'double') {
       if (!g.track.has(i)) return true;
@@ -404,7 +406,7 @@ export class Tools {
   bar(): { text: string; ok: string; can: boolean; turn?: boolean; near?: boolean } | null {
     const g = this.g(), a = this.againOn();
     if (a && !this.card) return { text: a.text, ok: a.ok, can: true };
-    if (this.mode === 'rail' && this.plan && this.plan.path.length === 1) return { text: '🛤 Line starts here: drag from it, or tap where it goes', ok: '✓ Build', can: false };
+    if (this.mode === 'rail' && this.plan && this.plan.path.length === 1) return { text: isAnchor(g, this.plan.path[0]!) ? '🛤 Line starts here: drag from it, or tap where it goes' : '🛤 Line starts at the building: run it on to your track', ok: '✓ Build', can: false };
     if (this.mode === 'rail' && this.plan && this.plan.path.length > 1) {
       const e = planError(g, this.plan), n = this.plan.path.filter(i => !g.track.has(i)).length, wet = this.plan.path.filter(i => !g.track.has(i) && g.world.terr[i] === 0).length;
       return { text: e || `${n} new square${n === 1 ? '' : 's'} · ${fmtMoney(planCost(g, this.plan))}${wet ? ` · 🌉 then ${fmtMoney(wet * BRIDGE_UPKEEP)}/min upkeep` : ''}${harmText(harmOf(g, this.plan.path.filter(i => !g.track.has(i))))}`, ok: '✓ Build', can: !e };
@@ -473,7 +475,7 @@ export class Tools {
       const next: Omit<Again, 'until'> = linked ? { mode: 'menu', text: `✅ ${name} built`, ok: '🏗 Build more' } : { mode: 'rail', join: true, text: `✅ ${name} built · now join it to your railway`, ok: '🛤 Lay its track' };
       this.preview = null; this.previewErr = ''; this.glowKey = '';
       if (!g.s.fog.every((v, k) => v === fog0[k])) { this.lastBuild = null; toast(`${name} built: it uncovered new land, so it can't be undone`, 3500); this.closeAfter(next); return; }
-      toast(linked ? `${name} built · ↶ Undo if it's the wrong spot` : `${INDUSTRIES[b.kind].icon} Built! Now lay track from your railway to one end of its yard · ↶ Undo if it's the wrong spot`);
+      toast(linked ? `${name} built · ↶ Undo if it's the wrong spot` : `${INDUSTRIES[b.kind].icon} Built! Now lay track between your railway and one end of its yard, from either side · ↶ Undo if it's the wrong spot`);
       this.closeAfter(next);
     } else if (this.mode === 'train') {
       const t = buyTrain(g); if (typeof t === 'string') { toast(t); return; }
