@@ -23,7 +23,7 @@ import { attachInput } from './ui/input.ts';
 import { fmtMoney, toast, updateHud } from './ui/hud.ts';
 import { MODE_HINT, type Mode, Tools } from './ui/tools.ts';
 import { setClosed } from './buildings/closing.ts';
-import { GOODS, type Good, INDUSTRIES, info, type IndustryKind, isFactory, lockedText, priceOf } from './buildings/industries.ts';
+import { GOODS, type Good, INDUSTRIES, info, inputsOf, type IndustryKind, isFactory, lockedText, priceOf } from './buildings/industries.ts';
 import { tickProduction } from './economy/production.ts';
 import type { Game } from './state.ts';
 import { footprint } from './buildings/industries.ts';
@@ -478,7 +478,9 @@ function renderMenu() {
   const kinds = (Object.keys(INDUSTRIES) as IndustryKind[]).filter(k => far(k) ? game.s.sites.some(s => s.kind === 'dep' && s.res === k && !s.hidden) : (info(k).ring ?? 0) <= (game.s.rings ?? 0));
   const tile = (k: IndustryKind) => {
     const d = info(k), p = priceOf(game, k), lock = lockedText(game, k);
-    return `<button data-k="${k}" class="${tools.buildKind === k ? 'on' : ''}${lock ? ' locked' : ''}"><b>${d.icon}</b>${d.name}<small>${lock ? (d.ring && d.ring > (game.s.rings ?? 0) ? '🔒 🗺 Expedition' : '🔒 Level ' + d.unlock) : fmtMoney(p)}</small></button>`;
+    // factories show what goes in and what comes out, as icons: 🪵 → planks
+    const recipe = isFactory(k) ? `<span class="rcp" title="${inputsOf(k).map(g => GOODS[g].name).join(' + ')} → ${GOODS[d.makes].name}">${inputsOf(k).map(g => GOODS[g].icon).join('+')}→${GOODS[d.makes].icon}</span>` : '';
+    return `<button data-k="${k}" class="${tools.buildKind === k ? 'on' : ''}${lock ? ' locked' : ''}"><b>${d.icon}</b>${d.name}<small>${lock ? (d.ring && d.ring > (game.s.rings ?? 0) ? '🔒 🗺 Expedition' : '🔒 Level ' + d.unlock) : fmtMoney(p)}</small>${recipe}</button>`;
   };
   const r = recommendedBuild(game);
   menu.innerHTML = (r ? `<button data-k="${r.k}" class="rec"><b>${info(r.k).icon}</b><span style="font-size:11px;font-weight:800;color:#ffd24a;letter-spacing:.05em">⭐ RECOMMENDED NEXT BUILD${r.mission ? ' · YOUR MISSION' : ''}</span><br>${info(r.k).name} · ${fmtMoney(priceOf(game, r.k))}<small>${r.why}</small></button>` : '')
