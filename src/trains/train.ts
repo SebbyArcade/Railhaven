@@ -14,6 +14,11 @@ export const UNSTICK_AFTER = 4, REFUGE_WAIT = 4;
 /** A train held up takes a way round at once if it is at most this much longer than its own way (share, plus
  *  squares). A longer way round only once it has waited as long as running the extra distance would take. */
 export const DETOUR_SHARE = 1.5, DETOUR_SQUARES = 8;
+/** Gridlock: trains with a trip that have all stood this many seconds, each waiting on another that stands too. One
+ *  of them backs off (with the trains behind it if need be) and the one it blocked goes first; checked every few s. */
+export const TANGLE_AFTER = 40, TANGLE_EVERY = 5, TANGLE_KEEP = 90;
+/** how many trains deep a train in the way may ask the trains behind it to back off too */
+export const TANGLE_DEPTH = 4;
 export const V_MAX = 70, ACCEL = 40, DECEL = 60, REVERSE_PAUSE = 0.45;
 /** the engine running round its train: speed (px/s), seconds to uncouple or couple, and the longest way round (px) */
 /** extra route cost per px run with the engine at the back: low enough that a train pushes its wagons a short way rather than running past a junction to turn round */
@@ -113,8 +118,23 @@ export class TrainSystem {
 
   /** seconds each train has been held up on its current trip (not saved: it only shapes when to take a way round) */
   private heldUp = new Map<number, number>();
+  /** seconds each train with a trip has stood still (not saved) */
+  private still = new Map<number, number>();
+  /** when each train last ended a trip (clock) */
+  private arrived = new Map<number, number>();
+  /** untangling a gridlock: pieces kept for the train that goes first, and trains that must not change their plan */
+  private keep = new Map<number, { id: number; until: number }>();
+  private calm = new Map<number, number>();
+  /** trains given the way through a gridlock, until when */
+  private prio = new Map<number, number>();
+  /** trains backing off to untangle a gridlock, by the plan they were given: they may cross the kept pieces */
+  private backing = new Map<number, Move[]>();
+  private clock = 0;
+  private tangleT = 0;
+  /** gridlocks untangled so far (not saved) */
+  untangled = 0;
 
-  setNetwork(net: Network) { this.net = net; }
+  setNetwork(net: Network) { this.net = net; this.keep.clear(); this.prio.clear(); this.backing.clear(); this.calm.clear(); } // piece ids change with the rails
 
   /** length of a plan's remaining moves, in px */
   private planLen(plan: Move[]): number { let d = 0; for (const m of plan) if (!isRev(m)) d += this.net.pieces[m.piece]!.len; return d; }
@@ -138,15 +158,12 @@ export class TrainSystem {
   }
 
   private free(t: Train, piece: number): boolean {
-    const own = (p: number) => { const h = this.holder.get(p); return h === undefined || h === t.id; };
+    const own = (p: number) => { const h = this.holder.get(p); if (h !== undefined && h !== t.id) return false; const k = this.keep.get(p); return !k || k.id === t.id || k.until < this.clock || this.backing.get(t.id) === t.plan; };
     return !this.blocked.has(piece) && !this.crew.has(piece) && own(piece) && this.net.conflicts[piece]!.every(own);
   }
 
-  /**
-   * Try to clear the next block of the plan for t: every piece up to a passing place long enough to hold the whole
-   * train (double track or a junction), so two trains never meet head-on on a single line.
-   */
-  private tryHold(t: Train): boolean {
+  /** the next block of t's plan: every piece up to a passing place long enough to hold the whole train */
+  private blockOf(t: Train): Step[] {
     const steps: Step[] = []; let k = 0, c = 0;
     for (; k < t.plan.length; k++) { const m = t.plan[k]!; if (isRev(m)) continue; if (c++ >= t.held) break; }
     const need = trainLength(t) + SIGNAL_GAP;
@@ -161,6 +178,15 @@ export class TrainSystem {
       if (room >= need && this.anyLane.has(m.piece) && this.trackAheadTaken(t, j)) room = 0;
       if (room >= need) break;
     }
+    return steps;
+  }
+
+  /**
+   * Try to clear the next block of the plan for t: every piece up to a passing place long enough to hold the whole
+   * train (double track or a junction), so two trains never meet head-on on a single line.
+   */
+  private tryHold(t: Train): boolean {
+    const steps = this.blockOf(t);
     if (!steps.length) return false;
     if (!steps.every(s => this.free(t, s.piece))) {
       // about to run into a station or yard whose track it planned is taken: take a free platform or loading track instead
@@ -346,6 +372,147 @@ export class TrainSystem {
 
   tick(dt: number) {
     for (const t of this.trains) this.move(t, dt);
+    this.clock += dt;
+    for (const t of this.trains) {
+      if (t.v < 0.01 && t.pause <= 0 && !t.rr && t.dest !== undefined) this.still.set(t.id, (this.still.get(t.id) ?? 0) + dt);
+      else this.still.delete(t.id);
+      if (t.dest === undefined || !this.arrived.has(t.id)) this.arrived.set(t.id, this.clock);
+    }
+    this.tangleT += dt;
+    if (this.tangleT >= TANGLE_EVERY) { this.tangleT = 0; this.untangle(); }
+  }
+
+  /** pieces under a train and those that cross them */
+  private bodyOf(t: Train): Set<number> {
+    const out = new Set<number>();
+    for (const s of t.trail) { out.add(s.piece); for (const c of this.net.conflicts[s.piece]!) out.add(c); }
+    return out;
+  }
+
+  /** the way train o needs clear to get past the body `body`: its plan up to a passing place beyond it */
+  private wayPast(o: Train, body: Set<number>): Set<number> {
+    const out = new Set<number>(), need = trainLength(o) + SIGNAL_GAP;
+    let past = false, room = 0, n = 0;
+    for (const m of o.plan) {
+      if (isRev(m) || ++n > 120) break;
+      out.add(m.piece); for (const c of this.net.conflicts[m.piece]!) out.add(c);
+      const on = body.has(m.piece);
+      if (on) { past = true; room = 0; continue; }
+      if (!past) continue;
+      // a passing place on its own lane of the open line (a platform or loading track may be wanted by others)
+      const own = !this.anyLane.has(m.piece) && this.net.side[m.piece]! * m.dir >= 0;
+      room = this.net.passing[m.piece] && own ? room + this.net.pieces[m.piece]!.len : 0;
+      if (room >= need) break;
+    }
+    return out;
+  }
+
+  /**
+   * Gridlock: trains that have stood a long while, each waiting on another that stands too (e.g. trains heading into
+   * a full dead-end station fill both tracks of its approach, so the trains inside can't come out). Find one train
+   * in the way that can back off to a place clear of the waiting train's way (asking trains behind it to back off
+   * first if needed), and keep that way for the waiting train so it goes first. Real rails: trains only drive.
+   */
+  private untangle() {
+    for (const [p, k] of this.keep) if (k.until < this.clock) this.keep.delete(p);
+    for (const [id, u] of this.calm) if (u < this.clock) this.calm.delete(id);
+    for (const [id, u] of this.prio) if (u < this.clock || !this.trains.some(t => t.id === id && t.dest !== undefined)) this.prio.delete(id);
+    for (const [id, plan] of this.backing) { const t = this.trains.find(x => x.id === id); if (!t || t.plan !== plan || !plan.length) this.backing.delete(id); }
+    // a train given the way goes on being helped sooner; trains backing off are left to it
+    const long = (t: Train) => (this.still.get(t.id) ?? 0) >= (this.prio.has(t.id) ? TANGLE_EVERY * 2 : TANGLE_AFTER);
+    const stuck = this.trains.filter(t => long(t) && t.plan.length && !this.backing.has(t.id) && !(this.speedOf && this.speedOf(t) <= 0));
+    // who waits on whom: the trains holding (or keeping for themselves) the pieces of each one's next block
+    const waits = new Map<number, Train[]>();
+    for (const o of stuck) {
+      const block = this.blockOf(o).map(m => m.piece); if (!block.length || block.some(p => this.blocked.has(p) || this.crew.has(p))) continue;
+      const ids = new Set<number>();
+      for (const p of block) for (const q of [p, ...this.net.conflicts[p]!]) {
+        const h = this.holder.get(q); if (h !== undefined && h !== o.id) ids.add(h);
+        const k = this.keep.get(q); if (k && k.id !== o.id && k.until >= this.clock) ids.add(k.id);
+      }
+      const blockers = this.trains.filter(b => ids.has(b.id));
+      // only when everything in the way stands too (a moving train will clear by itself); a train going to and fro
+      // between a refuge and the same jam, or that has not finished a trip for minutes, counts as standing
+      const going = (b: Train) => this.clock - (this.arrived.get(b.id) ?? this.clock) < TANGLE_AFTER * 2;
+      if (!blockers.length || blockers.some(b => going(b) && (b.v >= 0.01 || ((this.still.get(b.id) ?? 0) < TANGLE_EVERY && b.refuge === undefined && b.plan.length > 0)))) continue;
+      waits.set(o.id, blockers);
+    }
+    // start where trains wait on each other in a ring (the shortest ring first): a train only queued behind another
+    // is no gridlock, it goes once the one ahead does
+    const ring = (o: Train) => { // steps until the waiting leads back to o (Infinity: never)
+      let front = [o.id]; const seen = new Set<number>();
+      for (let d = 1; d <= 8 && front.length; d++) {
+        const next: number[] = [];
+        for (const id of front) for (const b of waits.get(id) ?? []) { if (b.id === o.id) return d; if (!seen.has(b.id)) { seen.add(b.id); next.push(b.id); } }
+        front = next;
+      }
+      return Infinity;
+    };
+    // or a train stands aside (in a refuge, or parked) in the way and keeps coming back to the same place
+    const dormant = (b: Train) => (!b.plan.length || b.refuge !== undefined) && this.clock - (this.arrived.get(b.id) ?? this.clock) >= TANGLE_AFTER * 2;
+    const order = stuck.filter(o => waits.has(o.id)).map(o => ({ o, d: waits.get(o.id)!.some(dormant) ? 9 : ring(o), p: this.prio.has(o.id) ? 0 : 1 }))
+      .filter(x => x.d < Infinity).sort((a, b) => a.p - b.p || a.d - b.d || (this.still.get(b.o.id) ?? 0) - (this.still.get(a.o.id) ?? 0));
+    for (const { o } of order) {
+      const blockers = waits.get(o.id)!;
+      // a train already given the way is in the way here: let it go first
+      if (blockers.some(b => this.prio.has(b.id))) continue;
+      const way = new Set<number>();
+      for (const b of blockers) for (const p of this.wayPast(o, this.bodyOf(b))) way.add(p);
+      const moves: [Train, Move[]][] = [];
+      let ok = true;
+      for (const b of blockers) {
+        const r = this.backOff(b, way, TANGLE_DEPTH, new Set([o.id, ...this.prio.keys()]));
+        if (!r) { ok = false; break; }
+        moves.push(...r);
+      }
+      if (!ok || !moves.length) continue;
+      const until = this.clock + TANGLE_KEEP;
+      for (const [t, plan] of moves) {
+        t.plan = plan; t.held = 0; t.wait = 0; this.heldUp.delete(t.id);
+        t.refuge = t.dest !== undefined ? REFUGE_WAIT * 3 : 0;
+        this.calm.set(t.id, until); this.backing.set(t.id, plan); this.prio.delete(t.id);
+      }
+      for (const p of way) this.keep.set(p, { id: o.id, until });
+      this.prio.set(o.id, until); o.wait = 0;
+      this.still.delete(o.id);
+      this.rebuildHolds();
+      this.untangled++; return; // one at a time
+    }
+  }
+
+  /**
+   * Plans that take train t (and, if `depth` allows, trains standing behind it) to places clear of `avoid`.
+   * Trains that are moving, and those in `frozen`, can't be asked to move.
+   */
+  private backOff(t: Train, avoid: Set<number>, depth: number, frozen: Set<number>): [Train, Move[]][] | null {
+    const others = this.trains.filter(o => o !== t);
+    const hard = new Set<number>();
+    for (const o of others) for (const p of this.bodyOf(o)) hard.add(p);
+    for (const anywhere of [false, true]) {
+      const r = this.refugeRoute(t, avoid, anywhere, p => hard.has(p) ? Infinity : 0, true);
+      if (r) return [[t, r]];
+    }
+    if (depth <= 0) return null;
+    const movable = (o: Train) => !frozen.has(o.id) && (this.still.has(o.id) || (o.dest === undefined && o.v < 0.01 && !o.rr)) && !(this.speedOf && this.speedOf(o) <= 0);
+    const fixed = new Set<number>(), soft = new Set<number>();
+    for (const o of others) for (const p of this.bodyOf(o)) (movable(o) ? soft : fixed).add(p);
+    for (const anywhere of [false, true]) {
+      const r = this.refugeRoute(t, avoid, anywhere, p => fixed.has(p) ? Infinity : soft.has(p) ? 3000 : 0, true);
+      if (!r) continue;
+      const path = new Set<number>();
+      for (const m of r) if (!isRev(m)) { path.add(m.piece); for (const c of this.net.conflicts[m.piece]!) path.add(c); }
+      const avoid2 = new Set([...avoid, ...path]), frozen2 = new Set([...frozen, t.id]);
+      const out: [Train, Move[]][] = [];
+      let ok = true;
+      for (const o of others) {
+        if (!movable(o) || !o.trail.some(s => path.has(s.piece))) continue;
+        const sub = this.backOff(o, avoid2, depth - 1, frozen2);
+        if (!sub) { ok = false; break; }
+        out.push(...sub);
+      }
+      if (ok) return [...out, [t, r]];
+    }
+    return null;
   }
 
   private move(t: Train, dt: number) {
@@ -418,6 +585,7 @@ export class TrainSystem {
    */
   private unstick(t: Train) {
     if (t.wait < UNSTICK_AFTER) return;
+    if (this.calm.has(t.id) || this.prio.has(t.id)) return; // untangling a gridlock: keep to the plan given
     const waited = (this.heldUp.get(t.id) ?? 0) + t.wait; this.heldUp.set(t.id, waited);
     // moving aside with no trip of its own, and that way is blocked too: give it up and stand, so a waiting train can
     // ask it to move somewhere else (otherwise both wait for each other for ever)
@@ -472,14 +640,24 @@ export class TrainSystem {
 
   /** `anywhere`: no siding or passing track is free, so any stretch of line clear of the others' way will do. */
   private aside(t: Train, inWay: Set<number>, anywhere: boolean): boolean {
-    const L = trainLength(t);
     const bodies = new Set<number>();
     for (const o of this.trains) if (o !== t) for (const s of o.trail) { bodies.add(s.piece); for (const c of this.net.conflicts[s.piece]!) bodies.add(c); }
+    const refuge = this.refugeRoute(t, inWay, anywhere, p => bodies.has(p) ? Infinity : 0);
+    if (!refuge) return false;
+    t.plan = refuge; t.held = 0; t.wait = 0; this.rebuildHolds();
+    return true;
+  }
+
+  /** a way for t to a siding or passing track (or, `anywhere`, any track) where its whole body stands clear of inWay */
+  private refugeRoute(t: Train, inWay: Set<number>, anywhere: boolean, body: (piece: number) => number, strict = false): Move[] | null {
+    const L = trainLength(t);
     const refuge = this.route({
       head: t.trail.at(-1)!, tail: t.trail[0]!, trail: t.trail, trainLen: L, canReverseNow: true,
-      extra: s => bodies.has(s.piece) ? Infinity : this.laneCost(s) + (() => { const h = this.holder.get(s.piece); return h !== undefined && h !== t.id ? 4000 : 0; })(),
+      extra: s => { const b = body(s.piece); return b === Infinity ? b : b + this.laneCost(s) + (() => { const h = this.holder.get(s.piece); return h !== undefined && h !== t.id ? 4000 : 0; })(); },
       goal: s => !inWay.has(s.piece) && (anywhere || this.net.passing[s.piece]! || (s.dir === 1 && !!this.net.pieces[s.piece]!.endB)),
       accept: moves => { // the whole train must stand clear of the others' way, its tail included
+        // untangling: staying put (maybe turned round) leaves the body where it stands now, partly on its pieces
+        if (strict && !moves.some(m => !isRev(m))) return !t.trail.some(st => inWay.has(st.piece));
         let got = 0;
         const revs = moves.filter(isRev).length;
         // where the rest of the body lies once the moves are done: on its old trail, from the tail end after a
@@ -490,9 +668,7 @@ export class TrainSystem {
         return got >= L || (behind.length === 0 && moves.length > 0);
       },
     });
-    if (!refuge || !refuge.length) return false;
-    t.plan = refuge; t.held = 0; t.wait = 0; this.rebuildHolds();
-    return true;
+    return refuge && (strict ? refuge.some(m => !isRev(m)) : refuge.length) ? refuge : null;
   }
 }
 
