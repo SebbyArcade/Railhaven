@@ -41,6 +41,9 @@ const PENTA_MAJ = [0, 2, 4, 7, 9], PENTA_MIN = [0, 3, 5, 7, 10];
 export const MAX_SOURCES = 8, MAX_VOICES = 28;
 /** Effects are scheduled this far ahead, so their soft start is never cut off by a busy frame (a cut-off start pops). */
 const LEAD = 0.06;
+/** Panning faster than this (screen pixels a second), or zooming, starts no new effect sounds: things rush in and out
+ *  of hearing then, and a burst of sounds starting at once while the phone is busy drawing the map pops. */
+const PAN_CALM = 250;
 /** overall level (the gentle level keeper adds less boost than the old hard one, so this is a bit higher) */
 const LOUD = 0.95;
 
@@ -52,6 +55,7 @@ export class Sound {
   private loops: Record<'sea' | 'wind' | 'rain', { g: GainNode; f: BiquadFilterNode } | null> = { sea: null, wind: null, rain: null };
   private next = new Map<string, number>();
   /** effect sounds playing right now, and the shared left-right placers (one per pan step instead of one per sound) */
+  private cam: { x: number; y: number; z: number; t: number } | null = null; private calmAt = 0;
   voices = 0; private pluckWave?: PeriodicWave; private pans = new Map<number, StereoPannerNode>();
   private wasMoving = new Map<string, boolean>();
   private whistleAt = 0; private thunderAt = 0; private birdAt = 0;
@@ -121,8 +125,16 @@ export class Sound {
     if (this.settings.music) this.music(now); else this.barAt = now + 0.3;
     this.ambience(sc, now);
     if (!this.settings.sfx) return;
-    const seen = new Set<string>(), loud = [...sc.sources].sort((a, b) => b.vol - a.vol);
-    loud.forEach((h, i) => { seen.add(h.id); this.source(h, now + LEAD, i < MAX_SOURCES); }); // the rest keep their clocks, quietly
+    const c = sc.cam, was = this.cam;
+    if (c) {
+      if (was && now > was.t) { // how fast the view moves, in screen pixels a second
+        const dt = now - was.t, speed = Math.hypot(c.x - was.x, c.y - was.y) * c.z / dt, zoom = Math.abs(Math.log(c.z / was.z)) / dt;
+        if (speed > PAN_CALM || zoom > 0.3) this.calmAt = now + 0.3; // and a moment after it settles
+      }
+      this.cam = { ...c, t: now };
+    }
+    const busy = now < this.calmAt, seen = new Set<string>(), loud = [...sc.sources].sort((a, b) => b.vol - a.vol);
+    loud.forEach((h, i) => { seen.add(h.id); this.source(h, now + LEAD, !busy && i < MAX_SOURCES); }); // the rest keep their clocks, quietly
     for (const id of [...this.next.keys()]) if (!seen.has(id)) { this.next.delete(id); this.wasMoving.delete(id); }
   }
 
