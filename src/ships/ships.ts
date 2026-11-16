@@ -61,8 +61,11 @@ export interface CargoShip {
   wait: number;
   /** seconds it has waited at this dock for a fuller load */
   held?: number;
-  /** which berth along the pier it left from (so it pulls away from where it lay) */
+  /** which berth it lies at while moored, or left from while sailing (so it pulls away from where it lay).
+   *  Each ship at a dock keeps its own berth: two lie end to end along the pier, more wait at anchor further out. */
   slot?: number;
+  /** the berth it will tie up at, chosen as it comes in to its dock (so two ships never head for the same one) */
+  dslot?: number;
   /** which way it lies at its berth (radians), so it doesn't spin round when it ties up */
   face?: number;
 }
@@ -128,7 +131,7 @@ export function buyShip(g: Game, dock: Building): CargoShip | string {
   const price = shipPrice(g);
   if (g.s.money < price) return `Need $${(price - Math.floor(g.s.money)).toLocaleString('en-US')} more for a ship`;
   g.s.money -= price;
-  const s: CargoShip = { id: g.s.nextId++, at: dock.id, pos: 0, hold: [], wait: 0 };
+  const s: CargoShip = { id: g.s.nextId++, at: dock.id, pos: 0, hold: [], wait: 0, slot: freeSlot(g, dock.id) };
   (g.s.ships ??= []).push(s);
   return s;
 }
@@ -141,7 +144,7 @@ export function waitingAt(b: Building): Map<number, number> {
 }
 
 function sail(g: Game, s: CargoShip, from: Building, to: Building) {
-  s.slot = berthSlot(g, s, s.at); s.face = shipPlace(g, s).a;
+  s.slot ??= freeSlot(g, s.at, s); s.face = shipPlace(g, s).a; s.dslot = undefined;
   s.to = to.id; s.path = seaPath(g, from, to); s.pos = 0;
   if (s.path.length < 2) { s.to = undefined; s.path = undefined; s.wait = SHIP_IDLE; }
 }
@@ -165,17 +168,20 @@ export function tickShips(g: Game, dt: number) {
   const ships = g.s.ships; if (!ships?.length) return;
   let lanes: Lane[] | null = null;
   const L = () => (lanes ??= seaLanes(g));
+  tidySlots(g);
   for (const s of ships) {
     if (s.to !== undefined) { // at sea
       const to = dockOf(g, s.to);
-      if (!to || !s.path) { s.to = undefined; s.path = undefined; continue; }
+      if (!to || !s.path) { s.to = undefined; s.path = undefined; s.dslot = undefined; continue; }
+      // coming in: pick a free berth before it starts the curve in to the pier
+      if (s.dslot === undefined && s.pos >= s.path.length - 1 - Math.min(BERTH_TURN, (s.path.length - 1) / 2) - 0.5) s.dslot = freeSlot(g, s.to, s);
       { const p = shipPlace(g, s); s.pos += shipSpeed(g) * lightMul(g, p.x, p.y) * (inStorm(g, p.x, p.y) ? STORM_SLOW : 1) * dt; salvageAt(g, Math.round(p.x), Math.round(p.y)); }
-      if (s.pos >= s.path.length - 1) { s.pos = s.path.length - 1; s.face = shipPlace(g, s).a; s.at = s.to; s.to = undefined; s.path = undefined; s.pos = 0; s.wait = SHIP_LOAD; }
+      if (s.pos >= s.path.length - 1) { s.pos = s.path.length - 1; s.face = shipPlace(g, s).a; s.slot = s.dslot ?? freeSlot(g, s.to, s); s.dslot = undefined; s.at = s.to; s.to = undefined; s.path = undefined; s.pos = 0; s.wait = SHIP_LOAD; }
       continue;
     }
     const at = dockOf(g, s.at);
     if (!at) { // its dock was removed: go to any dock on the railway
-      const d = linkedDocks(g)[0]; if (d) s.at = d.id; continue;
+      const d = linkedDocks(g)[0]; if (d) { s.at = d.id; s.slot = freeSlot(g, d.id, s); } continue;
     }
     // unload what is for this dock
     const here = s.hold.filter(q => q.to === at.id);
@@ -240,21 +246,85 @@ function farther(g: Game, ships: CargoShip[], s: CargoShip, at: Building, lanes:
 /** How far out from the middle of the pier deck a moored ship lies, in squares: just past its edge, in the water. */
 export const BERTH_OUT = 0.62;
 
-/** Which berth a ship lies at (or will): its place among the ships moored at the dock. */
-function berthSlot(g: Game, s: CargoShip, dock: number): number {
-  const moored = (g.s.ships ?? []).filter(o => o.to === undefined && o.at === dock), k = moored.indexOf(s);
-  return k >= 0 ? k : moored.length;
+/**
+ * Berths at a dock (he asked, 2026-11-16: ships moored at one dock lay on top of each other). Two ships lie end to end
+ * along the pier, each in its own berth; any more wait at anchor in rows further out in open water. A ship keeps the
+ * berth it tied up at until it sails, so nobody shuffles along when another leaves.
+ */
+/** Squares between the middles of two ships lying end to end (a ship is about 1.4 squares long). */
+export const BERTH_GAP = 1.5;
+/** How far out each row of ships at anchor lies beyond the pier berths, in squares. */
+export const ANCHOR_OUT = [1, 1.55, 2.1, 2.65];
+
+/** The berths a ship is in or about to be in at a dock (moored there, pulling away from it, or coming in to it). */
+function takenSlots(g: Game, dock: number, except?: CargoShip): Set<number> {
+  const out = new Set<number>();
+  for (const o of g.s.ships ?? []) {
+    if (o === except) continue;
+    if (o.to === undefined && o.at === dock && o.slot !== undefined) out.add(o.slot);
+    else if (o.to !== undefined && o.at === dock && o.slot !== undefined && o.pos < BERTH_TURN + 1) out.add(o.slot); // still pulling away
+    if (o.to === dock && o.dslot !== undefined) out.add(o.dslot);
+  }
+  return out;
 }
 
-/** The berth: alongside the pier, in the water, just past the deck edge on the side away from the loading track. */
-function berthAt(g: Game, d: Building, slot: number): { x: number; y: number; a: number; ox: number; oy: number } {
-  const n = g.world.n;
-  const sea = pierSea(g, d), i = sea[Math.min(sea.length - 1, 1 + (slot % 3))] ?? buildingSquares(n, d)[1]!;
-  const ang = d.horizontal ? 0 : Math.PI / 2;
-  const ys = yardSquares(n, d), y0 = ys.find(q => q === i - 1 || q === i + 1 || q === i - n || q === i + n);
-  const out = y0 !== undefined ? i + (i - y0) : -1, k = out >= 0 && out < n * n && !g.world.terr[out] ? BERTH_OUT : 0;
-  const dx = y0 === undefined ? 0 : (i % n) - (y0 % n), dy = y0 === undefined ? 0 : ((i / n) | 0) - ((y0 / n) | 0);
-  return { x: (i % n) + dx * k, y: ((i / n) | 0) + dy * k, a: ang, ox: dx, oy: dy }; // ox, oy: out from the pier
+/** The first free berth at a dock (pier berths first, then anchor spots). */
+function freeSlot(g: Game, dock: number, except?: CargoShip): number {
+  const t = takenSlots(g, dock, except); let k = 0;
+  while (t.has(k)) k++;
+  return k;
+}
+
+/** Ships from older saves (or two that ended up at the same berth) get a berth of their own. */
+function tidySlots(g: Game) {
+  const used = new Map<number, Set<number>>();
+  for (const s of g.s.ships ?? []) {
+    if (s.to !== undefined) continue;
+    const u = used.get(s.at) ?? new Set<number>(); used.set(s.at, u);
+    if (s.slot === undefined || u.has(s.slot)) { let k = 0; while (u.has(k) || takenSlots(g, s.at, s).has(k)) k++; s.slot = k; }
+    u.add(s.slot);
+  }
+}
+
+/** Which berth a ship lies at (or will) at a dock. */
+function berthSlot(g: Game, s: CargoShip, dock: number): number {
+  if (s.to === undefined && s.at === dock && s.slot !== undefined) return s.slot;
+  if (s.to === dock && s.dslot !== undefined) return s.dslot;
+  return freeSlot(g, dock, s);
+}
+
+type Berth = { x: number; y: number; a: number; ox: number; oy: number };
+const berthCache = new WeakMap<Building, { key: string; spots: Berth[] }>();
+
+/** Every berth at a dock in order: the pier berths (alongside, just past the deck edge away from the loading track),
+ *  then the anchor spots further out. Only spots where the whole ship floats on open water. */
+function berths(g: Game, d: Building): Berth[] {
+  const key = `${d.x},${d.y},${d.horizontal},${d.side},${d.len ?? ''}`, hit = berthCache.get(d);
+  if (hit && hit.key === key) return hit.spots;
+  const n = g.world.n, t = g.world.terr, sea = pierSea(g, d), ang = d.horizontal ? 0 : Math.PI / 2;
+  const ys = yardSquares(n, d), bs = buildingSquares(n, d);
+  // out from the pier, away from the yard
+  const ox = d.horizontal ? 0 : Math.sign(bs[0]! % n - ys[0]! % n), oy = d.horizontal ? Math.sign(((bs[0]! / n) | 0) - ((ys[0]! / n) | 0)) : 0;
+  const ax = d.horizontal ? 1 : 0, ay = d.horizontal ? 0 : 1; // along the pier
+  const row = sea.length ? sea : bs, mx = row.reduce((a, i) => a + (i % n), 0) / row.length, my = row.reduce((a, i) => a + ((i / n) | 0), 0) / row.length;
+  const wet = (x: number, y: number) => { const X = Math.round(x), Y = Math.round(y); return X >= 0 && Y >= 0 && X < n && Y < n && !t[Y * n + X]; };
+  const floats = (x: number, y: number) => wet(x, y) && wet(x + ax * 0.65, y + ay * 0.65) && wet(x - ax * 0.65, y - ay * 0.65);
+  const spots: Berth[] = [];
+  for (const out of [BERTH_OUT, ...ANCHOR_OUT.map(o => BERTH_OUT + o)]) for (const u of [-BERTH_GAP / 2, BERTH_GAP / 2]) {
+    const x = mx + ox * out + ax * u, y = my + oy * out + ay * u;
+    if (floats(x, y)) spots.push({ x, y, a: ang, ox, oy });
+  }
+  if (!spots.length) { // a cramped inlet: the old single berth beside the pier
+    const i = sea[Math.min(sea.length - 1, 1)] ?? bs[1]!, k = wet((i % n) + ox, ((i / n) | 0) + oy) ? BERTH_OUT : 0;
+    spots.push({ x: (i % n) + ox * k, y: ((i / n) | 0) + oy * k, a: ang, ox, oy });
+  }
+  berthCache.set(d, { key, spots });
+  return spots;
+}
+
+/** Where berth number `slot` is at a dock (past the last spot, ships share the outermost one). */
+function berthAt(g: Game, d: Building, slot: number): Berth {
+  const b = berths(g, d); return b[Math.min(slot, b.length - 1)]!;
 }
 
 /** Squares at each end of a crossing where the ship curves between the open-water path and its berth. */
