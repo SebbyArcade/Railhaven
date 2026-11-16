@@ -17,6 +17,11 @@ export const DETOUR_SHARE = 1.5, DETOUR_SQUARES = 8;
 /** Gridlock: trains with a trip that have all stood this many seconds, each waiting on another that stands too. One
  *  of them backs off (with the trains behind it if need be) and the one it blocked goes first; checked every few s. */
 export const TANGLE_AFTER = 40, TANGLE_EVERY = 5, TANGLE_KEEP = 90;
+/** a train given the way through a gridlock that has still not moved after this many seconds gives the way back */
+export const TANGLE_GIVE_BACK = 20;
+/** A train with a trip that is held up waits this many seconds before taking a way round that turns it back, and this
+ *  many before it steps aside out of the others' way (a short wait in line is better than turning round). */
+export const TURN_BACK_AFTER = 20, STEP_ASIDE_AFTER = 30;
 /** how many trains deep a train in the way may ask the trains behind it to back off too */
 export const TANGLE_DEPTH = 4;
 export const V_MAX = 70, ACCEL = 40, DECEL = 60, REVERSE_PAUSE = 0.45;
@@ -176,7 +181,8 @@ export class TrainSystem {
       steps.push(m);
       // on the wrong lane (after turning back) the train can't wait where oncoming trains run: it clears the whole way back to its own lane
       const own = this.anyLane.has(m.piece) || this.net.side[m.piece]! * m.dir >= 0;
-      room = this.net.passing[m.piece] && own ? room + this.net.pieces[m.piece]!.len : 0;
+      // nobody waits in a station's or yard's throat: trains coming out need it to reach their own lane
+      room = this.net.passing[m.piece] && own && !this.throat.has(m.piece) ? room + this.net.pieces[m.piece]!.len : 0;
       // never wait on a platform or loading track behind another train: it may turn back into this one
       if (room >= need && this.anyLane.has(m.piece) && this.trackAheadTaken(t, j)) room = 0;
       if (room >= need) break;
@@ -417,9 +423,16 @@ export class TrainSystem {
    * first if needed), and keep that way for the waiting train so it goes first. Real rails: trains only drive.
    */
   private untangle() {
-    for (const [p, k] of this.keep) if (k.until < this.clock) this.keep.delete(p);
+    // a train given the way that still can't go (the trains that backed off didn't clear it): give the way back
+    for (const [id, u] of this.prio) {
+      if (u - TANGLE_KEEP + TANGLE_GIVE_BACK < this.clock && (this.still.get(id) ?? 0) >= TANGLE_GIVE_BACK) {
+        this.prio.delete(id); for (const [p, k] of this.keep) if (k.id === id) this.keep.delete(p);
+      }
+    }
     for (const [id, u] of this.calm) if (u < this.clock) this.calm.delete(id);
     for (const [id, u] of this.prio) if (u < this.clock || !this.trains.some(t => t.id === id && t.dest !== undefined)) this.prio.delete(id);
+    // the way is kept only while its train still has the way (it may have arrived, or given it back)
+    for (const [p, k] of this.keep) if (k.until < this.clock || !this.prio.has(k.id)) this.keep.delete(p);
     for (const [id, plan] of this.backing) { const t = this.trains.find(x => x.id === id); if (!t || t.plan !== plan || !plan.length) this.backing.delete(id); }
     // a train given the way goes on being helped sooner; trains backing off are left to it
     const long = (t: Train) => (this.still.get(t.id) ?? 0) >= (this.prio.has(t.id) ? TANGLE_EVERY * 2 : TANGLE_AFTER);
@@ -597,6 +610,9 @@ export class TrainSystem {
     // waiting for a broken rail to be fixed: nothing else to do
     const nextFree = t.plan.filter(m => !isRev(m))[t.held] as Step | undefined;
     if (nextFree && this.blocked.has(nextFree.piece)) return;
+    // queued behind trains going the same way (or loading on the way): wait in line, like real trains, rather than
+    // turn back; if the queue never moves, the gridlock check sorts it out
+    if (this.queued(t)) return;
     const dest = t.dest, L = trainLength(t), goal = this.goalFor(dest, t.area, L);
     // pieces under other trains can't be passed; pieces they have only signalled ahead are just costly
     const bodies = new Set<number>();
@@ -605,7 +621,10 @@ export class TrainSystem {
     const cost = (s: Step) => bodies.has(s.piece) ? Infinity : this.laneCost(s) + (this.crew.has(s.piece) ? 4000 : 0) + (() => { const h = this.holder.get(s.piece); return h !== undefined && h !== t.id ? 4000 : 0; })();
     const route = this.route({ ...base, goal, extra: cost, push: this.pushOf(t), ...(t.area ? { revParity: this.backIn(t) } : {}) }) ?? this.route({ ...base, goal, extra: cost });
     // a long way round to dodge a train that will move on in a moment costs more than waiting for it: wait a while first
-    const own = this.planLen(t.plan), extra = route ? this.planLen(route) - own : 0;
+    // turning back costs the time to stop and change ends: only after a fair wait, and only when worth it
+    const revs = route ? route.filter(isRev).length - t.plan.filter(isRev).length : 0;
+    const own = this.planLen(t.plan), extra = route ? this.planLen(route) - own + Math.max(0, revs) * REVERSE_COST : 0;
+    if (route && revs > 0 && waited < TURN_BACK_AFTER) return;
     if (route && own > 0 && own + extra > own * DETOUR_SHARE + DETOUR_SQUARES * 32 && waited < extra / this.vmax) return;
     if (route) { t.plan = route; t.held = 0; this.rebuildHolds(); return; }
     // a parked train (no trip) is in the way: ask it to move aside, then wait for the way to clear
@@ -625,6 +644,7 @@ export class TrainSystem {
       }
     }
     // no way round: get out of the way of every train that is waiting
+    if (waited < STEP_ASIDE_AFTER) return;
     const inWay = new Set<number>();
     for (const o of this.trains) if (o !== t) {
       let c = 0; for (const m of o.plan) { if (isRev(m)) continue; inWay.add(m.piece); for (const x of this.net.conflicts[m.piece]!) inWay.add(x); if (++c > 60) break; }
@@ -634,6 +654,28 @@ export class TrainSystem {
     }
     // stagger retries so two trains standing aside don't come back at the same moment
     if (this.stepAside(t, inWay)) t.refuge = REFUGE_WAIT + (t.id % 3) * 1.5;
+  }
+
+  /**
+   * Is t only queued: every train holding its next block is ahead of it along its way, heading the same way, or
+   * standing at a stop of its own (loading or unloading) there? Then the way clears by itself.
+   */
+  private queued(t: Train): boolean {
+    const block = this.blockOf(t).map(m => m.piece); if (!block.length) return false;
+    const ids = new Set<number>();
+    for (const p of block) for (const q of [p, ...this.net.conflicts[p]!]) { const h = this.holder.get(q); if (h !== undefined && h !== t.id) ids.add(h); }
+    if (!ids.size) return false;
+    const ahead = new Set<number>(); // piece*2+dir of each step of its way
+    for (const m of t.plan) if (!isRev(m)) ahead.add(m.piece * 2 + (m.dir === 1 ? 0 : 1));
+    for (const id of ids) {
+      const b = this.trains.find(o => o.id === id); if (!b) return false;
+      const same = b.trail.some(s => ahead.has(s.piece * 2 + (s.dir === 1 ? 0 : 1)));
+      if (!same) return false;
+      // stopped for good on our way (parked with no work, or broken down): not a queue
+      if (b.dest === undefined && !b.plan.length && b.v < 0.01 && !b.job) return false;
+      if (this.speedOf && this.speedOf(b) <= 0) return false;
+    }
+    return true;
   }
 
   /** Drive a train to a siding or passing track clear of the given pieces (and of other trains). */

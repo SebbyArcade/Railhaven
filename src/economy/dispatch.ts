@@ -16,7 +16,7 @@ import { isRev } from '../track/route.ts';
 import { GRAND_LOAD, hasGrandStation, payMul, rewardMul } from '../buildings/parks.ts';
 import { BRIDGE_UPKEEP, bridgeSquares } from '../track/rules.ts';
 import { tickTrade, tradeDelivered, tradeRoom } from './trade.ts';
-import { deliverToTown, orderDone, reward, sizeName, stepOf } from './towns.ts';
+import { deliverToTown, orderDone, reward, sizeName, steadyFull, stepOf } from './towns.ts';
 
 export const LOAD_TIME = 4;
 /** Loading or unloading time for this train: 🚉 the Grand Station makes it 25% shorter on Ashford Isle. */
@@ -250,7 +250,7 @@ function bestJob(g: Game, t: Train, plan: Plan): { b: Building; k: Good; ship: S
     for (const k of goods) {
       const ship = planFor(plan, b, k); if (!ship) continue;
       const avail = readyOf(b, k) - claimed(g, b, isDock(b) ? k : undefined); if (avail < minLoad(g, isl)) continue;
-      const v = payFor(k, Math.min(cap, avail), ship.d, ship.why);
+      const v = payFor(k, Math.min(cap, avail), ship.d, ship.full ? 'order' : ship.why);
       if (losesMoney(g, ship, v, reach, isl)) continue; // a load that pays less than the trip costs: the train waits for better work, for free
       // goods an order waits for: the load that fills it soonest (most units per square run, empty and loaded), whatever
       // the good is worth; other loads: the best pay per square
@@ -320,7 +320,8 @@ function unload(g: Game, t: Train) {
   }
   const town = siteOf(g, j.to.id)!;
   const p = deliverToTown(g, town, k, c.n, tradeRoom(g, town, k));
-  const v = (payFor(k, p.order + p.trade, c.d, 'order') + payFor(k, p.steady, c.d, 'steady') + payFor(k, p.surplus, c.d, 'extra')) * payMul(g, town); // 🏛 town projects pay more
+  // 🏛 town projects pay more; while its order waits on goods from the outer islands, the rest of the order pays in full
+  const v = (payFor(k, p.order + p.trade, c.d, 'order') + payFor(k, p.steady, c.d, steadyFull(g, town, k) ? 'order' : 'steady') + payFor(k, p.surplus, c.d, 'extra')) * payMul(g, town);
   pay(g, v); if (rushDelivered(g, j.to, k, p.order)) news(g, `⭐ Rush done: ${town.name} got its ${GOODS[k].name.toLowerCase()}`);
   t.lastPay = { pay: Math.round(v), at: g.s.t, n: c.n, good: k, to: j.to }; tripDone(t, v);
   if (!town.filled && orderDone(g, town)) {

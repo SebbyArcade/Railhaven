@@ -25,6 +25,9 @@ describe('a train leaving a stop backs out the short way rather than run round a
       }
     }
     expect(trips.length).toBeGreaterThan(0);
-    for (const sq of trips) expect(sq).toBeLessThan(9); // the short way is 6 squares; the loop was 20
+    // the short way is 6 squares; the loop was 20 (when another train stands on the short way, the little 10-square
+    // loop past the Sawmill is fine: it doesn't wait or run round by Ashford)
+    for (const sq of trips) expect(sq).toBeLessThan(11);
+    expect(trips.filter(sq => sq < 7).length).toBeGreaterThan(trips.length / 2);
   });
 });

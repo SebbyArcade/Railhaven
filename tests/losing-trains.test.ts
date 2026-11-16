@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import { loadFrom } from '../src/save/save.ts';
 import { tickProduction } from '../src/economy/production.ts';
 import { tickTowns } from '../src/economy/towns.ts';
-import { tickTrains } from '../src/economy/dispatch.ts';
+import { islandOfTrain, tickTrains } from '../src/economy/dispatch.ts';
 import type { Game } from '../src/state.ts';
 
 // Playtest 2026-11-16 (bot, seed 2): every order waited on steel, and the trains kept hauling goods nobody waited
@@ -15,15 +15,16 @@ const free = (g: Game) => g.s.trains.filter(t => !t.job && !t.cargo && t.dest ==
 
 describe('a train that loses money waits for better work', () => {
   it('free trains take the optional loads when their trips paid', () => {
-    const g = load(); run(g, 120);
-    const ids = free(g).map(t => t.id); expect(ids.length).toBeGreaterThan(0);
+    // trains that lost money stand waiting (on Ashford Isle: one train on another island has no work at all)
+    const g = load(); for (const t of g.s.trains) t.nets = [-20, -20]; run(g, 120);
+    const ids = free(g).filter(t => islandOfTrain(g, t) === g.world.home).map(t => t.id); expect(ids.length).toBeGreaterThan(0);
     for (const t of g.s.trains) t.nets = [20, 20];
     run(g, 60);
     expect(g.s.trains.filter(t => ids.includes(t.id) && t.job).length).toBeGreaterThan(0);
   });
   it('the same trains wait when their last trips lost money (only steel is wanted, and nobody makes it)', () => {
-    const g = load(); run(g, 120);
-    const ids = free(g).map(t => t.id); expect(ids.length).toBeGreaterThan(0);
+    const g = load(); for (const t of g.s.trains) t.nets = [-20, -20]; run(g, 120);
+    const ids = free(g).filter(t => islandOfTrain(g, t) === g.world.home).map(t => t.id); expect(ids.length).toBeGreaterThan(0);
     for (const t of g.s.trains) t.nets = [-20, -20];
     run(g, 60);
     expect(g.s.trains.filter(t => ids.includes(t.id) && t.job).map(t => t.id)).toEqual([]);

@@ -1,5 +1,5 @@
 import type { Game, Site } from '../state.ts';
-import { type Good, INDUSTRIES } from '../buildings/industries.ts';
+import { farText, type Good, INDUSTRIES, type IndustryKind, inputsOf, isFactory } from '../buildings/industries.ts';
 import { hallOf } from '../buildings/stations.ts';
 import { reveal } from '../world/fog.ts';
 import { islandSpec } from '../world/specialty.ts';
@@ -74,12 +74,36 @@ export function orderProgress(g: Game, t: Site): number {
 }
 export const orderDone = (g: Game, t: Site) => orderProgress(g, t) >= 1;
 
-/** Goods of steps already climbed: the town keeps buying these (steady demand). Towns by the sea also buy fish, and shellfish from Town size. */
+/** Goods of steps already climbed: the town keeps buying these (steady demand). Towns by the sea also buy fish, and
+ *  shellfish from Town size. While its order waits on goods from the outer islands, it keeps buying its order's other goods too. */
 export function steadyGoods(t: Site, g?: Game): Good[] {
   const out = [...new Set(LADDER.slice(0, Math.min(stepOf(t), LADDER.length)).flatMap(o => Object.keys(o) as Good[]))];
   if (g && isCoastal(g, t)) { out.push('fish'); if (stepOf(t) >= 2) out.push('shellfish'); }
+  if (g) for (const k of waitsAbroad(g, t) ? Object.keys(orderOf(g, t)) as Good[] : []) if (!out.includes(k) && !overseas(g, k)) out.push(k);
   return out;
 }
+
+/**
+ * A good nothing on the railway can make yet because it (or what its factory needs) only comes from the outer islands
+ * or the far seas, and no mine for it is on the railway (e.g. steel before any iron mine is joined up).
+ */
+export function overseas(g: Game, k: Good): boolean {
+  if (farText(g, k)) return true;
+  const facs = (Object.keys(INDUSTRIES) as IndustryKind[]).filter(m => INDUSTRIES[m].makes === k && isFactory(m));
+  return facs.length > 0 && facs.every(m => inputsOf(m).some(i => !!farText(g, i)));
+}
+
+/** The town's order still waits on goods only the outer islands can supply (a long wait: the player must sail first). */
+export function waitsAbroad(g: Game, t: Site): Good[] {
+  const o = orderOf(g, t);
+  return (Object.keys(o) as Good[]).filter(k => (t.got?.[k] ?? 0) < o[k]! && overseas(g, k));
+}
+
+/**
+ * Steady buying pays its share (STEADY_PAY), but while the town's order waits on goods from the outer islands, the
+ * goods of that same order it can get at home pay in full: deliveries keep paying while the player sets out to sea.
+ */
+export const steadyFull = (g: Game, t: Site, k: Good) => !!orderOf(g, t)[k] && !overseas(g, k) && waitsAbroad(g, t).length > 0;
 
 /** A town with the open sea within 4 squares. */
 export function isCoastal(g: Game, t: Site): boolean {
