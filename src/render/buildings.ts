@@ -1,5 +1,5 @@
 import { hash } from '../core/rng.ts';
-import { capOf, type Building, GOODS, type Good, INDUSTRIES, isLinked } from '../buildings/industries.ts';
+import { capOf, type Building, GOODS, type Good, INDUSTRIES, isLinked, yardLen } from '../buildings/industries.ts';
 import type { Game } from '../state.ts';
 import { barriersDown } from '../buildings/closing.ts';
 import { TILE } from '../world/terrain.ts';
@@ -42,7 +42,7 @@ function stockOf(b: Building): [number, number, boolean] {
 function stockChip(ctx: CanvasRenderingContext2D, b: Building, cx: number, cy: number, zoom: number) {
   const [have, , full] = stockOf(b);
   const k = 1 / zoom, icon = GOODS[INDUSTRIES[b.kind].makes as Good]?.icon ?? '📦';
-  const ex = b.horizontal ? cx + 1.6 * TILE : cx, ey = b.horizontal ? cy : cy + 1.6 * TILE;
+  const e = (yardLen(b) / 2 - 0.4) * TILE, ex = b.horizontal ? cx + e : cx, ey = b.horizontal ? cy : cy + e;
   ctx.save(); ctx.translate(ex, ey); ctx.scale(k, k);
   ctx.font = '600 9px system-ui'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   const text = `${icon}${have}`, w = ctx.measureText(text).width + 8, h = 13;
@@ -59,10 +59,10 @@ function stockChip(ctx: CanvasRenderingContext2D, b: Building, cx: number, cy: n
  */
 export function drawBuilding(ctx: CanvasRenderingContext2D, g: Game, b: Building, tm: number, zoom: number) {
   const T = TILE, n = g.world.n;
-  const cx = b.horizontal ? (b.x + 2) * T : (b.x + b.side + 0.5) * T, cy = b.horizontal ? (b.y + b.side + 0.5) * T : (b.y + 2) * T;
+  const h = yardLen(b) / 2, cx = b.horizontal ? (b.x + h) * T : (b.x + b.side + 0.5) * T, cy = b.horizontal ? (b.y + b.side + 0.5) * T : (b.y + h) * T;
   const rot = b.horizontal ? (b.side > 0 ? 0 : Math.PI) : (b.side > 0 ? -Math.PI / 2 : Math.PI / 2);
   ctx.save(); ctx.translate(cx, cy); ctx.rotate(rot);
-  const L = 4 * T - 6, H = (k: number) => hash(g.s.seed, b.x, b.y, k);
+  const L = yardLen(b) * T - 6, H = (k: number) => hash(g.s.seed, b.x, b.y, k);
   // loading platform along the yard
   ctx.fillStyle = 'rgba(0,0,0,.2)'; ctx.fillRect(-L / 2 + 1, -19.4 + 1.2, L, 4.4);
   ctx.fillStyle = '#d0c4a8'; ctx.fillRect(-L / 2, -19.4, L, 4.4);
@@ -71,7 +71,7 @@ export function drawBuilding(ctx: CanvasRenderingContext2D, g: Game, b: Building
   if (b.kind !== 'dock') stockPile(ctx, b, L);
   // half of all buildings are laid out the other way round along their yard (docks keep their pier and office as built)
   if (b.kind !== 'dock' && H(1) < 0.5) ctx.scale(-1, 1);
-  ART[b.kind](ctx, tm, H, b.lvl);
+  ART[b.kind](ctx, tm, H, b.lvl, yardLen(b));
   ctx.restore();
   if (b.id < 0) drawBuildingTags(ctx, g, b, tm, zoom); // the placement preview carries its name; real buildings get theirs over the trains
   void n;
@@ -80,7 +80,7 @@ export function drawBuilding(ctx: CanvasRenderingContext2D, g: Game, b: Building
 /** A building's name and stock, its warning signs: drawn after the trains so a train in the yard never hides them. */
 export function drawBuildingTags(ctx: CanvasRenderingContext2D, g: Game, b: Building, tm: number, zoom: number) {
   const T = TILE;
-  const cx = b.horizontal ? (b.x + 2) * T : (b.x + b.side + 0.5) * T, cy = b.horizontal ? (b.y + b.side + 0.5) * T : (b.y + 2) * T;
+  const h = yardLen(b) / 2, cx = b.horizontal ? (b.x + h) * T : (b.x + b.side + 0.5) * T, cy = b.horizontal ? (b.y + b.side + 0.5) * T : (b.y + h) * T;
   // how much is waiting: a small soft tag at the building's end when zoomed out (none when zoomed far out);
   // close up the count joins the name label below instead
   const shows = b.kind !== 'dock' && b.id >= 0;
@@ -150,7 +150,7 @@ function drawClosed(ctx: CanvasRenderingContext2D, g: Game, b: Building, tm: num
   ctx.fillStyle = '#fff'; ctx.fillRect(X - 4 * k, Y - 1.2 * k, 8 * k, 2.4 * k);
 }
 
-type Art = (ctx: CanvasRenderingContext2D, tm: number, H: (k: number) => number, lvl: number) => void;
+type Art = (ctx: CanvasRenderingContext2D, tm: number, H: (k: number) => number, lvl: number, len: number) => void;
 
 /** Pick one of a few looks from a building's own random number (0..1). */
 const pick = <T,>(r: number, xs: readonly T[]): T => xs[Math.min(xs.length - 1, Math.floor(r * xs.length))]!;
@@ -642,7 +642,7 @@ function oilArt(ctx: CanvasRenderingContext2D, tm: number, H: (k: number) => num
 const ART: Record<Building['kind'], Art> = {
   ...FACTORY_ART,
   wood: (ctx, tm, H, lvl) => lumberCamp(ctx, tm, H, lvl),
-  dock: (ctx, tm, H, lvl) => dockArt(ctx, tm, H, lvl),
+  dock: (ctx, tm, H, lvl, len) => dockArt(ctx, tm, H, lvl, len),
   farm: (ctx, tm, H, lvl) => farmArt(ctx, tm, H, lvl),
   stone: (ctx, tm, H, lvl) => quarry(ctx, tm, H, lvl),
   coal: (ctx, tm, H, lvl) => pithead(ctx, tm, H, lvl, ['#2a2725', '#3e3a36', '#14120f']),
@@ -843,21 +843,23 @@ function pithead(ctx: CanvasRenderingContext2D, tm: number, H: (k: number) => nu
  * Dock: a plank pier on pilings over the water, a quayside crane swinging, crates and barrels, a harbour office,
  * and bollards for mooring (the cargo ships themselves are drawn where they are).
  */
-function dockArt(ctx: CanvasRenderingContext2D, tm: number, H: (k: number) => number, lvl: number) {
+function dockArt(ctx: CanvasRenderingContext2D, tm: number, H: (k: number) => number, lvl: number, len = 4) {
+  // the same pier at any length: hl = half the deck; the crane, crates and office keep their size and move in with it
+  const hl = len * 16 - 4, s = hl / 60;
   // pilings showing under the deck edge, with ripples
-  for (let u = -56; u <= 56; u += 8) {
+  for (let u = -hl + 4; u <= hl - 4; u += 8) {
     ctx.fillStyle = 'rgba(255,255,255,.25)'; ctx.beginPath(); ctx.ellipse(u, 9.5 + Math.sin(tm * 2 + u) * 0.3, 2.6, 0.9, 0, 0, 7); ctx.fill();
     ctx.fillStyle = '#4a3424'; ctx.fillRect(u - 0.9, 6, 1.8, 3.4);
   }
   // the deck: planks across, a darker edge beam
-  ctx.fillStyle = 'rgba(0,0,0,.3)'; ctx.fillRect(-59, -13, 118, 21);
-  ctx.fillStyle = '#9a7a52'; ctx.fillRect(-60, -14, 120, 20);
+  ctx.fillStyle = 'rgba(0,0,0,.3)'; ctx.fillRect(-hl + 1, -13, 2 * hl - 2, 21);
+  ctx.fillStyle = '#9a7a52'; ctx.fillRect(-hl, -14, 2 * hl, 20);
   ctx.strokeStyle = 'rgba(60,40,20,.35)'; ctx.lineWidth = 0.35;
-  for (let u = -60; u <= 60; u += 2.2) { ctx.beginPath(); ctx.moveTo(u, -14); ctx.lineTo(u, 6); ctx.stroke(); }
-  for (let k = 0; k < 12; k++) { ctx.fillStyle = 'rgba(40,26,12,.35)'; ctx.fillRect(-58 + H(700 + k) * 116, -13 + H(710 + k) * 18, 0.6, 0.6); } // nail heads
-  ctx.fillStyle = '#5a4030'; ctx.fillRect(-60, 5, 120, 1.6);
+  for (let u = -hl; u <= hl; u += 2.2) { ctx.beginPath(); ctx.moveTo(u, -14); ctx.lineTo(u, 6); ctx.stroke(); }
+  for (let k = 0; k < 12; k++) { ctx.fillStyle = 'rgba(40,26,12,.35)'; ctx.fillRect(-hl + 2 + H(700 + k) * (2 * hl - 4), -13 + H(710 + k) * 18, 0.6, 0.6); } // nail heads
+  ctx.fillStyle = '#5a4030'; ctx.fillRect(-hl, 5, 2 * hl, 1.6);
   // bollards with ropes out to the boat
-  for (const u of [-44, -8, 26]) { ctx.fillStyle = '#2e2a26'; ctx.beginPath(); ctx.arc(u, 4, 1.2, 0, 7); ctx.fill(); }
+  for (const u of [-44 * s, -8 * s, 26 * s]) { ctx.fillStyle = '#2e2a26'; ctx.beginPath(); ctx.arc(u, 4, 1.2, 0, 7); ctx.fill(); }
   // the steamer at the berth: hull, deck, funnel with a red band, smoke
   const boat = (u0: number, k: number) => {
     const bob = Math.sin(tm * 1.6 + k) * 0.6, v0 = 13 + bob;
@@ -873,12 +875,12 @@ function dockArt(ctx: CanvasRenderingContext2D, tm: number, H: (k: number) => nu
   };
   void boat; // cargo ships are drawn on their own (they come and go)
   // crates and barrels waiting on the quay
-  for (let k = 0; k < Math.min(9, 3 + 3 * lvl); k++) { const u = 8 + (k % 3) * 4, v = -12 + ((k / 3) | 0) * 4; ctx.fillStyle = '#8a6a40'; ctx.fillRect(u, v, 3.4, 3.4); ctx.strokeStyle = 'rgba(0,0,0,.35)'; ctx.lineWidth = 0.3; ctx.strokeRect(u, v, 3.4, 3.4); ctx.beginPath(); ctx.moveTo(u, v); ctx.lineTo(u + 3.4, v + 3.4); ctx.stroke(); }
-  for (let k = 0; k < 4; k++) { const u = 24 + k * 3.2; ctx.fillStyle = '#6a4a2e'; ctx.beginPath(); ctx.arc(u, -10, 1.4, 0, 7); ctx.fill(); ctx.strokeStyle = '#3a2a1e'; ctx.lineWidth = 0.3; ctx.beginPath(); ctx.arc(u, -10, 1, 0, 7); ctx.stroke(); }
+  for (let k = 0; k < Math.min(9, 3 + 3 * lvl); k++) { const u = 8 * s + (k % 3) * 4, v = -12 + ((k / 3) | 0) * 4; ctx.fillStyle = '#8a6a40'; ctx.fillRect(u, v, 3.4, 3.4); ctx.strokeStyle = 'rgba(0,0,0,.35)'; ctx.lineWidth = 0.3; ctx.strokeRect(u, v, 3.4, 3.4); ctx.beginPath(); ctx.moveTo(u, v); ctx.lineTo(u + 3.4, v + 3.4); ctx.stroke(); }
+  for (let k = 0; k < 4; k++) { const u = 24 * s - (1 - s) * 6 + k * 3.2; ctx.fillStyle = '#6a4a2e'; ctx.beginPath(); ctx.arc(u, -10, 1.4, 0, 7); ctx.fill(); ctx.strokeStyle = '#3a2a1e'; ctx.lineWidth = 0.3; ctx.beginPath(); ctx.arc(u, -10, 1, 0, 7); ctx.stroke(); }
   // harbour office
-  cottage(ctx, 46, -5, 14, 11, { wall: '#e8e0cc', roof: '#3f5a7a', chimney: 0.6, tm, smoke: true });
+  cottage(ctx, hl - 14, -5, 14, 11, { wall: '#e8e0cc', roof: '#3f5a7a', chimney: 0.6, tm, smoke: true });
   // quay crane: a turning jib over the water with a hook and a sling of crates
-  const a = Math.PI / 2 + Math.sin(tm * 0.5) * 0.9, cu = -40, cv = -6, L = 16;
+  const a = Math.PI / 2 + Math.sin(tm * 0.5) * 0.9, cu = -hl + 20, cv = -6, L = 16;
   ctx.fillStyle = 'rgba(0,0,0,.3)'; ctx.fillRect(cu - 2.5, cv - 1.5, 6, 6);
   ctx.fillStyle = '#b8862e'; ctx.fillRect(cu - 3, cv - 2, 6, 6);
   const ju = cu + Math.cos(a) * L, jv = cv + Math.sin(a) * L * 0.8;
@@ -887,5 +889,5 @@ function dockArt(ctx: CanvasRenderingContext2D, tm: number, H: (k: number) => nu
   ctx.strokeStyle = '#7a5a10'; ctx.lineWidth = 0.3; for (let k = 1; k < 6; k++) { const p = k / 6; ctx.beginPath(); ctx.moveTo(cu + (ju - cu) * p - 0.6, cv + (jv - cv) * p); ctx.lineTo(cu + (ju - cu) * p + 0.6, cv + (jv - cv) * p + 0.8); ctx.stroke(); }
   ctx.fillStyle = '#8a6a40'; ctx.fillRect(ju - 1.6, jv + 1.4, 3.2, 2.4);
   ctx.strokeStyle = '#2e2a26'; ctx.lineWidth = 0.25; ctx.beginPath(); ctx.moveTo(ju, jv); ctx.lineTo(ju, jv + 1.4); ctx.stroke();
-  person(ctx, -30, -10, '#3f5a7a', '#2a3a4a'); person(ctx, 18, -2, '#a8402e');
+  person(ctx, -hl + 30, -10, '#3f5a7a', '#2a3a4a'); person(ctx, 18 * s, -2, '#a8402e');
 }

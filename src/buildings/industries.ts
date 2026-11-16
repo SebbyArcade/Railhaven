@@ -97,6 +97,8 @@ export const FAR_RES = { gold: 1, gems: 1, cocoa: 2, rubber: 3 } as const;
 export interface Building {
   id: number;
   kind: IndustryKind;
+  /** squares along the yard: 4, or DOCK_LEN for docks built since docks got shorter (older docks keep 4) */
+  len?: number;
   /** west/north end of the yard track */
   x: number;
   y: number;
@@ -130,22 +132,26 @@ export interface Building {
 }
 
 export const YARD_LEN = 4;
+/** Docks are 3 squares long (he asked, 2026-11-16: 4 was hard to fit on island shores); a train or a ship still fits. */
+export const DOCK_LEN = 3;
+/** How many squares along its yard this building runs. */
+export const yardLen = (b: { len?: number }) => b.len ?? YARD_LEN;
 
-export function yardSquares(n: number, b: Pick<Building, 'x' | 'y' | 'horizontal'>): number[] {
+export function yardSquares(n: number, b: Pick<Building, 'x' | 'y' | 'horizontal'> & { len?: number }): number[] {
   const out: number[] = [];
-  for (let k = 0; k < YARD_LEN; k++) out.push(b.horizontal ? b.y * n + b.x + k : (b.y + k) * n + b.x);
+  for (let k = 0; k < yardLen(b); k++) out.push(b.horizontal ? b.y * n + b.x + k : (b.y + k) * n + b.x);
   return out;
 }
-export function buildingSquares(n: number, b: Pick<Building, 'x' | 'y' | 'horizontal' | 'side'>): number[] {
+export function buildingSquares(n: number, b: Pick<Building, 'x' | 'y' | 'horizontal' | 'side'> & { len?: number }): number[] {
   return yardSquares(n, b).map(i => b.horizontal ? i + b.side * n : i + b.side);
 }
-export const footprint = (n: number, b: Pick<Building, 'x' | 'y' | 'horizontal' | 'side'> & { tracks?: number }) => [...yardSquares(n, b), ...buildingSquares(n, b), ...((b.tracks ?? 2) > 2 ? stripSquares(n, b) : [])];
+export const footprint = (n: number, b: Pick<Building, 'x' | 'y' | 'horizontal' | 'side'> & { tracks?: number; len?: number }) => [...yardSquares(n, b), ...buildingSquares(n, b), ...((b.tracks ?? 2) > 2 ? stripSquares(n, b) : [])];
 
 /** Kinds whose yards grow extra loading tracks with their levels (farms grow fields instead; docks reach farther). */
 export const growsTracks = (k: IndustryKind) => k !== 'farm' && k !== 'wool' && k !== 'dock';
 export const tracksOf = (b: { tracks?: number }) => b.tracks ?? 2;
 /** The strip beside the yard, on the side away from the building: room for the 3rd and 4th loading tracks. */
-export function stripSquares(n: number, b: Pick<Building, 'x' | 'y' | 'horizontal' | 'side'>): number[] {
+export function stripSquares(n: number, b: Pick<Building, 'x' | 'y' | 'horizontal' | 'side'> & { len?: number }): number[] {
   return yardSquares(n, b).map(i => b.horizontal ? i - b.side * n : i - b.side);
 }
 /** Where each loading track runs across the yard row, in px from its middle (the 3rd and 4th out on the strip). */
@@ -280,8 +286,8 @@ function squareError(g: Game, b: Pick<Building, 'x' | 'y' | 'horizontal' | 'side
   if (x < 1 || y < 1 || x >= n - 1 || y >= n - 1) return 'Too close to the edge of the map';
   if (!isRevealed(g, i)) return 'Part of this spot is still in the fog: explore it first';
   const pier = b.kind === 'dock' && inRow;
-  // a ragged coast is fine: the pier needs at least 2 of its 4 squares over the water, and stands on the shore for the rest
-  if (pier && t[i] !== T.Water && (t[i] === T.Mountain || buildingSquares(n, b).filter(j => t[j] === T.Water).length < 2)) return t[i] === T.Mountain ? 'A dock\'s pier can\'t stand on mountain: slide it along the coast' : 'A dock\'s pier stands over the water: turn it so at least half of the green row is on the sea';
+  // a ragged coast is fine: the pier needs at least 2 of its squares over the water, and stands on the shore for the rest
+  if (pier && t[i] !== T.Water && (t[i] === T.Mountain || buildingSquares(n, b).filter(j => t[j] === T.Water).length < 2)) return t[i] === T.Mountain ? 'A dock\'s pier can\'t stand on mountain: slide it along the coast' : 'A dock\'s pier stands over the water: turn it so at least 2 squares of the green row are on the sea';
   if (t[i] === T.Water && !pier) return b.kind === 'dock' ? 'A dock\'s yard track goes on the shore: turn it so the blue row is on land' : 'Part of this spot is water: pick dry land';
   if (t[i] === T.Mountain && !(MINES.has(b.kind) && inRow)) return MINES.has(b.kind) ? 'The blue loading track needs flat land: turn it so the green row is on the mountain and the blue row beside it' : 'The yard track can\'t go on mountain: turn it to the flat land';
   const taken = takenSquares(g).has(i); // buildings, towns, the shed and track: the checks below only matter on these squares
@@ -308,11 +314,12 @@ export function depositUnder(g: Game, b: Pick<Building, 'x' | 'y' | 'horizontal'
 
 /** Every way the building could stand with its building row on square (x, y): both directions, both sides. */
 export function placementsAt(kind: IndustryKind, x: number, y: number) {
-  const out: { x: number; y: number; horizontal: boolean; side: 1 | -1; kind: IndustryKind }[] = [];
-  for (const horizontal of [true, false]) for (const side of [1, -1] as const) for (let k = 0; k < YARD_LEN; k++) {
+  const out: { x: number; y: number; horizontal: boolean; side: 1 | -1; kind: IndustryKind; len?: number }[] = [];
+  const len = kind === 'dock' ? DOCK_LEN : YARD_LEN;
+  for (const horizontal of [true, false]) for (const side of [1, -1] as const) for (let k = 0; k < len; k++) {
     // the tapped square is in the building row; the yard runs beside it
     const yx = horizontal ? x - k : x - side, yy = horizontal ? y - side : y - k;
-    out.push({ x: yx, y: yy, horizontal, side, kind });
+    out.push({ x: yx, y: yy, horizontal, side, kind, ...(len !== YARD_LEN ? { len } : {}) });
   }
   return out;
 }
@@ -324,13 +331,13 @@ export function bestPlacement(g: Game, kind: IndustryKind, x: number, y: number)
   for (const p of placementsAt(kind, x, y)) {
     const e = placeError(g, p);
     if (e) { why ||= e; continue; }
-    const ends = yardSquares(n, p), a = ends[0]!, z = ends[YARD_LEN - 1]!;
+    const ends = yardSquares(n, p), a = ends[0]!, z = ends.at(-1)!;
     let near = 99;
     for (const i of g.track.keys()) { const d = Math.min(dist(n, a, i), dist(n, z, i)); if (d < near) near = d; }
     const s = shareAt(g, p) * 10 - near * 0.5;
     if (s > bs) { bs = s; best = p; }
   }
-  return best ? { place: best, why: '' } : { place: null, why: why || 'No room for a 2×4 yard here' };
+  return best ? { place: best, why: '' } : { place: null, why: why || `No room for a 2×${kind === 'dock' ? DOCK_LEN : YARD_LEN} yard here` };
 }
 const dist = (n: number, a: number, b: number) => Math.abs((a % n) - (b % n)) + Math.abs(((a / n) | 0) - ((b / n) | 0));
 

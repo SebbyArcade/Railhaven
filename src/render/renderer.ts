@@ -222,7 +222,7 @@ export class Renderer {
           ctx.fillStyle = 'rgba(20,16,12,.85)'; ctx.beginPath(); ctx.roundRect(X - w / 2, Y - h / 2, w, h, 7 * k); ctx.fill(); ctx.fillStyle = '#bfe4ff'; ctx.fillText(text, X, Y + 0.5 * k);
         }
         // a drag handle in the middle of the building row
-        const bs = buildingSquares(n, t.preview), m = bs[1]!, m2 = bs[2]!, hx = ((m % n) + (m2 % n)) / 2 * TILE + TILE / 2, hy = (((m / n) | 0) + ((m2 / n) | 0)) / 2 * TILE + TILE / 2;
+        const bs = buildingSquares(n, t.preview), m = bs[0]!, m2 = bs.at(-1)!, hx = ((m % n) + (m2 % n)) / 2 * TILE + TILE / 2, hy = (((m / n) | 0) + ((m2 / n) | 0)) / 2 * TILE + TILE / 2;
         ctx.fillStyle = 'rgba(28,22,16,.75)'; ctx.beginPath(); ctx.arc(hx, hy, 9, 0, 7); ctx.fill();
         ctx.fillStyle = '#fff'; ctx.font = '700 11px system-ui'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('✥', hx, hy + 0.5);
         // ⟳ turn arrows just off each corner: tap one to turn the building a quarter turn

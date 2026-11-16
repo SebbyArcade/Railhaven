@@ -11,7 +11,7 @@ import { buyTrain, trainPrice } from '../economy/dispatch.ts';
 import { bodyPoint, trainLength } from '../trains/train.ts';
 import { fmtMoney, toast } from './hud.ts';
 import type { Card } from './cards.ts';
-import { badSquares, bestPlacement, build, footprint, INDUSTRIES, type IndustryKind, isLinked, placeError, placementsAt, priceOf, shareAt, harmOf, harmText, nearestSpot, noSpotText, lockedText, linkedSquares, yardSquares } from '../buildings/industries.ts';
+import { badSquares, bestPlacement, build, footprint, INDUSTRIES, type IndustryKind, isLinked, placeError, placementsAt, priceOf, shareAt, harmOf, harmText, nearestSpot, noSpotText, lockedText, linkedSquares, yardSquares, yardLen, DOCK_LEN } from '../buildings/industries.ts';
 import { refundOf, removeBuilding } from '../economy/upgrades.ts';
 import { townLinked } from '../economy/towns.ts';
 import { hallOf } from '../buildings/stations.ts';
@@ -61,7 +61,7 @@ export class Tools {
   buildKind: IndustryKind | null = null;
   glow = new Set<number>();
   private glowKey = '';
-  /** the building being placed: a 2×4 outline the player drags around (red when it can't go there) */
+  /** the building being placed: a 2×4 (dock 2×3) outline the player drags around (red when it can't go there) */
   preview: Placement | null = null;
   previewErr = '';
   /** the outline squares that can't be used (drawn red; the rest keep their colours) */
@@ -94,13 +94,15 @@ export class Tools {
     const spot = nearestSpot(g, k, cx, cy);
     // the outline appears at once: on the nearest spot that fits, or in the middle of the view (red, with the reason)
     const at = spot ? bestPlacement(g, k, spot.x, spot.y).place : null;
-    this.setPreview(at ?? { kind: k, ...placeAround(true, 1, cx, cy) });
+    this.setPreview(at ?? { kind: k, ...placeAround(true, 1, cx, cy, k === 'dock' ? DOCK_LEN : 4) });
     if (!spot) { toast(noSpotText(k)); return null; }
     return spot;
   }
 
   private setPreview(p: Placement) {
     const g = this.g();
+    if (p.kind === 'dock' && p.len !== DOCK_LEN) p = { ...p, len: DOCK_LEN }; // every new dock is 3 squares long
+    else if (p.kind !== 'dock' && p.len !== undefined) { const { len: _, ...q } = p; p = q; }
     this.preview = p;
     this.previewErr = lockedText(g, p.kind) || placeError(g, p);
     this.previewBad = new Set(this.previewErr ? badSquares(g, p) : []);
@@ -296,10 +298,10 @@ export class Tools {
     // prefer a nearby spot that fits this way round, so a turn next to an obstacle still works
     const g = this.g();
     for (const [dx, dy] of [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]]) {
-      const q = { kind: p.kind, ...placeAround(h, side, cx + dx, cy + dy) };
+      const q = { kind: p.kind, ...placeAround(h, side, cx + dx, cy + dy, yardLen(p)), ...(p.len ? { len: p.len } : {}) };
       if (!placeError(g, q)) { this.setPreview(q); return; }
     }
-    this.setPreview({ kind: p.kind, ...placeAround(h, side, cx, cy) });
+    this.setPreview({ kind: p.kind, ...placeAround(h, side, cx, cy, yardLen(p)) });
   }
 
   /** a tap near a train selects it */
@@ -456,17 +458,19 @@ export function turnSquares(n: number, p: { x: number; y: number; horizontal: bo
   return [y0 * n + x0, y0 * n + x1, y1 * n + x0, y1 * n + x1];
 }
 
-/** A building's footprint (two rows of four) placed so its middle is at (cx, cy), facing the given way. */
-function placeAround(horizontal: boolean, side: 1 | -1, cx: number, cy: number): { x: number; y: number; horizontal: boolean; side: 1 | -1 } {
-  if (horizontal) { const left = Math.round(cx - 1.5), top = Math.round(cy - 0.5); return { x: left, y: side > 0 ? top : top + 1, horizontal, side }; }
-  const left = Math.round(cx - 0.5), top = Math.round(cy - 1.5);
+/** A building's footprint (two rows of four, or of three for a dock) placed so its middle is at (cx, cy), facing the given way. */
+function placeAround(horizontal: boolean, side: 1 | -1, cx: number, cy: number, len = 4): { x: number; y: number; horizontal: boolean; side: 1 | -1 } {
+  const m = (len - 1) / 2;
+  if (horizontal) { const left = Math.round(cx - m), top = Math.round(cy - 0.5); return { x: left, y: side > 0 ? top : top + 1, horizontal, side }; }
+  const left = Math.round(cx - 0.5), top = Math.round(cy - m);
   return { x: side > 0 ? left : left + 1, y: top, horizontal, side };
 }
 
 /** The middle of a footprint, in squares. */
-function centreOf(p: { x: number; y: number; horizontal: boolean; side: 1 | -1 }): [number, number] {
-  if (p.horizontal) return [p.x + 1.5, (p.side > 0 ? p.y : p.y - 1) + 0.5];
-  return [(p.side > 0 ? p.x : p.x - 1) + 0.5, p.y + 1.5];
+function centreOf(p: { x: number; y: number; horizontal: boolean; side: 1 | -1; len?: number }): [number, number] {
+  const m = (yardLen(p) - 1) / 2;
+  if (p.horizontal) return [p.x + m, (p.side > 0 ? p.y : p.y - 1) + 0.5];
+  return [(p.side > 0 ? p.x : p.x - 1) + 0.5, p.y + m];
 }
 
 /** Undo of a building: its yard track goes again. Squares that were already track get their old rails back; squares
