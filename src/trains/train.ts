@@ -11,6 +11,9 @@ export const SIGNAL_GAP = 8;
 export const WRONG_LANE = 50000;
 /** seconds stuck before looking for another way, and seconds to wait aside before trying again */
 export const UNSTICK_AFTER = 4, REFUGE_WAIT = 4;
+/** A train held up takes a way round at once if it is at most this much longer than its own way (share, plus
+ *  squares). A longer way round only once it has waited as long as running the extra distance would take. */
+export const DETOUR_SHARE = 1.5, DETOUR_SQUARES = 8;
 export const V_MAX = 70, ACCEL = 40, DECEL = 60, REVERSE_PAUSE = 0.45;
 /** the engine running round its train: speed (px/s), seconds to uncouple or couple, and the longest way round (px) */
 /** extra route cost per px run with the engine at the back: low enough that a train pushes its wagons a short way rather than running past a junction to turn round */
@@ -104,7 +107,13 @@ export class TrainSystem {
   /** told when a train reverses partway along a trip (not at its stops): the square where its tail turned */
   onMidReverse?: (t: Train, square: number) => void;
 
+  /** seconds each train has been held up on its current trip (not saved: it only shapes when to take a way round) */
+  private heldUp = new Map<number, number>();
+
   setNetwork(net: Network) { this.net = net; }
+
+  /** length of a plan's remaining moves, in px */
+  private planLen(plan: Move[]): number { let d = 0; for (const m of plan) if (!isRev(m)) d += this.net.pieces[m.piece]!.len; return d; }
 
   /** findRoute that never drives over blocked pieces */
   private route(q: RouteRequest) {
@@ -363,7 +372,7 @@ export class TrainSystem {
       if (!isRev(t.plan[0])) t.wait += dt; else t.wait = 0;
       this.unstick(t); return;
     }
-    t.wait = 0;
+    t.wait = 0; this.heldUp.delete(t.id);
     while (go > 0) {
       const head = t.trail.at(-1)!, room = this.net.pieces[head.piece]!.len - t.headS;
       if (go <= room) { t.headS += go; go = 0; break; }
@@ -401,6 +410,7 @@ export class TrainSystem {
    */
   private unstick(t: Train) {
     if (t.wait < UNSTICK_AFTER) return;
+    const waited = (this.heldUp.get(t.id) ?? 0) + t.wait; this.heldUp.set(t.id, waited);
     // moving aside with no trip of its own, and that way is blocked too: give it up and stand, so a waiting train can
     // ask it to move somewhere else (otherwise both wait for each other for ever)
     if (t.dest === undefined) { if (t.plan.length) { t.plan = []; t.held = 0; t.wait = 0; this.rebuildHolds(); } return; }
@@ -415,6 +425,9 @@ export class TrainSystem {
     const base = { head: t.trail.at(-1)!, tail: t.trail[0]!, trail: t.trail, trainLen: L, canReverseNow: true };
     const cost = (s: Step) => bodies.has(s.piece) ? Infinity : this.laneCost(s) + (() => { const h = this.holder.get(s.piece); return h !== undefined && h !== t.id ? 4000 : 0; })();
     const route = this.route({ ...base, goal, extra: cost, push: this.pushOf(t), ...(t.area ? { revParity: this.backIn(t) } : {}) }) ?? this.route({ ...base, goal, extra: cost });
+    // a long way round to dodge a train that will move on in a moment costs more than waiting for it: wait a while first
+    const own = this.planLen(t.plan), extra = route ? this.planLen(route) - own : 0;
+    if (route && own > 0 && own + extra > own * DETOUR_SHARE + DETOUR_SQUARES * 32 && waited < extra / this.vmax) return;
     if (route) { t.plan = route; t.held = 0; this.rebuildHolds(); return; }
     // a parked train (no trip) is in the way: ask it to move aside, then wait for the way to clear
     const parked = new Set<number>();
