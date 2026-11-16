@@ -29,19 +29,26 @@ function stockPile(ctx: CanvasRenderingContext2D, b: Building, L: number) {
   }
 }
 
-/** "🪵 64/80" in a small dark chip over the building; amber when the store is full. Constant size on screen. */
+/** How much is in store: [have, cap, full]. */
+function stockOf(b: Building): [number, number, boolean] {
+  const cap = capOf(b), have = Math.min(cap, Math.floor(Math.max(0, b.stock)));
+  return [have, cap, have >= cap];
+}
+
+/**
+ * Zoomed out (no name label): "🪵 64" in a small, soft tag at the far end of the building, so it doesn't sit on the
+ * art. The number turns amber when the store is full. Constant size on screen.
+ */
 function stockChip(ctx: CanvasRenderingContext2D, b: Building, cx: number, cy: number, zoom: number) {
-  const cap = capOf(b), have = Math.min(cap, Math.floor(Math.max(0, b.stock))), full = have >= cap;
+  const [have, , full] = stockOf(b);
   const k = 1 / zoom, icon = GOODS[INDUSTRIES[b.kind].makes as Good]?.icon ?? '📦';
-  const text = `${icon} ${have}/${cap}${full ? ' full' : ''}`;
-  ctx.save(); ctx.translate(cx, cy - (zoom >= 1.6 ? 8 : 0)); ctx.scale(k, k);
-  ctx.font = '700 11px system-ui'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  const w = ctx.measureText(text).width + 12, h = 17;
-  ctx.fillStyle = full ? 'rgba(214,128,26,.95)' : 'rgba(30,24,16,.85)';
-  ctx.beginPath(); ctx.roundRect(-w / 2, -h / 2, w, h, 8); ctx.fill();
-  // a fill bar along the bottom of the chip
-  ctx.fillStyle = full ? '#ffe2a8' : '#8fd06a'; ctx.fillRect(-w / 2 + 6, h / 2 - 3, (w - 12) * have / cap, 1.6);
-  ctx.fillStyle = '#fff'; ctx.fillText(text, 0, -0.5);
+  const ex = b.horizontal ? cx + 1.6 * TILE : cx, ey = b.horizontal ? cy : cy + 1.6 * TILE;
+  ctx.save(); ctx.translate(ex, ey); ctx.scale(k, k);
+  ctx.font = '600 9px system-ui'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  const text = `${icon}${have}`, w = ctx.measureText(text).width + 8, h = 13;
+  ctx.fillStyle = 'rgba(30,24,16,.55)';
+  ctx.beginPath(); ctx.roundRect(-w / 2, -h / 2, w, h, 6.5); ctx.fill();
+  ctx.fillStyle = full ? '#ffc35a' : '#f6e7c6'; ctx.fillText(text, 0, 0.5);
   ctx.restore();
 }
 
@@ -66,16 +73,22 @@ export function drawBuilding(ctx: CanvasRenderingContext2D, g: Game, b: Building
   if (b.kind !== 'dock' && H(1) < 0.5) ctx.scale(-1, 1);
   ART[b.kind](ctx, tm, H, b.lvl);
   ctx.restore();
-  // how much is waiting, as a small chip that keeps its size on screen (hidden when zoomed far out)
-  if (b.kind !== 'dock' && b.id >= 0 && zoom >= 0.7) stockChip(ctx, b, cx, cy, zoom);
+  // how much is waiting: a small soft tag at the building's end when zoomed out (none when zoomed far out);
+  // close up the count joins the name label below instead
+  const shows = b.kind !== 'dock' && b.id >= 0;
+  if (shows && zoom >= 0.7 && zoom < 1.6) stockChip(ctx, b, cx, cy, zoom);
   // name, when close or when it is the only thing that tells you what this is
   if (zoom >= 1.6) {
     const d = INDUSTRIES[b.kind], fs = 9;
     ctx.font = `600 ${fs}px system-ui`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    const label = `${d.icon} ${d.name}${b.lvl > 1 ? ' ' + b.lvl : ''}${b.closed ? ' · closed' : ''}`, w = ctx.measureText(label).width + 8;
+    const label = `${d.icon} ${d.name}${b.lvl > 1 ? ' ' + b.lvl : ''}${b.closed ? ' · closed' : ''}`;
+    const [have, , full] = shows ? stockOf(b) : [0, 0, false], count = shows ? ` · ${have}` : '';
+    const lw = ctx.measureText(label).width, w = lw + ctx.measureText(count).width + 8;
     const lx = cx, ly = cy + (b.horizontal ? b.side * 20 : 22);
     ctx.fillStyle = 'rgba(30,24,16,.8)'; ctx.fillRect(lx - w / 2, ly - 6, w, 12);
-    ctx.fillStyle = '#f6e7c6'; ctx.fillText(label, lx, ly + 0.5);
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#f6e7c6'; ctx.fillText(label, lx - w / 2 + 4, ly + 0.5);
+    if (count) { ctx.fillStyle = full ? '#ffc35a' : '#bfe0a8'; ctx.fillText(count, lx - w / 2 + 4 + lw, ly + 0.5); }
   }
   if (b.id >= 0) drawClosed(ctx, g, b, tm, zoom, cx, cy);
   if (b.id >= 0 && !isLinked(g, b)) { // not on the railway yet: a small red sign on the yard end (not on the placement preview)
