@@ -3,6 +3,36 @@ import { buildingSquares } from '../buildings/industries.ts';
 import { bodyPoint } from '../trains/train.ts';
 import { TILE } from '../world/terrain.ts';
 import { hash } from '../core/rng.ts';
+import { type CrewRun, runPoint, runValid } from '../world/crews.ts';
+
+/**
+ * A crew's rail vehicle, on the rails at p: the fire crew's little red engine (ladder, flashing blue lamp, two
+ * firefighters in yellow helmets riding on it) or the repair crew's handcar (two workers pumping the see-saw lever).
+ * `riding` = the crew is on board (on the way out or home); parked, the vehicle stands empty.
+ */
+export function drawCrewCar(ctx: CanvasRenderingContext2D, kind: CrewRun['kind'], p: { x: number; y: number; tx: number; ty: number }, tm: number, riding: boolean) {
+  ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(Math.atan2(p.ty, p.tx));
+  ctx.fillStyle = 'rgba(0,0,0,.3)'; ctx.fillRect(-6, -2.6, 13, 6.6);
+  if (kind === 'fire') {
+    ctx.fillStyle = '#c8322a'; ctx.fillRect(-6.5, -3.2, 13, 6.4); // body
+    ctx.fillStyle = '#7e1a14'; ctx.fillRect(3, -3.2, 3.5, 6.4); // cab roof at the front
+    ctx.strokeStyle = '#e8e2d0'; ctx.lineWidth = 0.6; // the ladder along the top
+    ctx.beginPath(); ctx.moveTo(-5.5, -1.2); ctx.lineTo(2.2, -1.2); ctx.moveTo(-5.5, 1.2); ctx.lineTo(2.2, 1.2);
+    for (let x = -5; x <= 2; x += 1.6) { ctx.moveTo(x, -1.2); ctx.lineTo(x, 1.2); } ctx.stroke();
+    ctx.fillStyle = Math.floor(tm * 4) % 2 ? '#5aa8ff' : '#1e4a9a'; ctx.beginPath(); ctx.arc(4.8, 0, 1.1, 0, 7); ctx.fill(); // blue lamp
+    if (riding) for (const [x, y] of [[-3.8, -4.4], [-0.8, 4.4]] as const) { // firefighters on the running boards
+      ctx.fillStyle = '#2b3d6b'; ctx.beginPath(); ctx.arc(x, y, 1.7, 0, 7); ctx.fill(); ctx.fillStyle = '#f0c030'; ctx.beginPath(); ctx.arc(x, y, 1.1, 0, 7); ctx.fill();
+    }
+  } else {
+    ctx.fillStyle = '#6b4a2e'; ctx.fillRect(-5, -3, 10, 6); ctx.fillStyle = '#3a2a1a'; ctx.fillRect(-0.5, -3, 1, 6); // deck and lever post
+    if (riding) {
+      const sw = Math.sin(tm * 8) * 2.2; // the see-saw pump lever going up and down
+      ctx.strokeStyle = '#2a211c'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(-sw - 3, 0); ctx.lineTo(sw + 3, 0); ctx.stroke();
+      for (const x of [-3.2, 3.2]) { ctx.fillStyle = '#f0a020'; ctx.beginPath(); ctx.arc(x, 0, 1.8, 0, 7); ctx.fill(); ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.arc(x, 0, 0.8, 0, 7); ctx.fill(); }
+    }
+  }
+  ctx.restore();
+}
 
 /** Fires on buildings and broken-down trains, with their crews. Drawn over buildings and trains, in world space. */
 export function drawMishaps(ctx: CanvasRenderingContext2D, g: Game, tm: number, vis: (sq: number) => boolean) {
@@ -25,16 +55,32 @@ export function drawMishaps(ctx: CanvasRenderingContext2D, g: Game, tm: number, 
         ctx.fillStyle = `rgba(60,55,52,${0.45 * (1 - ph) * Math.max(0.3, 1 - out)})`; ctx.beginPath(); ctx.arc(sx, sy, 4 + ph * 9, 0, 7); ctx.fill();
       }
     });
-    if (t >= b.fire.crewAt) { // the fire cart and two firefighters spraying water
-      const e = sq[3]!, ex = (e % n + 0.5) * TILE, ey = (((e / n) | 0) + 0.5) * TILE, tgt = sq[2]!, tx = (tgt % n + 0.5) * TILE, ty = (((tgt / n) | 0) + 0.5) * TILE;
-      ctx.fillStyle = '#c8322a'; ctx.fillRect(ex - 7, ey + 2, 14, 7); ctx.fillStyle = '#e8c070'; ctx.fillRect(ex - 6, ey + 1, 12, 1.5);
-      ctx.fillStyle = '#222'; ctx.beginPath(); ctx.arc(ex - 4, ey + 9.5, 1.8, 0, 7); ctx.arc(ex + 4, ey + 9.5, 1.8, 0, 7); ctx.fill();
+    const run = b.fire.run && runValid(g, b.fire.run) ? b.fire.run : null;
+    if (run && t < b.fire.crewAt) { const p = runPoint(g, run, t); if (p) drawCrewCar(ctx, 'fire', p, tm, true); } // on its way along the rails
+    if (t >= b.fire.crewAt) { // the fire engine stands on the loading track; two firefighters climb down and spray water
+      const tgt = sq[2]!, tx = (tgt % n + 0.5) * TILE, ty = (((tgt / n) | 0) + 0.5) * TILE;
+      let ex: number, ey: number;
+      const p = run ? runPoint(g, run, b.fire.crewAt) : null;
+      if (p) { drawCrewCar(ctx, 'fire', p, tm, false); const k = Math.hypot(tx - p.x, ty - p.y) || 1; ex = p.x + (tx - p.x) / k * 9; ey = p.y + (ty - p.y) / k * 9; } // they stand between the engine and the fire
+      else {
+        const e = sq[3]!; ex = (e % n + 0.5) * TILE; ey = (((e / n) | 0) + 0.5) * TILE;
+        ctx.fillStyle = '#c8322a'; ctx.fillRect(ex - 7, ey + 2, 14, 7); ctx.fillStyle = '#e8c070'; ctx.fillRect(ex - 6, ey + 1, 12, 1.5);
+        ctx.fillStyle = '#222'; ctx.beginPath(); ctx.arc(ex - 4, ey + 9.5, 1.8, 0, 7); ctx.arc(ex + 4, ey + 9.5, 1.8, 0, 7); ctx.fill();
+      }
       for (const [dx, ph] of [[-4, 0], [4, 1.3]] as const) {
         const fx = ex + dx, fy = ey - 3; ctx.fillStyle = '#2b3d6b'; ctx.beginPath(); ctx.arc(fx, fy, 2, 0, 7); ctx.fill(); ctx.fillStyle = '#f0c030'; ctx.beginPath(); ctx.arc(fx, fy - 1, 1.2, 0, 7); ctx.fill();
         ctx.strokeStyle = 'rgba(150,200,255,.75)'; ctx.lineWidth = 1.4; ctx.setLineDash([2, 2]); ctx.lineDashOffset = -tm * 30 - ph * 4;
         ctx.beginPath(); ctx.moveTo(fx, fy); ctx.quadraticCurveTo((fx + tx) / 2, Math.min(fy, ty) - 12, tx + dx, ty - 4); ctx.stroke(); ctx.setLineDash([]);
       }
     }
+  }
+  for (const b of g.s.breaks ?? []) { // the repair crew pumping its handcar along the rails to the break
+    if (!b.run || t >= b.crewAt || !runValid(g, b.run)) continue;
+    const p = runPoint(g, b.run, t); if (p && vis(Math.floor(p.y / TILE) * n + Math.floor(p.x / TILE))) drawCrewCar(ctx, 'repair', p, tm, true);
+  }
+  for (const r of g.s.crews ?? []) { // crews riding home after the job
+    if (!runValid(g, r)) continue;
+    const p = runPoint(g, r, t); if (p && !p.arrived && vis(Math.floor(p.y / TILE) * n + Math.floor(p.x / TILE))) drawCrewCar(ctx, r.kind, p, tm, true);
   }
   for (const tr of g.s.trains) {
     if (!tr.broke || t >= tr.broke.doneAt || !tr.trail.length) continue;

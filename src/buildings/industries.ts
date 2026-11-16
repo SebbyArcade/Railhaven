@@ -110,7 +110,7 @@ export interface Building {
   /** the deposit a mine stands on */
   dep?: number;
   /** on fire: makes nothing until the fire crew puts it out */
-  fire?: { crewAt: number; doneAt: number };
+  fire?: { crewAt: number; doneAt: number; run?: import('../world/crews.ts').CrewRun; from?: string };
   /** money paid for it and its levels (half comes back if it is removed) */
   paid?: number;
   /** docks: how far out the sea is already charted */
