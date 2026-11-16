@@ -15,7 +15,7 @@ import { trackFromSave, trackToSave } from './track/state.ts';
 import type { TrackMap } from './track/types.ts';
 import { TrainSystem } from './trains/train.ts';
 import { placeShed, shedSiding } from './buildings/shed.ts';
-import { type Building, linkedSquares, revealAround, tracksOf, yardLanes, yardSquares } from './buildings/industries.ts';
+import { type Building, footprint, linkedSquares, revealAround, tracksOf, yardLanes, yardSet, yardSquares } from './buildings/industries.ts';
 import { blockedPieces } from './track/breaks.ts';
 import { networkKey, relocate, snapshot } from './trains/relocate.ts';
 
@@ -34,7 +34,7 @@ export function buildWorld(s: GameState) {
 }
 
 function makeNetwork(track: TrackMap, n: number, sites: Site[], buildings: Building[], terr: Uint8Array, shed?: { shed: number; mid: number } | null): Network {
-  const halls = hallsOf(track, n, sites, terr), dbl = doubleSquares(track, halls), still = new Set<number>(), lanes = new Map<number, number[]>();
+  const halls = hallsOf(track, n, sites, terr, new Set(buildings.flatMap(b => footprint(n, b)))), dbl = doubleSquares(track, halls), still = new Set<number>(), lanes = new Map<number, number[]>();
   // the engine shed's siding keeps its own straight square: a gentle turnout curving through it both ways would leave
   // no room for a new train to stand clear of the line (buying a train then always said the siding was busy)
   if (shed) { still.add(shed.shed); still.add(shed.mid); }
@@ -158,7 +158,7 @@ function throatPieces(g: Game, area: Set<number>): Set<number> {
 
 function platformPieces(g: Game): Set<number> {
   const n = g.world.n, sq = new Set<number>();
-  for (const h of hallsOf(g.track, n, g.s.sites, g.world.terr)) for (const i of h.squares) sq.add(i);
+  for (const h of hallsOf(g.track, n, g.s.sites, g.world.terr, yardSet(g))) for (const i of h.squares) sq.add(i);
   for (const b of g.s.buildings ?? []) for (const i of yardSquares(n, b)) sq.add(i);
   return new Set(g.net.pieces.filter(p => p.squares.every(i => sq.has(i))).map(p => p.id));
 }

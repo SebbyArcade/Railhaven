@@ -5,6 +5,7 @@ import { isRevealed } from '../world/fog.ts';
 import { layPath } from './edit.ts';
 import { planError } from './paint.ts';
 import type { TrackMap } from './types.ts';
+import { yardSet } from '../buildings/industries.ts';
 
 /** How many new squares a gap may hold and still be shown: a few squares, so it reads as "almost there". */
 export const GAP_MAX = 4;
@@ -22,7 +23,7 @@ const memo = new WeakMap<Set<number>, Map<number, JoinGap | null>>();
  */
 export function joinGap(g: Game, t: Site): JoinGap | null {
   if (t.kind !== 'town' || !g.linked?.size) return null;
-  const h0 = hallOf(g.track, g.world.n, t, g.world.terr); if (h0 && g.linked.has(h0.squares[1])) return null; // already on the railway
+  const h0 = hallOf(g.track, g.world.n, t, g.world.terr, yardSet(g)); if (h0 && g.linked.has(h0.squares[1])) return null; // already on the railway
   let m = memo.get(g.linked); if (!m) { m = new Map(); memo.set(g.linked, m); }
   if (m.has(t.id)) return m.get(t.id)!;
   const v = find(g, t); m.set(t.id, v); return v;
@@ -63,7 +64,7 @@ function joins(g: Game, t: Site, path: number[]): boolean {
   const tr: TrackMap = new Map(g.track);
   for (const i of path) { const o = tr.get(i); if (o) tr.set(i, { ...o }); }
   layPath(tr, n, path);
-  const h = hallOf(tr, n, t, g.world.terr);
+  const h = hallOf(tr, n, t, g.world.terr, yardSet(g));
   if (!h || !(path.includes(h.squares[1]) || g.linked!.has(h.squares[1]))) return false;
   const e = planError(g, { path });
   return !e || e.startsWith('Need $');

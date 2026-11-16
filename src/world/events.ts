@@ -1,7 +1,7 @@
 import type { Game } from '../state.ts';
 import type { Train } from '../trains/train.ts';
 import { bodyPoint } from '../trains/train.ts';
-import { buildingSquares, capOf, INDUSTRIES, isLinked, type Building, yardSquares } from '../buildings/industries.ts';
+import { buildingSquares, capOf, INDUSTRIES, isLinked, type Building, yardSquares, yardSet } from '../buildings/industries.ts';
 import { townLinked } from '../economy/towns.ts';
 import { breakRail } from '../track/breaks.ts';
 import { hallOf } from '../buildings/stations.ts';
@@ -124,7 +124,7 @@ export function tickEvents(g: Game, dt: number): boolean {
       towns.sort((a, c) => Math.hypot(a.x - x, a.y - y) - Math.hypot(c.x - x, c.y - y)); const from = towns[0];
       // the crew rides the rails from the nearest town's station that has a way there
       let run: CrewRun | null = null, base = from;
-      for (const t of towns) { const h = hallOf(g.track, n, t, g.world.terr); run = h ? crewRun(g, 'fire', railPath(g, h.squares, yardSquares(n, b)), s.t) : null; if (run) { base = t; break; } }
+      for (const t of towns) { const h = hallOf(g.track, n, t, g.world.terr, yardSet(g)); run = h ? crewRun(g, 'fire', railPath(g, h.squares, yardSquares(n, b)), s.t) : null; if (run) { base = t; break; } }
       const crewAt = run ? s.t + runTime(run) : s.t + crewTime(g, x, y, from);
       b.fire = { crewAt, doneAt: crewAt + FIX_FIRE, ...(run ? { run } : {}), ...(base?.name ? { from: base.name } : {}) };
       news(`🔥 Fire at the ${INDUSTRIES[b.kind].name} ${nearName(g, x, y)}! It stops working until the fire crew${base?.name ? ` from ${base.name}` : ''} ${run ? 'rides out along the rails and ' : ''}puts it out`);

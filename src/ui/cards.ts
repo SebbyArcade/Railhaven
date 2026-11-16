@@ -3,7 +3,7 @@ import type { Game, Site } from '../state.ts';
 import { fallsMul, POI, POI_RARITY, poisOf, RARITY } from '../world/explore.ts';
 import { isleCard, reportsHtml, scoutCard } from './discover.ts';
 import { joinGap } from '../track/joins.ts';
-import { aName, buildingSquares, farText, yardSquares, bufOf, growsTracks, stripError, tracksOf, type Building, capOf, GOODS, type Good, INDUSTRIES, type IndustryKind, inputsOf, isFactory, isLinked, lockedText, outputOf, shareAt, forestOf, stumpsOf } from '../buildings/industries.ts';
+import { aName, buildingSquares, farText, yardSquares, bufOf, growsTracks, stripError, tracksOf, type Building, capOf, GOODS, type Good, INDUSTRIES, type IndustryKind, inputsOf, isFactory, isLinked, lockedText, outputOf, shareAt, forestOf, stumpsOf, yardSet } from '../buildings/industries.ts';
 import { factoryState } from '../economy/production.ts';
 import { hasProject, nextParkPrice, orderMul, PARK_PRICE, parkSpot, parksOf, payMul, projectsFor, projectsOf, rewardMul } from '../buildings/parks.ts';
 import { isCapital, islandOfSite, regions, tradeOf, tradeReward, tradeWhy } from '../economy/trade.ts';
@@ -77,7 +77,7 @@ function townCard(g: Game, t: Site, page?: string): string {
   if (!linked) {
     const gap = joinGap(g, t)?.squares, go = `<button class="mini" data-act="railtown" data-x="${t.x}" data-y="${t.y}">🛤 Lay track ›</button>`;
     h += gap ? `<div class="warn">🔌 Not on the railway yet: your track is only ${gap.length === 1 ? '1 square' : `${gap.length} squares`} short. Lay track from the gold arrow over the dashed ${gap.length === 1 ? 'square' : 'squares'} to link it ${go}</div>`
-      : `<div class="warn">🔌 Not on the railway yet: ${hallOf(g.track, g.world.n, t, g.world.terr) ? 'join your line to either end of its station' : 'lay track straight across its square, past it beside it, or ending right beside it'} (🛤 Rails shows where with arrows) ${go}</div>`;
+      : `<div class="warn">🔌 Not on the railway yet: ${hallOf(g.track, g.world.n, t, g.world.terr, yardSet(g)) ? 'join your line to either end of its station' : 'lay track straight across its square, past it beside it, or ending right beside it'} (🛤 Rails shows where with arrows) ${go}</div>`;
   }
   const done = orderDone(g, t);
   h += `<h3>📋 ${done ? 'Order filled!' : `Wants these to grow into a ${sizeName(L + 1)}`}</h3>`;

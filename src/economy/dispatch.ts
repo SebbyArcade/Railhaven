@@ -2,7 +2,7 @@ import type { Game, Site } from '../state.ts';
 import { fallsMul } from '../world/explore.ts';
 import type { Train } from '../trains/train.ts';
 import { placeTrain } from '../trains/train.ts';
-import { type Building, GOODS, type Good, INDUSTRIES, isLinked, yardSquares } from '../buildings/industries.ts';
+import { type Building, GOODS, type Good, INDUSTRIES, isLinked, yardSquares, yardSet } from '../buildings/industries.ts';
 import { hallOf } from '../buildings/stations.ts';
 import { shedSiding } from '../buildings/shed.ts';
 import { bldDist, bldOf, destName, destSquares, dockKey, factoryRoom, payFor, type Plan, railDist, type Ship, shipPlan, siteOf } from './shipping.ts';
@@ -438,7 +438,7 @@ function nearestTown(g: Game, t: Train): { kind: 'town'; id: number } | null {
   const at = headSquare(g, t);
   let to: Site | undefined, bd = Infinity;
   for (const s of g.s.sites) {
-    if (s.kind !== 'town') continue; const h = hallOf(g.track, g.world.n, s, g.world.terr); if (!h) continue;
+    if (s.kind !== 'town') continue; const h = hallOf(g.track, g.world.n, s, g.world.terr, yardSet(g)); if (!h) continue;
     const d = railDist(g, 't' + s.id, h.squares)[at]!; if (d >= 0 && d < bd) { bd = d; to = s; }
   }
   return to ? { kind: 'town', id: to.id } : null;

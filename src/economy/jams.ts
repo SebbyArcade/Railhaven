@@ -1,7 +1,7 @@
 import type { Game, Site } from '../state.ts';
 import type { Train } from '../trains/train.ts';
 import { isRev } from '../track/route.ts';
-import { isLinked, yardSquares } from '../buildings/industries.ts';
+import { isLinked, yardSquares, yardSet } from '../buildings/industries.ts';
 import { hallsOf } from '../buildings/stations.ts';
 import { isDock, railIsleName, railIsleOfB } from '../ships/docks.ts';
 import { headSquare, islandOfTrain } from './dispatch.ts';
@@ -38,7 +38,7 @@ export function jams(g: Game): Jam[] {
   if (!held.length) return [];
   // stations and yards are already double where it matters: don't offer to double them
   const fixed = new Set<number>();
-  for (const h of hallsOf(g.track, n, g.s.sites, g.world.terr)) for (const i of h.squares) fixed.add(i);
+  for (const h of hallsOf(g.track, n, g.s.sites, g.world.terr, yardSet(g))) for (const i of h.squares) fixed.add(i);
   for (const b of g.s.buildings ?? []) for (const i of yardSquares(n, b)) fixed.add(i);
   const by = new Map<number, Train[]>();
   for (const t of held) { const k = islandOfTrain(g, t); by.set(k, [...(by.get(k) ?? []), t]); }

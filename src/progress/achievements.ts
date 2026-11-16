@@ -1,5 +1,5 @@
 import type { Game } from '../state.ts';
-import { isFactory } from '../buildings/industries.ts';
+import { isFactory, yardSet } from '../buildings/industries.ts';
 import { stepOf, townLinked } from '../economy/towns.ts';
 import { FISHING, FLEET, type FleetKey, fleetLvl, MAX_LVL } from '../economy/upgrades.ts';
 import { INDUSTRIES, type IndustryKind } from '../buildings/industries.ts';
@@ -62,7 +62,7 @@ const fleetBought = (g: Game) => (Object.keys(FLEET) as FleetKey[]).reduce((a, k
 const fleetMax = (Object.keys(FLEET) as FleetKey[]).reduce((a, k) => a + FLEET[k].lv.length - 1, 0);
 /** the farthest track square from Ashford's station, in squares along the rails */
 function reach(g: Game) {
-  const h = hallOf(g.track, g.world.n, ashford(g), g.world.terr); if (!h) return 0;
+  const h = hallOf(g.track, g.world.n, ashford(g), g.world.terr, yardSet(g)); if (!h) return 0;
   const d = railDist(g, 'achAshford', h.squares); let m = 0; for (const v of d) if (v > m) m = v; return m;
 }
 function farShore(g: Game) {

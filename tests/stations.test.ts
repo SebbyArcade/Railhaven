@@ -72,4 +72,21 @@ describe('station halls', () => {
     const wet = LAND.slice(); for (const x of [9, 10, 11]) wet[sq(x, 11)] = 0; // those squares are a bridge
     expect(hallOf(t, N, town, wet)).toBeNull();
   });
+  it('never stand on a building\'s loading track: a dock yard ending in front of a town is not its station', () => {
+    // Stonecroft Haven (his 2026-11-16 save): a dock's yard runs west-east and stops on the square in front of the town
+    const t: TrackMap = new Map(); layPath(t, N, line([[5, 10], [9, 10]]));
+    expect(hallOf(t, N, town, LAND)!.squares).toEqual([sq(7, 10), sq(8, 10), sq(9, 10)]); // a plain line: a dead-end station
+    const yard = new Set([sq(6, 10), sq(7, 10), sq(8, 10)]);
+    expect(hallOf(t, N, town, LAND, yard)).toBeNull(); // the dock's loading track: no platforms on it
+    expect(stationLinkError(t, N, [town], sq(8, 11), sq(8, 10), LAND, yard)).toBe(''); // and no station rules on the yard
+  });
+  it('a line stopping on the town square by the sea runs its platforms back along the line, never out over the water', () => {
+    const t: TrackMap = new Map(); layPath(t, N, line([[5, 10], [10, 10]])); // stops on the town square
+    const wet = LAND.slice(); wet[sq(11, 10)] = 0; // the sea just past the town
+    expect(hallOf(t, N, town, LAND)!.squares).toEqual([sq(9, 10), sq(10, 10), sq(11, 10)]); // on land: centred on the town
+    expect(hallOf(t, N, town, wet)!.squares).toEqual([sq(8, 10), sq(9, 10), sq(10, 10)]);
+    expect(hallOf(t, N, town, wet, new Set([sq(8, 10)]))).toBeNull(); // no room at all: no station yet
+    const bridge = LAND.slice(); bridge[sq(9, 10)] = 0; // a bridge straight into the town square, land beyond: as before
+    expect(hallOf(t, N, town, bridge)!.squares).toEqual([sq(9, 10), sq(10, 10), sq(11, 10)]);
+  });
 });

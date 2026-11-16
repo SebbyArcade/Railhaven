@@ -4,11 +4,12 @@ import { hallsOf } from '../buildings/stations.ts';
 import { closedPieces, tickClosures } from '../buildings/closing.ts';
 import { shedSiding } from '../buildings/shed.ts';
 import { backRun, crewRun, railPath, runTime, tickCrews } from '../world/crews.ts';
+import { yardSet } from '../buildings/industries.ts';
 
 /** Where the repair crew sets off: the engine shed's siding, else Ashford's station. */
 function crewBase(g: Game): number[] {
   const sd = shedSiding(g); if (sd) return [sd.line];
-  const a = g.s.sites[0]!, h = hallsOf(g.track, g.world.n, [a], g.world.terr)[0];
+  const a = g.s.sites[0]!, h = hallsOf(g.track, g.world.n, [a], g.world.terr, yardSet(g))[0];
   return h ? h.squares : [a.y * g.world.n + a.x];
 }
 
@@ -44,7 +45,7 @@ export function blockedPieces(g: Game): Set<number> {
 export function breakRail(g: Game, at?: number): Break | null {
   const n = g.world.n, busy = new Map<number, number>(), sys = g.sys;
   const off = new Set<number>();
-  for (const h of hallsOf(g.track, n, g.s.sites, g.world.terr)) for (const i of [...h.squares, ...h.approaches]) off.add(i);
+  for (const h of hallsOf(g.track, n, g.s.sites, g.world.terr, yardSet(g))) for (const i of [...h.squares, ...h.approaches]) off.add(i);
   for (const b of g.s.breaks ?? []) off.add(b.square);
   // no break under a train or on a stretch a train has already signalled
   for (const [p] of sys.holder) for (const q of g.net.pieces[p]!.squares) off.add(q);

@@ -1,5 +1,5 @@
 import type { Game, Site } from '../state.ts';
-import { farText, type Good, INDUSTRIES, type IndustryKind, inputsOf, isFactory } from '../buildings/industries.ts';
+import { farText, type Good, INDUSTRIES, type IndustryKind, inputsOf, isFactory, yardSet } from '../buildings/industries.ts';
 import { hallOf } from '../buildings/stations.ts';
 import { reveal } from '../world/fog.ts';
 import { islandSpec } from '../world/specialty.ts';
@@ -135,7 +135,7 @@ export function isCoastal(g: Game, t: Site): boolean {
 
 /** Is the town on the railway: its station hall joined to Ashford? */
 export function townLinked(g: Game, t: Site): boolean {
-  const h = hallOf(g.track, g.world.n, t, g.world.terr);
+  const h = hallOf(g.track, g.world.n, t, g.world.terr, yardSet(g));
   return !!h && !!g.linked?.has(h.squares[1]);
 }
 
