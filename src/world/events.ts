@@ -9,6 +9,7 @@ import { backRun, type CrewRun, crewRun, moveCrews, railPath, runTime } from './
 import { hash } from '../core/rng.ts';
 import { TILE } from './terrain.ts';
 import { isRevealed } from './fog.ts';
+import { type NewsGo, say } from '../core/news.ts';
 
 /**
  * Events that make the railway feel alive: storms drifting across the map, trains breaking down and building fires.
@@ -78,7 +79,7 @@ export const onFire = (g: Game, b: Building) => !!b.fire && g.s.t < b.fire.doneA
 
 /** Run events. Returns true when rails broke (the caller replans trains). */
 export function tickEvents(g: Game, dt: number): boolean {
-  const s = g.s, news = (m: string) => (g.news ??= []).push(m);
+  const s = g.s, news = (m: string, go?: NewsGo) => say(g, m, go);
   let railsBroke = false;
   const t0 = Math.max(s.t, EVENTS_START); // an older save starts its events a minute or more after loading, never all at once
   s.nextEvent ??= { storm: t0 + 60, breakdown: t0 + 3 * 60, fire: t0 + 5 * 60 };
@@ -91,7 +92,7 @@ export function tickEvents(g: Game, dt: number): boolean {
       const n = g.world.n, cands = [...g.track.keys()].filter(i => Math.hypot(i % n - st.x, ((i / n) | 0) - st.y) < st.r * 0.7);
       if (cands.length) {
         const b = breakRail(g, cands[Math.floor(hash(s.seed, Math.floor(s.t), cands.length, 53) * cands.length)]!);
-        if (b) { b.kind = 'washout'; st.wash = true; railsBroke = true; news(`🌊 The storm washed out a rail ${nearName(g, b.square % n, (b.square / n) | 0)}: a repair crew is on its way`); }
+        if (b) { b.kind = 'washout'; st.wash = true; railsBroke = true; news(`🌊 The storm washed out a rail ${nearName(g, b.square % n, (b.square / n) | 0)}: a repair crew is on its way`, { kind: 'sq', x: b.square % n, y: (b.square / n) | 0 }); }
       }
     }
     if (s.t >= st.until) { s.storm = undefined; news('🌤 The storm has passed'); }
@@ -100,21 +101,21 @@ export function tickEvents(g: Game, dt: number): boolean {
     const tr = [...g.track.keys()], n = g.world.n, at = tr[Math.floor(hash(s.seed, Math.floor(s.t), 2, 54) * tr.length)]!;
     const ax = at % n, ay = (at / n) | 0, ang0 = hash(s.seed, Math.floor(s.t), 3, 55) * Math.PI * 2, life = 100 + hash(s.seed, Math.floor(s.t), 4, 56) * 50;
     s.storm = stormPath(g, ax, ay, ang0, life);
-    news(`⛈ A storm is rolling in ${nearName(g, ax, ay)}: trains slow down under it`);
+    news(`⛈ A storm is rolling in ${nearName(g, ax, ay)}: trains slow down under it`, { kind: 'sq', x: ax, y: ay });
   }
   // 🔧 breakdowns: a moving train stops and waits for the crew
-  for (const t of s.trains) if (t.broke && s.t >= t.broke.doneAt) { t.broke = undefined; news(`🔧 Train ${t.id} is fixed and on its way again`); }
+  for (const t of s.trains) if (t.broke && s.t >= t.broke.doneAt) { t.broke = undefined; news(`🔧 Train ${t.id} is fixed and on its way again`, { kind: 'train', id: t.id }); }
   if (s.t >= ne.breakdown) {
     ne.breakdown = gap(g, 5, BREAKDOWN_GAP);
     const moving = s.trains.filter(t => Math.abs(t.v) > 20 && !t.broke && t.trail.length);
     if (moving.length && !s.trains.some(t => t.broke)) {
       const t = moving[Math.floor(hash(s.seed, Math.floor(s.t), moving.length, 57) * moving.length)]!, p = bodyPoint(g.net, t, 0), x = p.x / TILE, y = p.y / TILE;
       const crewAt = s.t + crewTime(g, x, y); t.broke = { crewAt, doneAt: crewAt + FIX_TRAIN };
-      news(`🔧 Train ${t.id} broke down ${nearName(g, x, y)}: a repair crew is on its way`);
+      news(`🔧 Train ${t.id} broke down ${nearName(g, x, y)}: a repair crew is on its way`, { kind: 'train', id: t.id });
     }
   }
   // 🔥 fires: a working building stops until the fire crew from the nearest town on the railway puts it out
-  for (const b of s.buildings ?? []) if (b.fire && s.t >= b.fire.doneAt) { if (b.fire.run) (s.crews ??= []).push(backRun(b.fire.run, s.t)); b.fire = undefined; news(`🚒 The fire at the ${INDUSTRIES[b.kind].name} ${nearName(g, b.x, b.y)} is out: it is working again`); }
+  for (const b of s.buildings ?? []) if (b.fire && s.t >= b.fire.doneAt) { if (b.fire.run) (s.crews ??= []).push(backRun(b.fire.run, s.t)); b.fire = undefined; news(`🚒 The fire at the ${INDUSTRIES[b.kind].name} ${nearName(g, b.x, b.y)} is out: it is working again`, { kind: 'bld', id: b.id }); }
   if (s.t >= ne.fire) {
     ne.fire = gap(g, 6, FIRE_GAP);
     const ok = (s.buildings ?? []).filter(b => b.kind !== 'dock' && isLinked(g, b) && b.stock < capOf(b) && !b.fire);
@@ -127,7 +128,7 @@ export function tickEvents(g: Game, dt: number): boolean {
       for (const t of towns) { const h = hallOf(g.track, n, t, g.world.terr, yardSet(g)); run = h ? crewRun(g, 'fire', railPath(g, h.squares, yardSquares(n, b)), s.t) : null; if (run) { base = t; break; } }
       const crewAt = run ? s.t + runTime(run) : s.t + crewTime(g, x, y, from);
       b.fire = { crewAt, doneAt: crewAt + FIX_FIRE, ...(run ? { run } : {}), ...(base?.name ? { from: base.name } : {}) };
-      news(`🔥 Fire at the ${INDUSTRIES[b.kind].name} ${nearName(g, x, y)}! It stops working until the fire crew${base?.name ? ` from ${base.name}` : ''} ${run ? 'rides out along the rails and ' : ''}puts it out`);
+      news(`🔥 Fire at the ${INDUSTRIES[b.kind].name} ${nearName(g, x, y)}! It stops working until the fire crew${base?.name ? ` from ${base.name}` : ''} ${run ? 'rides out along the rails and ' : ''}puts it out`, { kind: 'bld', id: b.id });
     }
   }
   moveCrews(g, dt); // crews ride on (or wait for trains), and hold the stretch they stand on

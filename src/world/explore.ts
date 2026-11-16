@@ -5,6 +5,7 @@ import { T } from './terrain.ts';
 import { squareCost } from '../track/rules.ts';
 import { buildingSquares, footprint, isLinked } from '../buildings/industries.ts';
 import { townLinked } from '../economy/towns.ts';
+import { type NewsGo, say } from '../core/news.ts';
 
 /**
  * Exploring. Scouts set out from a town on the railway (on foot, over land) or from a dock (by boat, over water) along
@@ -169,13 +170,13 @@ export const poisOf = (g: Game) => {
 /** Islands whose explorer's camp is yours: everything still hidden there shows as a ? on the map. */
 export const toldIslands = (g: Game) => new Set((g.s.pois ?? []).filter(p => p.kind === 'camp' && p.got).map(p => g.world.islandOf[p.y * g.world.n + p.x]!));
 
-const news = (g: Game, s: string) => (g.news ??= []).push(s);
+const news = (g: Game, s: string, go?: NewsGo) => say(g, s, go);
 
 /** Landmarks that came out of the fog say so once; those your track reaches are taken over. */
 export function checkPois(g: Game) {
   const n = g.world.n;
   for (const p of poisOf(g)) {
-    if (!p.seen && isRevealed(g, p.y * n + p.x)) { p.seen = true; (g.found ??= []).push(p.id); if (p.kind !== 'wreck') news(g, `${POI[p.kind].icon} ${POI[p.kind].name} found: ${CLAIM_TEXT} to take it over (${POI[p.kind].perk})`); else news(g, `⚓ A shipwreck lies off the coast: a ship or scout boat passing by can salvage it`); }
+    if (!p.seen && isRevealed(g, p.y * n + p.x)) { p.seen = true; (g.found ??= []).push(p.id); if (p.kind !== 'wreck') news(g, `${POI[p.kind].icon} ${POI[p.kind].name} found: ${CLAIM_TEXT} to take it over (${POI[p.kind].perk})`, { kind: 'sq', x: p.x, y: p.y }); else news(g, `⚓ A shipwreck lies off the coast: a ship or scout boat passing by can salvage it`, { kind: 'sq', x: p.x, y: p.y }); }
     if (p.got || p.kind === 'wreck' || !p.seen) continue;
     let near = false;
     for (let dy = -CLAIM_R; dy <= CLAIM_R && !near; dy++) for (let dx = -CLAIM_R; dx <= CLAIM_R && !near; dx++) if (g.linked?.has((p.y + dy) * n + p.x + dx)) near = true;
@@ -184,7 +185,7 @@ export function checkPois(g: Game) {
     if (p.kind === 'lookout') reveal(g, p.x, p.y, LOOKOUT_R);
     if (p.kind === 'halt') { g.s.money += HALT_PAY; g.s.earned = (g.s.earned ?? 0) + HALT_PAY; }
     if (p.kind === 'camp') reveal(g, p.x, p.y, CAMP_R);
-    news(g, `${POI[p.kind].icon} ${POI[p.kind].name} is yours: ${POI[p.kind].perk}`);
+    news(g, `${POI[p.kind].icon} ${POI[p.kind].name} is yours: ${POI[p.kind].perk}`, { kind: 'sq', x: p.x, y: p.y });
   }
 }
 
@@ -194,7 +195,7 @@ export function salvageAt(g: Game, x: number, y: number): number {
     if (p.kind !== 'wreck' || p.got || Math.abs(p.x - x) > 1.5 || Math.abs(p.y - y) > 1.5) continue;
     p.got = true; p.seen = true;
     const v = p.pay ?? 2000; g.s.money += v; g.s.earned = (g.s.earned ?? 0) + v;
-    news(g, `⚓ Shipwreck salvaged: +$${v.toLocaleString('en-US')} in cargo and brass fittings`);
+    news(g, `⚓ Shipwreck salvaged: +$${v.toLocaleString('en-US')} in cargo and brass fittings`, { kind: 'sq', x: p.x, y: p.y });
     return v;
   }
   return 0;

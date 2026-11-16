@@ -24,8 +24,16 @@ export function updateHud(el: HTMLElement, g: Game) {
 }
 
 let toastTimer = 0;
-export function toast(text: string, ms = 2600) {
+/** A short note at the top. With `go`, it carries a Go › button (only the button takes taps: the rest lets them through to the map). */
+export function toast(text: string, ms = 2600, go?: () => void) {
   const el = document.getElementById('toast')!;
   el.textContent = text; el.style.opacity = '1';
-  clearTimeout(toastTimer); toastTimer = window.setTimeout(() => (el.style.opacity = '0'), ms);
+  el.className = go ? 'go' : '';
+  const hide = () => { el.style.opacity = '0'; el.className = ''; };
+  if (go) {
+    const b = document.createElement('button'); b.textContent = 'Go ›';
+    b.onclick = e => { e.stopPropagation(); clearTimeout(toastTimer); hide(); go(); };
+    el.append(b);
+  }
+  clearTimeout(toastTimer); toastTimer = window.setTimeout(hide, ms);
 }

@@ -7,6 +7,7 @@ import { tickProduction } from '../src/economy/production.ts';
 import { EVENTS_START, inStorm, STORM_SLOW, tickEvents, trainSpeedMul } from '../src/world/events.ts';
 import { TILE } from '../src/world/terrain.ts';
 import { isRevealed } from '../src/world/fog.ts';
+import { newsPlace } from '../src/core/news.ts';
 
 function setup() {
   const g = newGame(4242), n = g.world.n, a = g.s.sites[0]!, at = (dx: number, dy: number) => (a.y + dy) * n + a.x + dx;
@@ -99,5 +100,30 @@ describe('storms, breakdowns and fires', () => {
     expect(b.fire).toBeUndefined();
     expect(b.stock).toBeGreaterThan(10); // working again
     expect(g.news!.some(m => m.startsWith('🚒'))).toBe(true);
+  });
+
+  it('notes about a place say where it is, for their Go › button', () => {
+    const { g, t } = setup();
+    g.s.t = EVENTS_START + 61; g.s.nextEvent = { storm: g.s.t, breakdown: 1e9, fire: 1e9 };
+    run(g, 0.05);
+    const storm = g.news!.find(m => m.startsWith('⛈'))!;
+    expect(newsPlace(g, storm)?.kind).toBe('sq');
+    expect(newsPlace(g, storm)).toBeUndefined(); // read once
+    const crewAt = g.s.t + 1; t.broke = { crewAt, doneAt: crewAt + 1 }; g.s.nextEvent = { storm: 1e9, breakdown: 1e9, fire: 1e9 };
+    run(g, 3);
+    expect(newsPlace(g, g.news!.find(m => m.includes('is fixed'))!)).toEqual({ kind: 'train', id: t.id });
+    expect(newsPlace(g, '🌤 The storm has passed')).toBeUndefined(); // no place: no button
+  });
+
+  it('a fire note leads to the building', () => {
+    const g = newGame(4242), a = g.s.sites[0]!;
+    const s = nearestSpot(g, 'wood', a.x, a.y)!, b = build(g, bestPlacement(g, 'wood', s.x, s.y).place!);
+    if (typeof b === 'string') throw new Error(b);
+    trackChanged(g);
+    g.linked!.add(yardSquares(g.world.n, b)[0]!);
+    g.s.t = EVENTS_START + 61; g.s.nextEvent = { storm: 1e9, breakdown: 1e9, fire: g.s.t };
+    run(g, 0.05);
+    const fire = g.news!.find(m => m.startsWith('🔥'))!;
+    expect(newsPlace(g, fire)).toEqual({ kind: 'bld', id: b.id });
   });
 });
