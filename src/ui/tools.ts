@@ -98,15 +98,14 @@ export class Tools {
     this.again = { ...a, until: performance.now() + AGAIN_MS };
   }
 
-  /** 🛤 Keep building: reopen the tool that just closed (rails carry on from the end of the line just built).
+  /** 🛤 Keep building: reopen the tool that just closed (rails: no line chosen yet, so a new one can start anywhere on the network).
    *  Returns 'menu' when the build menu should open (main.ts owns it). */
   resume(): 'menu' | '' {
     const a = this.againOn(); if (!a) return '';
     this.again = null;
     if (a.mode === 'menu') return 'menu';
     this.mode = a.mode; this.cancel();
-    if (a.mode === 'rail' && a.end !== undefined && isAnchor(this.g(), a.end)) { this.plan = { path: [a.end] }; toast('🛤 Carry on from the end of your line: drag from it, or tap where it goes next'); }
-    else if (a.mode === 'rail') toast('🛤 Drag from your track to the building\'s loading track');
+    if (a.mode === 'rail') toast(a.join ? '🛤 Drag from your track to the building\'s loading track' : '🛤 Start anywhere on your track: drag out from it, or tap it then tap where the line goes');
     return '';
   }
 
@@ -450,13 +449,13 @@ export class Tools {
   private doConfirm() {
     const g = this.g();
     if (this.mode === 'rail' && this.plan) {
-      const fresh = this.plan.path.filter(i => !g.track.has(i)).length, end = this.plan.path.at(-1)!;
+      const fresh = this.plan.path.filter(i => !g.track.has(i)).length;
       const b = buildPlan(g, this.plan); if (typeof b === 'string') { toast(b); return; }
       this.lastBuild = null; // new track: a building can no longer be taken back
       this.lastStroke = b.revealed ? null : b;
       if (b.revealed) toast('New land uncovered! (Track that uncovers land can\'t be undone)');
       trackChanged(g); g.terrainDirty?.(this.plan.path);
-      this.closeAfter({ mode: 'rail', end, text: `✅ ${fresh ? `${fresh} square${fresh === 1 ? '' : 's'} built` : 'Track joined'}`, ok: '🛤 Keep building' });
+      this.closeAfter({ mode: 'rail', text: `✅ ${fresh ? `${fresh} square${fresh === 1 ? '' : 's'} built` : 'Track joined'}`, ok: '🛤 Keep building' });
     } else if (this.mode === 'double') {
       const add = [...this.dbl].filter(i => g.track.has(i) && !g.track.get(i)!.dbl && !g.net.twin?.has(i)), c = add.length * TRACK_COST.double;
       if (c > g.s.money) { toast('Not enough money'); return; }
@@ -471,7 +470,7 @@ export class Tools {
       this.lastBuild = { id: b.id, paid: m0 - g.s.money, at: performance.now(), before, shed: shed0 };
       trackChanged(g); g.terrainDirty?.(footprint(g.world.n, b));
       const linked = isLinked(g, b), name = `${INDUSTRIES[b.kind].icon} ${INDUSTRIES[b.kind].name}`;
-      const next: Omit<Again, 'until'> = linked ? { mode: 'menu', text: `✅ ${name} built`, ok: '🏗 Build more' } : { mode: 'rail', text: `✅ ${name} built · now join it to your railway`, ok: '🛤 Lay its track' };
+      const next: Omit<Again, 'until'> = linked ? { mode: 'menu', text: `✅ ${name} built`, ok: '🏗 Build more' } : { mode: 'rail', join: true, text: `✅ ${name} built · now join it to your railway`, ok: '🛤 Lay its track' };
       this.preview = null; this.previewErr = ''; this.glowKey = '';
       if (!g.s.fog.every((v, k) => v === fog0[k])) { this.lastBuild = null; toast(`${name} built: it uncovered new land, so it can't be undone`, 3500); this.closeAfter(next); return; }
       toast(linked ? `${name} built · ↶ Undo if it's the wrong spot` : `${INDUSTRIES[b.kind].icon} Built! Now lay track from your railway to one end of its yard · ↶ Undo if it's the wrong spot`);
@@ -497,7 +496,7 @@ export class Tools {
 
 /** how long the "Keep building" offer shows after a build */
 const AGAIN_MS = 8000;
-type Again = { mode: 'rail' | 'double' | 'menu'; end?: number; text: string; ok: string; until: number };
+type Again = { mode: 'rail' | 'double' | 'menu'; join?: boolean; text: string; ok: string; until: number };
 
 /** Towns and buildings that would no longer be on the railway if square i were removed, in words ('' if none). */
 export function cutText(g: Game, i: number): string {

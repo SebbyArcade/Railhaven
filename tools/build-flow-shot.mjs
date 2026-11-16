@@ -21,6 +21,7 @@ await page.click('#ok'); await page.waitForTimeout(300);
 const s1 = await st(); console.log('after build', JSON.stringify(s1));
 await page.screenshot({ path: 'shots/flow-1-keep-building.png' });
 await page.click('#ok'); await page.waitForTimeout(200); // 🛤 Keep building
+const sK = await st(); console.log('keep building', JSON.stringify(sK));
 await drag([at(4, 0), at(4, 1), at(4, 2), at(4, 3)]);
 const s2 = await st(); console.log('second line', JSON.stringify(s2));
 await drag([at(2, 0), at(3, -1), at(4, -2)]); // a scroll that starts on built track
@@ -37,7 +38,7 @@ await page.click('#ok'); await page.waitForTimeout(300);
 const s5 = await st(); console.log('after lumber camp', JSON.stringify(s5));
 await page.screenshot({ path: 'shots/flow-4-building.png' });
 await page.click('#ok'); await page.waitForTimeout(200); const s6 = await st(); console.log('lay its track', JSON.stringify(s6));
-const ok = s5.mode === 'pan' && /Lay its track|Build more/.test(s5.bar?.ok) && (s6.mode === 'rail' || s6.card === undefined) && s1.mode === 'pan' && s1.bar?.ok === '🛤 Keep building' && JSON.stringify(s3.plan) === JSON.stringify(s2.plan) && s3.cam[0] !== s2.cam[0] && s4.plan[0] === s2.plan[0];
+const ok = sK.mode === 'rail' && sK.plan === null && s5.mode === 'pan' && /Lay its track|Build more/.test(s5.bar?.ok) && (s6.mode === 'rail' || s6.card === undefined) && s1.mode === 'pan' && s1.bar?.ok === '🛤 Keep building' && JSON.stringify(s3.plan) === JSON.stringify(s2.plan) && s3.cam[0] !== s2.cam[0] && s4.plan[0] === s2.plan[0];
 console.log(ok ? 'PASS' : 'FAIL');
 await browser.close();
 if (errors.length) { console.error(errors.join('\n')); process.exit(1); }
