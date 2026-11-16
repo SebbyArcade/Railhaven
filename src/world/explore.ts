@@ -3,7 +3,7 @@ import { Rng } from '../core/rng.ts';
 import { isRevealed, reveal } from './fog.ts';
 import { T } from './terrain.ts';
 import { squareCost } from '../track/rules.ts';
-import { buildingSquares, isLinked } from '../buildings/industries.ts';
+import { buildingSquares, footprint, isLinked } from '../buildings/industries.ts';
 import { townLinked } from '../economy/towns.ts';
 
 /**
@@ -152,6 +152,13 @@ export function frontierPois(g: Game, have: Poi[], from = 0): Poi[] {
   return out;
 }
 
+/** The landmark a tap on square i means: one within a square of it, but never when a building stands on i
+ *  (a Lumber Camp built beside old ruins opened the ruins instead of its own card, he couldn't tap it). */
+export function poiTapAt(g: Game, i: number): Poi | undefined {
+  const n = g.world.n, x = i % n, y = (i / n) | 0;
+  if (g.s.buildings?.some(b => footprint(n, b).includes(i))) return undefined;
+  return poisOf(g).find(p => p.seen && Math.abs(p.x - x) <= 1 && Math.abs(p.y - y) <= 1 && !(p.kind === 'wreck' && p.got));
+}
 export const poisOf = (g: Game) => {
   if (!g.s.pois) g.s.pois = makePois(g);
   if (!g.s.poiV) { g.s.poiV = 2; g.s.pois.push(...morePois(g, g.s.pois)); } // older games get the new landmarks too

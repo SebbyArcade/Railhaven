@@ -40,7 +40,7 @@ import { checkArrivals } from './progress/arrivals.ts';
 import { buyTrainAt, buyTrainFor, fleetByIsland, bringTrainFrom, cancelMove, sellTrain, shipTrainTo, tickTrains, trainRefund, trainToSell } from './economy/dispatch.ts';
 import { moneyTip, type Tip } from './economy/advice.ts';
 import { buyShip, buyShipUp, SHIP_UP, type ShipUpKey, seaLanes, shipPlace, shipUpLvl } from './ships/ships.ts';
-import { CLAIM_TEXT, POI, poisOf } from './world/explore.ts';
+import { CLAIM_TEXT, POI, poisOf, poiTapAt } from './world/explore.ts';
 import { buyFishing, FISHING } from './economy/upgrades.ts';
 import { checkStuck } from './economy/nofail.ts';
 import { ashford, missionsOf, msOf, recommendedBuild, swapMission } from './progress/missions.ts';
@@ -122,7 +122,7 @@ attachInput(canvas, () => game.s.camera, () => view, () => game.world.n * 32, {
     if (tools.tapSquare(i)) return;
     const n = game.world.n, x = i % n, y = (i / n) | 0;
     if (!isRevealed(game, i)) { toast('Unexplored fog: 🔭 Scout from a town or dock on your railway, or lay track toward it'); return; }
-    const poi = poisOf(game).find(p => p.seen && Math.abs(p.x - x) <= 1 && Math.abs(p.y - y) <= 1 && !(p.kind === 'wreck' && p.got));
+    const poi = poiTapAt(game, i); // a building on this square wins: its card opens below
     if (poi) { tools.poiSel = { id: poi.id, until: performance.now() + 5000 }; toast(`${POI[poi.kind].icon} ${POI[poi.kind].name}: ${poi.got ? 'yours · ' : poi.kind === 'wreck' ? '' : `${CLAIM_TEXT} to take it over · `}${POI[poi.kind].perk}`); return; }
     const br = game.s.breaks?.find(b => b.square === i);
     if (br) { const s = Math.ceil(br.crewAt - game.s.t); toast(`${BREAK_TEXT[br.kind]}: trains go round or wait. ${s > 0 ? `Repair crew arrives in ${s} s` : `Repair crew at work, ${Math.ceil(br.doneAt - game.s.t)} s left`}`); return; }
