@@ -13,6 +13,7 @@ const live = () => { const raw = fs.readFileSync('tests/saves/save-seb-2026-11-1
 describe('trains stop clear of the switch at a hall or yard end', () => {
   it('loads and unloads on the plain track, never on the end-square switch', () => {
     const g = live(), n = g.world.n, stops: string[] = [];
+    for (const b of g.s.buildings ?? []) if (b.kind !== 'farm') b.stock = 0; // only wheat to move: the train works the Wheat Farm
     let last = '';
     for (let s = 0; s < 120 * 20; s++) {
       const dt = 0.05; g.s.t += dt; g.sys.tick(dt); tickProduction(g, dt); tickTowns(g, dt); tickTrains(g, dt);
