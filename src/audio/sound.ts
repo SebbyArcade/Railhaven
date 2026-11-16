@@ -52,7 +52,7 @@ export class Sound {
   private loops: Record<'sea' | 'wind' | 'rain', { g: GainNode; f: BiquadFilterNode } | null> = { sea: null, wind: null, rain: null };
   private next = new Map<string, number>();
   /** effect sounds playing right now, and the shared left-right placers (one per pan step instead of one per sound) */
-  voices = 0; private pans = new Map<number, StereoPannerNode>();
+  voices = 0; private pluckWave?: PeriodicWave; private pans = new Map<number, StereoPannerNode>();
   private wasMoving = new Map<string, boolean>();
   private whistleAt = 0; private thunderAt = 0; private birdAt = 0;
   private bar = 0; private barAt = 0; private note = 7;
@@ -146,7 +146,7 @@ export class Sound {
   private pad(f: number, t: number, dur: number) {
     const ac = this.ac!, g = this.env(), lp = ac.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 900;
     g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.05, t + 0.9); g.gain.setTargetAtTime(0, t + dur - 0.4, 0.5);
-    for (const det of [-6, 6]) { const o = ac.createOscillator(); o.type = 'triangle'; o.frequency.value = f; o.detune.value = det; o.connect(lp); o.start(t); o.stop(t + dur + 2); }
+    for (const det of [-6, 6]) { const o = ac.createOscillator(); o.type = 'triangle'; o.frequency.value = f; o.detune.value = det; o.connect(lp); o.start(t); o.stop(t + dur + 1.2); } // faded to ~4% by then: fewer notes ringing on
     lp.connect(g); g.connect(this.musicBus);
   }
   private tone(f: number, t: number, dur: number, vol: number, type: OscillatorType) {
@@ -157,7 +157,9 @@ export class Sound {
   private pluck(f: number, t: number, vol: number) {
     const ac = this.ac!, g = this.env();
     g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vol, t + 0.01); g.gain.exponentialRampToValueAtTime(0.0005, t + 1.4);
-    for (const [m, v] of [[1, 1], [2, 0.25], [3, 0.08]] as const) { const o = ac.createOscillator(), og = ac.createGain(); o.frequency.value = f * m; og.gain.value = v; o.connect(og); og.connect(g); o.start(t); o.stop(t + 1.5); }
+    // one oscillator with the three overtones built in (was three oscillators: same sound, a third of the work)
+    const o = ac.createOscillator(); o.setPeriodicWave(this.pluckWave ??= ac.createPeriodicWave(new Float32Array([0, 0, 0, 0]), new Float32Array([0, 1, 0.25, 0.08]), { disableNormalization: true }));
+    o.frequency.value = f; o.connect(g); o.start(t); o.stop(t + 1.5);
     g.connect(this.musicBus); g.connect(this.echo);
   }
 
