@@ -180,7 +180,10 @@ function bestJob(g: Game, t: Train, plan: Plan): { b: Building; k: Good; ship: S
       const avail = readyOf(b, k) - claimed(g, b, isDock(b) ? k : undefined); if (avail < minLoad(g)) continue;
       const v = payFor(k, Math.min(trainCap(g), avail), ship.d, ship.why);
       if (losesMoney(g, ship, v, reach)) continue; // a load that pays less than the trip costs: the train waits for better work, for free
-      const s = v / (reach + ship.d + 8) + (ship.why === 'order' || ship.feeds || ship.rush || ship.sea !== undefined ? 1e3 : 0);
+      // goods an order waits for: the load that fills it soonest (most units per square run, empty and loaded), whatever
+      // the good is worth; other loads: the best pay per square
+      const urgent = ship.why === 'order' || ship.feeds || ship.rush || ship.sea !== undefined;
+      const s = urgent ? 1e3 + Math.min(trainCap(g), avail) / (reach + ship.d + 8) : v / (reach + ship.d + 8);
       if (s > bs) { bs = s; best = { b, k, ship }; }
     }
   }
