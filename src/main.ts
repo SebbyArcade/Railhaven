@@ -86,7 +86,7 @@ const tools = new Tools(() => game);
 let renderer = new Renderer(game, tools);
 /** run the game rules for some seconds at once (screenshot checks and the bot) */
 function step(secs: number) { for (let k = 0; k < secs * 20; k++) { const dt = 0.05; game.s.t += dt; game.sys.tick(dt); tickProduction(game, dt); tickTowns(game, dt); tickTrains(game, dt); if (Math.floor(game.s.t / 5) !== Math.floor((game.s.t - dt) / 5)) checkStuck(game); if (+tickBreaks(game) + +tickEvents(game, dt)) breaksChanged(game); } }
-(window as any).railhaven = { get game() { return game; }, get renderer() { return renderer; }, get sound() { return sound; }, hear: () => hearScene(game, view), trainAt: (id: number) => { const t = game.s.trains.find(t => t.id === id); return t?.trail.length ? bodyPoint(game.net, t, 0) : null; }, tools, step, openCard: (c: Card | null) => openCard(c), breakRail: (i: number) => { const b = breakRail(game, i); breaksChanged(game); return b; } };
+(window as any).railhaven = { get game() { return game; }, get renderer() { return renderer; }, get sound() { return sound; }, hear: () => hearScene(game, view), trainAt: (id: number) => { const t = game.s.trains.find(t => t.id === id); return t?.trail.length ? bodyPoint(game.net, t, 0) : null; }, tools, step, openCard: (c: Card | null) => openCard(c), breakRail: (i: number) => { const b = breakRail(game, i); breaksChanged(game); return b; }, trackChanged: (sq: number[] = []) => { trackChanged(game); game.terrainDirty?.(sq); } };
 
 const view: View = { w: 0, h: 0 };
 let dpr = 1;

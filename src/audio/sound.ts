@@ -44,6 +44,8 @@ const LEAD = 0.06;
 /** Panning faster than this (screen pixels a second), or zooming, starts no new effect sounds: things rush in and out
  *  of hearing then, and a burst of sounds starting at once while the phone is busy drawing the map pops. */
 const PAN_CALM = 250;
+/** How much sound the phone keeps ready to play, in seconds (see unlock). */
+export const BUFFER_S = 0.15;
 /** overall level (the gentle level keeper adds less boost than the old hard one, so this is a bit higher) */
 const LOUD = 0.95;
 
@@ -55,7 +57,7 @@ export class Sound {
   private loops: Record<'sea' | 'wind' | 'rain', { g: GainNode; f: BiquadFilterNode } | null> = { sea: null, wind: null, rain: null };
   private next = new Map<string, number>();
   /** effect sounds playing right now, and the shared left-right placers (one per pan step instead of one per sound) */
-  private cam: { x: number; y: number; z: number; t: number } | null = null; private calmAt = 0;
+  private cam: { x: number; y: number; z: number; t: number } | null = null; private calmAt = 0; private lastAt = 0;
   voices = 0; private pluckWave?: PeriodicWave; private pans = new Map<number, StereoPannerNode>();
   private wasMoving = new Map<string, boolean>();
   private whistleAt = 0; private thunderAt = 0; private birdAt = 0;
@@ -67,8 +69,9 @@ export class Sound {
     if (!this.ac) {
       const AC = window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
       if (!AC) return;
-      // 'playback' asks for a bigger sound buffer: on phones a small one runs dry on a busy screen and crackles
-      let ac: AudioContext; try { ac = new AC({ latencyHint: 'playback' }); } catch { ac = new AC(); }
+      // a big sound buffer (0.15 s): on phones a small one runs dry while the game is busy (laying or removing rails,
+      // drawing a panned map) and ticks. 'playback' only gave 0.023 s; effects starting 0.15 s late is not noticed.
+      let ac: AudioContext; try { ac = new AC({ latencyHint: BUFFER_S }); } catch { try { ac = new AC({ latencyHint: 'playback' }); } catch { ac = new AC(); } }
       this.ac = ac;
       // phone speakers buzz on deep bass and crackle when sounds pile up: cut the lowest notes and keep the level safe
       // a phone speaker can't play low thumps: it rattles on them, which sounds like a pop. Two filters cut below ~220 Hz.
@@ -125,6 +128,9 @@ export class Sound {
     if (this.settings.music) this.music(now); else this.barAt = now + 0.3;
     this.ambience(sc, now);
     if (!this.settings.sfx) return;
+    // the game just stalled (it was busy laying rails, say): don't fire every overdue sound at once to catch up
+    if (this.lastAt && now - this.lastAt > 0.3) this.calmAt = Math.max(this.calmAt, now + 0.3);
+    this.lastAt = now;
     const c = sc.cam, was = this.cam;
     if (c) {
       if (was && now > was.t) { // how fast the view moves, in screen pixels a second
