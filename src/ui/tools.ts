@@ -78,6 +78,8 @@ export class Tools {
   scout: { path: number[]; boat: boolean; name: string } | null = null;
   /** Map mode: the circle a map would cover */
   mapPv: { x: number; y: number; r: number; near: string } | null = null;
+  /** when ✓ Buy was first tapped: a map is bought only on a second tap within MAP_ARM_MS (he bought one by accident) */
+  mapArm = 0;
   /** just built: the tool has closed, and for a few seconds the bar offers to carry on (🛤 Keep building) and ↶ Undo */
   again: Again | null = null;
 
@@ -111,10 +113,12 @@ export class Tools {
     return '';
   }
 
+  mapArmed() { return this.mapArm > 0 && performance.now() - this.mapArm < MAP_ARM_MS; }
+
   /** Open Map mode with the circle centred on (x, y): a town or dock on the railway. */
   openMap(x: number, y: number): string {
     const m = mapAt(this.g(), x, y); if (typeof m === 'string') return m;
-    this.mode = 'map'; this.cancel(); this.mapPv = m; return '';
+    this.mode = 'map'; this.cancel(); this.mapPv = m; this.mapArm = 0; return '';
   }
 
   cancel() { this.again = null; if (this.mode !== 'map') this.mapPv = null; this.scout = null; this.plan = null; this.dbl.clear(); this.removeAt = null; this.preview = null; this.previewErr = ''; this.dragOff = null; if (this.mode !== 'build') this.buildKind = null; }
@@ -342,7 +346,7 @@ export class Tools {
     }
     if (this.mode === 'remove') { this.removeAt = g.track.has(i) ? i : null; this.removeCut = this.removeAt === null ? '' : cutText(g, i); if (!g.track.has(i)) toast('No track here'); return true; }
     if (this.mode === 'train') return true;
-    if (this.mode === 'map') { const m = mapAt(g, i % n, (i / n) | 0); if (typeof m === 'string') toast(m); else this.mapPv = m; return true; }
+    if (this.mode === 'map') { const m = mapAt(g, i % n, (i / n) | 0); if (typeof m === 'string') toast(m); else { this.mapPv = m; this.mapArm = 0; } return true; }
     return false;
   }
 
@@ -416,7 +420,7 @@ export class Tools {
   }
 
   // ---- the confirm bar
-  bar(): { text: string; ok: string; can: boolean; turn?: boolean; near?: boolean } | null {
+  bar(): { text: string; ok: string; can: boolean; turn?: boolean; near?: boolean; sure?: boolean } | null {
     const g = this.g(), a = this.againOn();
     if (a && !this.card) return { text: a.text, ok: a.ok, can: true };
     if (this.mode === 'rail' && this.plan && this.plan.path.length === 1) return { text: isAnchor(g, this.plan.path[0]!) ? '🛤 Line starts here: drag from it, or tap where it goes' : '🛤 Line starts at the building: run it on to your track', ok: '✓ Build', can: false };
@@ -442,7 +446,7 @@ export class Tools {
     if (this.mode === 'map' && this.mapPv) {
       const m = this.mapPv, c = mapCost(g), have = new Set(rumours(g).map(f => f.y * g.world.n + f.x));
       const k = mapFinds(g, m.x, m.y, m.r).filter(f => !have.has(f.y * g.world.n + f.x)).length, sh = Math.round(mappedShare(g, m.x, m.y, m.r) * 100);
-      return { text: `🗺 Map of this circle near ${m.near} · 💬 Travellers say: ${talkOf(k)}${sh >= 5 ? ` · ✅ ${sh}% already mapped` : ''}`, ok: `✓ Buy · ${fmtMoney(c)}`, can: c <= g.s.money };
+      return { text: `🗺 Map of this circle near ${m.near} · 💬 Travellers say: ${talkOf(k)}${sh >= 5 ? ` · ✅ ${sh}% already mapped` : ''}`, ok: this.mapArmed() ? `⚠ Tap again to buy · ${fmtMoney(c)}` : `✓ Buy · ${fmtMoney(c)}`, can: c <= g.s.money, sure: this.mapArmed() };
     }
     if (this.mode === 'build' && this.preview && this.previewErr) {
       return { text: `⚠ ${this.previewErr}`, ok: '✓ Build', can: false, turn: true, near: !lockedText(g, this.preview.kind) };
@@ -497,6 +501,8 @@ export class Tools {
       const s = sendScout(g, this.scout.path, this.scout.boat); if (typeof s === 'string') { toast(s); return; }
       toast(s.boat ? '⛵ The boat sets sail' : '🚶 The scout sets off'); this.scout = null;
     } else if (this.mode === 'map' && this.mapPv) {
+      if (!this.mapArmed()) { this.mapArm = performance.now(); return; } // first tap: ask again (the artifact frame blocks confirm())
+      this.mapArm = 0;
       const r = buyMap(g, this.mapPv.x, this.mapPv.y); if (typeof r === 'string') { toast(r); return; }
       toast(r.finds.length ? `🗺 The map shows ${findsText(r.finds)}: each is a ? in the fog. Scout it (🔭) or lay track there` : `🗺 Nothing hides in this circle · ${fmtMoney(r.refund)} back. Try another spot`, 5000);
       this.mapPv = null; this.mode = 'pan';
@@ -508,6 +514,9 @@ export class Tools {
     }
   }
 }
+
+/** how long ✓ Buy waits for the second tap that buys a map */
+const MAP_ARM_MS = 4000;
 
 /** how long the "Keep building" offer shows after a build */
 const AGAIN_MS = 8000;
