@@ -4,7 +4,7 @@ import { isRevealed } from '../world/fog.ts';
 import type { Tools } from '../ui/tools.ts';
 import { CLAIM_R, poisOf, POI, POI_REACH, type Poi, scoutPlace, scoutStarts } from '../world/explore.ts';
 import { drawLandmark } from './landmarks.ts';
-import { rumours } from '../world/maps.ts';
+import { rumours, surveyedInFog } from '../world/maps.ts';
 
 /** Landmarks and wrecks that are out of the fog, scouts on their way, and in Scout mode the start rings and the route. */
 export function drawExplore(ctx: CanvasRenderingContext2D, g: Game, _t: Tools | undefined, tm: number, vis: (x: number, y: number) => boolean, z: number) {
@@ -110,13 +110,12 @@ export function drawMaps(ctx: CanvasRenderingContext2D, g: Game, t: Tools | unde
     ctx.fillStyle = '#ffd27a'; ctx.font = `800 ${Math.round(12 * s)}px system-ui`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('?', X, Y + 0.5 * s);
   }
   // iron and oil the landing crew surveyed on an island: their icon over the fog (no holes punched in it)
-  const n = g.world.n;
-  for (const d of g.s.sites) if (d.kind === 'dep' && !d.hidden && !isRevealed(g, d.y * n + d.x)) {
+  for (const d of surveyedInFog(g)) {
     const X = (d.x + 0.5) * TILE, Y = (d.y + 0.5) * TILE, r = 9 * s;
     ctx.fillStyle = 'rgba(40,30,18,.85)'; ctx.beginPath(); ctx.arc(X, Y, r, 0, 7); ctx.fill();
     ctx.strokeStyle = 'rgba(200,220,240,.8)'; ctx.lineWidth = 1.2 * s; ctx.stroke();
     ctx.font = `${Math.round(11 * s)}px system-ui`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText(d.res === 'oil' ? '🛢' : d.res === 'iron' ? '🧲' : '⛏', X, Y + 0.5 * s);
+    ctx.fillText(d.res === 'oil' ? '🛢' : '🧲', X, Y + 0.5 * s);
   }
   if (t?.mode !== 'map') return;
   // maps you already bought: green circles, so you don't pay twice for the same land

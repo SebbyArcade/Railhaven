@@ -1,4 +1,4 @@
-import type { Game } from '../state.ts';
+import type { Game, Site } from '../state.ts';
 import { buildingSquares, isLinked } from '../buildings/industries.ts';
 import { townLinked } from '../economy/towns.ts';
 import { isRevealed } from './fog.ts';
@@ -93,4 +93,13 @@ export function findsText(fs: Find[]): string {
   if (p) parts.push(`${p} settlement site${p > 1 ? 's' : ''}`);
   if (l) parts.push(`${l} landmark${l > 1 ? 's' : ''}`);
   return parts.join(', ');
+}
+
+/** Iron and oil a landing crew surveyed that still sit in the fog: the only things marked over the fog with their own
+ *  icon. Nothing else under the fog may show (he saw empty white rings over unexplored land: every coal and stone
+ *  deposit is never "hidden", so all of them were drawn, 2026-11-16). Iron and oil start hidden and only a landing
+ *  crew's survey (game.ts surveyLandings) uncovers them. */
+export function surveyedInFog(g: Game): Site[] {
+  const n = g.world.n;
+  return g.s.sites.filter(d => d.kind === 'dep' && (d.res === 'iron' || d.res === 'oil') && !d.hidden && !isRevealed(g, d.y * n + d.x));
 }

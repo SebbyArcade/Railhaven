@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import { loadFrom } from '../src/save/save.ts';
 import type { Game } from '../src/state.ts';
 import { buildingSquares } from '../src/buildings/industries.ts';
-import { mapAt, mappedShare, MAP_R } from '../src/world/maps.ts';
+import { mapAt, mappedShare, MAP_R, surveyedInFog } from '../src/world/maps.ts';
 import { trackChanged } from '../src/game.ts';
 
 const load = () => { const raw = fs.readFileSync('tests/saves/save-seb-2026-11-16d.json', 'utf8'); return loadFrom({ getItem: () => raw, setItem: () => {} } as unknown as Storage)! as Game; };
@@ -37,5 +37,17 @@ describe('area maps and island surveys', () => {
     const shown = deps.filter(s => !s.hidden);
     expect(shown.length).toBeGreaterThan(0); // the crew found them
     expect([...g.s.fog]).toEqual([...fog0]); // and left the fog as it was
+  });
+
+  // his bug report 10 (2026-11-16): empty white rings over unexplored fog. Every coal and stone deposit in the fog was
+  // drawn as a ringed mark, giving away what the fog hides
+  it('only surveyed iron and oil are marked over the fog, never other deposits', () => {
+    const raw = fs.readFileSync('tests/saves/save-seb-2026-11-16e.json', 'utf8');
+    const g = loadFrom({ getItem: () => raw, setItem: () => {} } as unknown as Storage)! as Game, n = g.world.n;
+    const fogged = g.s.sites.filter(s => s.kind === 'dep' && !s.hidden && !(g.s.fog[(s.y * n + s.x) >> 3]! >> ((s.y * n + s.x) & 7) & 1));
+    expect(fogged.some(s => s.res !== 'iron' && s.res !== 'oil')).toBe(true); // coal and stone sit in his fog
+    const marks = surveyedInFog(g);
+    expect(marks.every(s => s.res === 'iron' || s.res === 'oil')).toBe(true);
+    expect(marks.every(s => !s.hidden)).toBe(true);
   });
 });
