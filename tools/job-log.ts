@@ -6,6 +6,7 @@ import type { Game } from '../src/state.ts';
 import { tickProduction } from '../src/economy/production.ts';
 import { tickTowns } from '../src/economy/towns.ts';
 import { headSquare, tickTrains } from '../src/economy/dispatch.ts';
+import { bodyPoint } from '../src/trains/train.ts';
 import { bldDist, shipPlan } from '../src/economy/shipping.ts';
 
 const [file = '', secs = '300'] = process.argv.slice(2);
@@ -18,7 +19,7 @@ const e0 = g.s.earned ?? 0;
 const got0 = g.s.sites.reduce((a, t) => a + (Object.values(t.got ?? {}) as number[]).reduce((x, y) => x + y, 0), 0);
 const drop = new Map<number, unknown>();
 let hauled = 0, runAll = 0, planned = 0;
-const ran = new Map<number, number>();
+const ran = new Map<number, number>(), pos = new Map<number, { x: number; y: number }>();
 for (let s = 0; s < +secs * 20; s++) {
   const before = new Map(g.s.trains.map(t => [t.id, t.job ? `${t.job.src}` : '']));
   const at = new Map(g.s.trains.map(t => [t.id, headSquare(g, t)]));
@@ -35,7 +36,8 @@ for (let s = 0; s < +secs * 20; s++) {
   }
   for (const t of g.s.trains) { // squares really run with the load, against the shortest rail way
     const j = t.job;
-    if (j?.phase === 'toDrop') ran.set(t.id, (ran.get(t.id) ?? 0) + Math.abs(t.v) * dt / 32);
+    const p = bodyPoint(g.net, t, 0), q = pos.get(t.id); pos.set(t.id, p);
+    if (j?.phase === 'toDrop' && q) ran.set(t.id, (ran.get(t.id) ?? 0) + Math.hypot(p.x - q.x, p.y - q.y) / 32);
     else if (ran.has(t.id)) { const r = ran.get(t.id)!, c = drop.get(t.id) as { d: number } | undefined; ran.delete(t.id); if (c && r > c.d * 1.4 + 3) console.log(`${(g.s.t).toFixed(0)} train ${t.id} ran ${r.toFixed(0)} sq loaded for a ${c.d}-sq trip`); runAll += r; }
   }
   for (const t of g.s.trains) { // loaded: where the load really goes, and how far
