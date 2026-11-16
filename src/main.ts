@@ -14,6 +14,7 @@ import { addSlot, copySlot, deleteSlot, openSlot, readIndex, renameSlot, touchAc
 import { homeHtml, isHomePage } from './ui/home.ts';
 import { mapThumb } from './render/thumb.ts';
 import { canInstall, installApp, isInstalled, servedOnline, setupPwa } from './ui/pwa.ts';
+import { canFull, isFull, showFullBtn, toggleFull } from './ui/fullscreen.ts';
 import { checkMedals, loadProfile, saveProfile } from './progress/achievements.ts';
 import { lookOpen, PAINTS, setLooks, THEMES } from './render/looks.ts';
 import { xpOf } from './progress/achievements.ts';
@@ -138,7 +139,7 @@ function renderCard() {
   if (tools.card?.kind === 'game' && cardEl.contains(document.activeElement) && document.activeElement?.tagName === 'INPUT') return; // keep a name or map number being typed
   const home = tools.card?.kind === 'game' && isHomePage(tools.card.page);
   cardEl.classList.toggle('home', home);
-  const html = tools.card && (tools.card.kind === 'game' ? (home ? homeHtml(tools.card.page, readIndex(localStorage), tools.card.id, delArmed?.id === tools.card.id && performance.now() < delArmed.until, profile, game, { online: servedOnline(), installed: isInstalled() }) : gameHtml(tools.card.page === 'settings' ? '' : tools.card.page, !!oldSave(), importReport, myCode, tools.card.page === 'stats' ? gameReport(game) : null, sound.settings, { online: servedOnline(), installed: isInstalled(), offer: canInstall() }, !game.s.tipsOff)) : cardHtml(game, tools.card, tools.view));
+  const html = tools.card && (tools.card.kind === 'game' ? (home ? homeHtml(tools.card.page, readIndex(localStorage), tools.card.id, delArmed?.id === tools.card.id && performance.now() < delArmed.until, profile, game, { online: servedOnline(), installed: isInstalled() }) : gameHtml(tools.card.page === 'settings' ? '' : tools.card.page, !!oldSave(), importReport, myCode, tools.card.page === 'stats' ? gameReport(game) : null, sound.settings, { online: servedOnline(), installed: isInstalled(), offer: canInstall(), full: isFull(), canFull: canFull() }, !game.s.tipsOff)) : cardHtml(game, tools.card, tools.view));
   if (!html) { tools.card = null; cardEl.style.display = 'none'; return; }
   cardEl.innerHTML = `<button class="x" data-act="close">✕</button>${html}`; cardEl.style.display = 'block';
   if (performance.now() - newArmed < 3000) { const nb = cardEl.querySelector<HTMLButtonElement>('button[data-act="newmap"]'); if (nb) { nb.classList.add('sure'); nb.textContent = '⚠ Tap again to start a new map'; } }
@@ -216,7 +217,7 @@ cardEl.onclick = e => {
   if (b.dataset.act === 'snd') { const k = b.dataset.k as 'music' | 'sfx'; sound.unlock(); sound.set(k, !sound.settings[k]); if (sound.settings[k]) sound.set('muted', false); showMute(); renderCard(); return; }
   if (b.dataset.act === 'unmute') { sound.unlock(); sound.set('muted', false); showMute(); renderCard(); return; }
   if (b.dataset.act === 'vol') { const k = b.dataset.k as 'musicVol' | 'sfxVol'; sound.unlock(); sound.volume(k, +b.dataset.v!); showMute(); renderCard(); return; }
-  if (b.dataset.act === 'full') { const d = document.documentElement; if (document.fullscreenElement) void document.exitFullscreen?.(); else d.requestFullscreen?.().catch(() => toast('Full screen works when the game is opened in Chrome')); return; }
+  if (b.dataset.act === 'full') { toggleFull(why => toast(why, 4000)); return; }
   if (b.dataset.act === 'copycode') { void saveCode(game).then(async c => { myCode = c; renderCard(); try { await navigator.clipboard.writeText(c); toast('📋 Code copied: paste it in 🏠 Home → ⚙ Settings on the other side'); } catch { toast('Press on the code below, Select all, then Copy'); } }); return; }
   if (b.dataset.act === 'copystats') { const t = cardEl.querySelector<HTMLTextAreaElement>('#stats'); if (t) { t.value = gameReport(game); void navigator.clipboard.writeText(t.value).then(() => toast('📋 Report copied: paste it in the chat'), () => { t.select(); toast('Press on the report, Select all, then Copy'); }); } return; }
   if (b.dataset.act === 'savefile') { void saveCode(game).then(c => saveFile(c)); return; }
@@ -597,6 +598,11 @@ const sound = new Sound(); let soundT = 0, cueOf: Game | null = null, memo: CueM
 const muteBtn = $('mute');
 const showMute = () => { const m = sound.settings.muted; muteBtn.textContent = m ? '🔇' : '🔊'; muteBtn.classList.toggle('off', m); muteBtn.title = m ? 'Sound off: tap to turn it on' : 'Tap to silence the game'; };
 showMute();
+const fullBtn = $('full');
+const fullChanged = () => { showFullBtn(fullBtn); if (tools.card?.kind === 'game') renderCard(); };
+showFullBtn(fullBtn);
+fullBtn.addEventListener('click', e => { e.stopPropagation(); toggleFull(why => toast(why, 4000)); });
+for (const ev of ['fullscreenchange', 'webkitfullscreenchange']) document.addEventListener(ev, fullChanged);
 muteBtn.addEventListener('click', e => { e.stopPropagation(); sound.unlock(); sound.set('muted', !sound.settings.muted); showMute(); toast(sound.settings.muted ? '🔇 Sound off · tap again to hear the game' : '🔊 Sound on · volume in 🏠 Home → ⚙ Settings', 2200); if (tools.card?.kind === 'game') renderCard(); });
 for (const ev of ['pointerdown', 'touchstart', 'keydown']) window.addEventListener(ev, () => sound.unlock(), { capture: true, passive: true });
 let last0 = 0, last = performance.now(), saveT = 0, lastMenu = 0, lastCard = 0, newsAt = 0;

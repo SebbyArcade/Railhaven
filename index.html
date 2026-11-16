@@ -38,6 +38,10 @@
   #card .vb.on i { background: linear-gradient(#ffd27a, #e8a33c); border-color: #ffd27a; }
   #mute { position: fixed; top: calc(max(8px, env(safe-area-inset-top)) + 38px); right: 8px; width: 34px; height: 30px; padding: 0; background: rgba(28,22,16,.88); border: 1px solid #6b5132; border-radius: 14px; font-size: 15px; line-height: 28px; z-index: 5; }
   #mute.off { border-color: #e0664f; background: rgba(90,42,34,.9); }
+  /* ⛶ full screen: under 🔊 on phones; on wide screens in the top row, clear of the side card */
+  #full { position: fixed; top: calc(max(8px, env(safe-area-inset-top)) + 72px); right: 8px; width: 34px; height: 30px; padding: 0; background: rgba(28,22,16,.88); color: #ffe2a8; border: 1px solid #6b5132; border-radius: 14px; display: flex; align-items: center; justify-content: center; z-index: 5; }
+  #full.on { border-color: #e8a33c; color: #ffd27a; } #full.blocked { opacity: .55; }
+  @media (min-width: 700px) { #full { top: max(8px, env(safe-area-inset-top)); } }
   #undo { position: fixed; right: 12px; bottom: calc(max(10px, env(safe-area-inset-bottom)) + 166px); display: none; background: #3a2c1c; color: #ffe9c4; border: 2px solid #c99a5b; border-radius: 12px; padding: 8px 12px; font-size: 14px; font-weight: 700; }
   #confirm button { border-radius: 10px; padding: 9px 12px; font-size: 14px; font-weight: 700; border: 0; }
   #ok { background: #4caf50; color: #fff; } #ok:disabled { background: #555; color: #aaa; }
@@ -136,6 +140,7 @@
 <canvas id="c"></canvas>
 <div id="hud"></div>
 <button id="mute" aria-label="Sound on or off">🔊</button>
+<button id="full" aria-label="Full screen"></button>
 <div id="paused"><div>⏸ Paused while you were away<br><small style="font-weight:500">Tap anywhere to carry on</small></div></div>
 <div id="mission"></div>
 <div id="tutPtr"></div>

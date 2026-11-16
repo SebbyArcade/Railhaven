@@ -10,7 +10,7 @@ function volRow(label: string, k: 'musicVol' | 'sfxVol', on: number): string {
   return `<div class="vol"><span>${label}</span><div class="vbars">${bars}</div></div>`;
 }
 
-export function gameHtml(page: string | undefined, hasOld: boolean, report: string[] | null, code: string | null = null, stats: string | null = null, snd: SoundSettings = { music: true, sfx: true, musicVol: 3, sfxVol: 3, muted: false }, app = { online: false, installed: false, offer: false }, tips = true): string {
+export function gameHtml(page: string | undefined, hasOld: boolean, report: string[] | null, code: string | null = null, stats: string | null = null, snd: SoundSettings = { music: true, sfx: true, musicVol: 3, sfxVol: 3, muted: false }, app: { online: boolean; installed: boolean; offer: boolean; full?: boolean; canFull?: boolean } = { online: false, installed: false, offer: false }, tips = true): string {
   const back = `<button class="act back" data-act="page" data-page="settings">‹ Back</button>`;
   if (page === 'report' && report) {
     return `<div class="head"><b class="big">🚂</b><div><h2>Your game is here</h2><span class="chip2">from the old Railhaven</span></div></div>`
@@ -53,6 +53,6 @@ export function gameHtml(page: string | undefined, hasOld: boolean, report: stri
     + `<div class="tiles"><button class="tile${tips ? ' on' : ''}" data-act="tips">💡 Tips<small>${tips ? 'on · help when money runs low' : 'off · tap to turn on'}</small></button><button class="tile" data-act="bugreport">🐞 Report a bug<small>saves your game and a report to a file</small></button></div>`
     + volRow('🎵 Music volume', 'musicVol', snd.music ? snd.musicVol : 0) + volRow('🔊 Sounds volume', 'sfxVol', snd.sfx ? snd.sfxVol : 0)
     + (app.installed ? '' : `<button class="act" data-act="page" data-page="app">📲 Install the game<small style="display:inline;margin-left:6px">home screen icon, full screen, plays offline</small></button>`)
-    + `<button class="act alt" data-act="full">⛶ Full screen</button>`
+    + `<button class="act alt" data-act="full">${app.full ? '⛶ Leave full screen' : '⛶ Full screen'}${app.full || app.canFull !== false ? '' : '<small style="display:inline;margin-left:6px">needs Chrome: the Claude app blocks it</small>'}</button>`
     + `<button class="act back" data-act="page" data-page="">‹ Back</button>`;
 }
