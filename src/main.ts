@@ -282,7 +282,7 @@ cardEl.onclick = e => {
     const why = toggleRush(game, to, k); toast(why || (on ? '⭐ Rush stopped' : `⭐ Rushing ${GOODS[k].name.toLowerCase()}: its makers send here first`)); renderCard(); return;
   }
   if (b.dataset.act === 'shipup') { const k = b.dataset.k as ShipUpKey, why = buyShipUp(game, k); toast(why || `${SHIP_UP[k].icon} ${SHIP_UP[k].name}: ${SHIP_UP[k].text(shipUpLvl(game, k))}`); renderCard(); return; }
-  if (b.dataset.act === 'fleet') { const k = b.dataset.k as FleetKey, why = buyFleet(game, k); toast(why || `${FLEET[k].icon} ${FLEET[k].name}: ${FLEET[k].text(fleetLvl(game, k))}`); renderCard(); return; }
+  if (b.dataset.act === 'fleet') { const k = b.dataset.k as FleetKey, isl = b.dataset.isl !== undefined ? +b.dataset.isl : game.world.home, why = buyFleet(game, k, isl); toast(why || `${FLEET[k].icon} ${FLEET[k].name}: ${FLEET[k].text(fleetLvl(game, k, isl))}`); renderCard(); return; }
   if (b.dataset.act === 'found') {
     const p = game.s.sites.find(s => s.id === +b.dataset.id!)!, name = p.name;
     const why = foundTown(game, p);
@@ -476,14 +476,16 @@ function renderMenu() {
   // deposits found far out (iron, oil, the far-sea chains) show once one is uncovered; far-sea factories once their expedition went
   const far = (k: IndustryKind) => !!info(k).ring && !isFactory(k) || k === 'iron' || k === 'oil';
   const kinds = (Object.keys(INDUSTRIES) as IndustryKind[]).filter(k => far(k) ? game.s.sites.some(s => s.kind === 'dep' && s.res === k && !s.hidden) : (info(k).ring ?? 0) <= (game.s.rings ?? 0));
+  // prices are per island: the island in the middle of the screen (Ashford Isle over the sea)
+  const cam = game.s.camera, ci = Math.floor(cam.y / 32) * game.world.n + Math.floor(cam.x / 32), menuIsl = (game.world.islandOf[ci] ?? -1) >= 0 ? game.world.islandOf[ci]! : game.world.home;
   const tile = (k: IndustryKind) => {
-    const d = info(k), p = priceOf(game, k), lock = lockedText(game, k);
+    const d = info(k), p = priceOf(game, k, menuIsl), lock = lockedText(game, k);
     // factories show what goes in and what comes out, as icons: 🪵 → planks
     const recipe = isFactory(k) ? `<span class="rcp" title="${inputsOf(k).map(g => GOODS[g].name).join(' + ')} → ${GOODS[d.makes].name}">${inputsOf(k).map(g => GOODS[g].icon).join('+')}→${GOODS[d.makes].icon}</span>` : '';
     return `<button data-k="${k}" class="${tools.buildKind === k ? 'on' : ''}${lock ? ' locked' : ''}"><b>${d.icon}</b>${d.name}<small>${lock ? (d.ring && d.ring > (game.s.rings ?? 0) ? '🔒 🗺 Expedition' : '🔒 Level ' + d.unlock) : fmtMoney(p)}</small>${recipe}</button>`;
   };
   const r = recommendedBuild(game);
-  menu.innerHTML = (r ? `<button data-k="${r.k}" class="rec"><b>${info(r.k).icon}</b><span style="font-size:11px;font-weight:800;color:#ffd24a;letter-spacing:.05em">⭐ RECOMMENDED NEXT BUILD${r.mission ? ' · YOUR MISSION' : ''}</span><br>${info(r.k).name} · ${fmtMoney(priceOf(game, r.k))}<small>${r.why}</small></button>` : '')
+  menu.innerHTML = (r ? `<button data-k="${r.k}" class="rec"><b>${info(r.k).icon}</b><span style="font-size:11px;font-weight:800;color:#ffd24a;letter-spacing:.05em">⭐ RECOMMENDED NEXT BUILD${r.mission ? ' · YOUR MISSION' : ''}</span><br>${info(r.k).name} · ${fmtMoney(priceOf(game, r.k, menuIsl))}<small>${r.why}</small></button>` : '')
     + kinds.filter(k => !isFactory(k) && k !== 'dock').map(tile).join('') + `<div class="mhead">🏭 Factories: turn raw goods into products</div>` + kinds.filter(isFactory).map(tile).join('')
     + `<div class="mhead">⚓ Sea: docks reach other islands</div>` + tile('dock');
 }

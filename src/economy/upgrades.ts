@@ -1,4 +1,5 @@
 import type { Game } from '../state.ts';
+import type { Train } from '../trains/train.ts';
 import { type Building, GOODS, type Good, growsTracks, INDUSTRIES, isFactory, stripError, tracksOf, yardSquares } from '../buildings/industries.ts';
 import { type Dest, siteOf, bldOf } from './shipping.ts';
 import { orderOf } from './towns.ts';
@@ -88,7 +89,7 @@ export function removeBuilding(g: Game, b: Building): string {
   return '';
 }
 
-// ---- engine shed fleet upgrades (the whole fleet; the old game's prices)
+// ---- fleet upgrades, bought separately for each island (trains never cross the sea by themselves)
 
 export type FleetKey = 'wag' | 'eng' | 'rep';
 export const FLEET: Record<FleetKey, { icon: string; name: string; what: string; lv: number[]; price: number[]; text: (l: number) => string }> = {
@@ -96,20 +97,46 @@ export const FLEET: Record<FleetKey, { icon: string; name: string; what: string;
   eng: { icon: '⚙', name: 'Stronger engines', what: 'every train runs faster', lv: [1, 1.25, 1.5, 1.8], price: [6000, 15000, 37500], text: l => `${['steam', 'fast steam', 'diesel', 'express diesel'][l]} · ×${[1, 1.25, 1.5, 1.8][l]} speed` },
   rep: { icon: '🔧', name: 'Repair works', what: 'well-kept trains cost less to run', lv: [1, 0.75, 0.55], price: [7500, 22500], text: l => `running cost −${[0, 25, 45][l]}%` },
 };
-export const fleetLvl = (g: Game, k: FleetKey) => g.s.fleet?.[k] ?? 0;
-export const fleetMulOf = (g: Game, k: FleetKey) => FLEET[k].lv[fleetLvl(g, k)]!;
-/** How many units one train carries. */
-/** Longer trains (Railway level 7): +20% cargo on every train. */
-export const trainCap = (g: Game) => Math.round(20 * fleetMulOf(g, 'wag') * ((g.s.rlv ?? 0) >= 7 ? 1.2 : 1));
-/** A train sets off when this many are ready (three quarters of a load). */
-export const minLoad = (g: Game) => Math.round(trainCap(g) * 0.75);
+/** An island's upgrade level (Ashford Isle when no island is given). */
+export const fleetLvl = (g: Game, k: FleetKey, isl = g.world.home) => g.s.fleetI?.[isl]?.[k] ?? 0;
+export const fleetMulOf = (g: Game, k: FleetKey, isl = g.world.home) => FLEET[k].lv[fleetLvl(g, k, isl)]!;
 
-export function buyFleet(g: Game, k: FleetKey): string {
-  const l = fleetLvl(g, k), p = FLEET[k].price[l];
+/** The island a train works on: where its engine stands, or the last land it stood on while it crosses a bridge. */
+const lastIsl = new WeakMap<Train, number>();
+export function fleetIsl(g: Game, t: Train): number {
+  const head = t.trail.at(-1), sq = head ? g.net.pieces[head.piece]?.squares.at(-1) : undefined;
+  const k = sq === undefined ? -1 : g.world.islandOf[sq]!;
+  if (k >= 0) { lastIsl.set(t, k); return k; }
+  return lastIsl.get(t) ?? g.world.home;
+}
+
+/** How many units one train carries on an island. Longer trains (Railway level 7): +20% cargo on every train. */
+export const trainCap = (g: Game, isl = g.world.home) => Math.round(20 * fleetMulOf(g, 'wag', isl) * ((g.s.rlv ?? 0) >= 7 ? 1.2 : 1));
+/** What this train carries (its island's wagons). */
+export const capOf = (g: Game, t: Train) => trainCap(g, fleetIsl(g, t));
+/** A train sets off when this many are ready (three quarters of a load). */
+export const minLoad = (g: Game, isl = g.world.home) => Math.round(trainCap(g, isl) * 0.75);
+
+export function buyFleet(g: Game, k: FleetKey, isl = g.world.home): string {
+  const l = fleetLvl(g, k, isl), p = FLEET[k].price[l];
   if (p === undefined) return 'Already at the top level';
   if (g.s.money < p) return `Need $${(p - Math.floor(g.s.money)).toLocaleString('en-US')} more`;
-  g.s.money -= p; (g.s.fleet ??= {})[k] = l + 1;
+  g.s.money -= p; ((g.s.fleetI ??= {})[isl] ??= {})[k] = l + 1;
   return '';
+}
+
+/** Islands with their own upgrades to show: Ashford Isle first, then every island already upgraded or with trains on it. */
+export function fleetIsls(g: Game): number[] {
+  const s = new Set<number>([g.world.home, ...Object.keys(g.s.fleetI ?? {}).map(Number)]);
+  for (const t of g.s.trains) s.add(fleetIsl(g, t));
+  return [...s].filter(k => k >= 0);
+}
+
+/** Saves from before upgrades were per island: what was bought stays on every island already reached. */
+export function fleetPerIsland(g: Game, reached: Iterable<number>) {
+  const old = g.s.fleet; if (!old) return;
+  for (const k of reached) { const cur = ((g.s.fleetI ??= {})[k] ??= {}); for (const f of Object.keys(old) as FleetKey[]) cur[f] = Math.max(cur[f] ?? 0, old[f] ?? 0); }
+  g.s.fleet = undefined;
 }
 
 // ---- rush a good

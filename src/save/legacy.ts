@@ -1,7 +1,7 @@
 import { hasProject, PARK_PRICE, type ParkKind, parkFree, parkSpot, parksOf, projectOf } from '../buildings/parks.ts';
 import type { Game, GameState, Resource, Site } from '../state.ts';
 import { loadGame, newGame, trackChanged } from '../game.ts';
-import { build, growsTracks, stripError, capOf, type Building, footprint, INDUSTRIES, type IndustryKind, isFactory, isLinked, placeError, placementsAt, priceOf, buildingSquares, yardSquares, yardLen, type Good } from '../buildings/industries.ts';
+import { build, growsTracks, stripError, capOf, type Building, footprint, INDUSTRIES, type IndustryKind, isFactory, isLinked, placeError, placementsAt, priceOf, islandAtYard, buildingSquares, yardSquares, yardLen, type Good } from '../buildings/industries.ts';
 import { stationLinkError } from '../buildings/stations.ts';
 import { orderOf, sizeCap } from '../economy/towns.ts';
 import { railLevel } from '../economy/dispatch.ts';
@@ -143,8 +143,8 @@ export function importLegacy(o: any): ImportResult {
     }
     const value = ob.paid ?? INDUSTRIES[kind].price;
     if (!best) { refund += value; missed.push(INDUSTRIES[kind].name); continue; }
-    g.s.money += priceOf(g, kind);
-    const b = build(g, best); if (typeof b === 'string') { g.s.money -= priceOf(g, kind); refund += value; missed.push(INDUSTRIES[kind].name); continue; }
+    const pay = priceOf(g, kind, islandAtYard(g, best)); g.s.money += pay;
+    const b = build(g, best); if (typeof b === 'string') { g.s.money -= pay; refund += value; missed.push(INDUSTRIES[kind].name); continue; }
     b.paid = value; b.lvl = Math.max(1, Math.min(3, ob.lvl ?? 1)); b.stock = Math.min(capOf(b), Math.max(0, ob.stock ?? 0));
     if (ob.inp && isFactory(kind)) for (const [k, v] of Object.entries(ob.inp)) (b.inbuf ??= {})[k as Good] = Math.min(30 + 20 * b.lvl, v as number);
     if (kind === 'dock' && ob.fish) b.fish = Math.min(3, ob.fish);

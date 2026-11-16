@@ -5,7 +5,7 @@ import { outputOf, bestPlacement, build, type Building, info, isFactory, isLinke
 import { buildPlan, extendPlan, startPlan } from '../src/track/paint.ts';
 import { squareCost } from '../src/track/rules.ts';
 import { tickProduction } from '../src/economy/production.ts';
-import { foundTown, FOUND_PRICE, orderDone, orderOf, tickTowns, townLinked, upgradePrice, upgradeTown, stepOf } from '../src/economy/towns.ts';
+import { foundTown, foundPrice, orderDone, orderOf, tickTowns, townLinked, upgradePrice, upgradeTown, stepOf } from '../src/economy/towns.ts';
 import { buyTrain, tickTrains, trainPrice } from '../src/economy/dispatch.ts';
 import { checkStuck } from '../src/economy/nofail.ts';
 import { buyFleet, FLEET, fleetLvl, levelPrice, upgradeBuilding } from '../src/economy/upgrades.ts';
@@ -121,9 +121,9 @@ function think() {
     const towns = g.s.sites.filter(t => t.kind === 'town' && !townLinked(g, t)).sort((a, b) => Math.hypot(a.x - ash.x, a.y - ash.y) - Math.hypot(b.x - ash.x, b.y - ash.y));
     for (const t of towns.slice(0, 4)) if (Math.hypot(t.x - ash.x, t.y - ash.y) < 40 && linkTown(t)) { log.push(`  linked ${t.name}`); return; } // the nearest one it can reach (some sit behind mountains or water)
   }
-  if (g.s.money > FOUND_PRICE + 5000) {
+  {
     const p = g.s.sites.find(s => s.kind === 'plot' && Math.hypot(s.x - ash.x, s.y - ash.y) < 30);
-    if (p && !foundTown(g, p)) { log.push(`  founded ${p.name}`); return; }
+    if (p && g.s.money > foundPrice(g, p) + 5000 && !foundTown(g, p)) { log.push(`  founded ${p.name}`); return; }
   }
   // upgrades with spare money
   if (g.s.money > 15000) {
