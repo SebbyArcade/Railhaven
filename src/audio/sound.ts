@@ -44,8 +44,6 @@ const LEAD = 0.06;
 /** Panning faster than this (screen pixels a second), or zooming, starts no new effect sounds: things rush in and out
  *  of hearing then, and a burst of sounds starting at once while the phone is busy drawing the map pops. */
 const PAN_CALM = 250;
-/** How much sound the phone keeps ready to play, in seconds (see unlock). */
-export const BUFFER_S = 0.15;
 /** overall level (the gentle level keeper adds less boost than the old hard one, so this is a bit higher) */
 const LOUD = 0.95;
 
@@ -69,9 +67,9 @@ export class Sound {
     if (!this.ac) {
       const AC = window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
       if (!AC) return;
-      // a big sound buffer (0.15 s): on phones a small one runs dry while the game is busy (laying or removing rails,
-      // drawing a panned map) and ticks. 'playback' only gave 0.023 s; effects starting 0.15 s late is not noticed.
-      let ac: AudioContext; try { ac = new AC({ latencyHint: BUFFER_S }); } catch { try { ac = new AC({ latencyHint: 'playback' }); } catch { ac = new AC(); } }
+      // 'playback' asks for a roomier sound buffer than the default. A fixed size (0.15 s, PR #144) made phones
+      // crackle all the time: Android plays sound in its own block size, and an odd buffer size doesn't fit it.
+      let ac: AudioContext; try { ac = new AC({ latencyHint: 'playback' }); } catch { ac = new AC(); }
       this.ac = ac;
       // phone speakers buzz on deep bass and crackle when sounds pile up: cut the lowest notes and keep the level safe
       // a phone speaker can't play low thumps: it rattles on them, which sounds like a pop. Two filters cut below ~220 Hz.
