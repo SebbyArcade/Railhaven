@@ -16,7 +16,7 @@ import { isRev } from '../track/route.ts';
 import { GRAND_LOAD, hasGrandStation, payMul, rewardMul } from '../buildings/parks.ts';
 import { BRIDGE_UPKEEP, bridgeSquares } from '../track/rules.ts';
 import { tickTrade, tradeDelivered, tradeRoom } from './trade.ts';
-import { deliverToTown, orderDone, reward, sizeName, stepOf } from './towns.ts';
+import { deliverToTown, orderDone, reward, sizeName, stepOf, townRoom } from './towns.ts';
 
 export const LOAD_TIME = 4;
 /** Loading or unloading time for this train: 🚉 the Grand Station makes it 25% shorter on Ashford Isle. */
@@ -208,11 +208,63 @@ function divert(g: Game, t: Train, plan: Plan) {
 
 /** Send a loaded train to where it unloads; if that place fell off the railway, to the nearest town that is still on it. */
 function sendLoaded(g: Game, t: Train) {
-  const j = t.job!, sq = destSquares(g, j.to);
+  const j = t.job!;
+  if (j.via) { if (siteOf(g, j.via.to.id) && g.sys.sendToArea(t, destSquares(g, j.via.to))) return; delete j.via; } // the stop on the way first
+  const sq = destSquares(g, j.to);
   if (!(j.to.kind === 'bld' && bldOf(g, j.to.id)?.closed) && sq.length && g.sys.sendToArea(t, sq)) return; // ⛔ a closed factory: take it to a town instead
   const to = nearestTown(g, t);
   if (to && g.sys.sendToArea(t, destSquares(g, to))) j.to = to;
   else j.timer = 5; // no way anywhere yet: wait and try again
+}
+
+/** A stop on the way may add at most this many squares (or this share of the trip, if more). */
+export const VIA_EXTRA = 4, VIA_SHARE = 0.2;
+
+/**
+ * Just loaded: a town on the way to the destination whose open order still waits for this good takes what it needs
+ * first, as long as the stop adds little to the trip. The order nearest the source wins.
+ */
+function onTheWay(g: Game, t: Train, src: Building): { to: { kind: 'town'; id: number }; n: number; d: number } | null {
+  const j = t.job!, c = t.cargo!, k = c.good as Good, n = g.world.n;
+  const toSq = destSquares(g, j.to); if (!toSq.length) return null;
+  const fromSrc = bldDist(g, src), toDest = railDist(g, `${j.to.kind}${j.to.id}`, toSq), direct = c.d;
+  const way = waysOf(g, t);
+  let best: { to: { kind: 'town'; id: number }; n: number; d: number } | null = null, bx = Infinity;
+  for (const s of g.s.sites) {
+    if (s.kind !== 'town' || (j.to.kind === 'town' && s.id === j.to.id)) continue;
+    const h = hallOf(g.track, n, s, g.world.terr); if (!h) continue;
+    const q = h.squares[1]!, a = fromSrc[q]!, b = toDest[q]!; if (a < 0 || b < 0 || a >= direct) continue;
+    const extra = a + b - direct; if (extra > Math.max(VIA_EXTRA, direct * VIA_SHARE)) continue;
+    const room = townRoom(g, s, k).order + tradeRoom(g, s, k) - (way.get(`town${s.id}`) ?? 0);
+    const take = Math.min(c.n, Math.floor(room)); if (take < 5) continue;
+    if (extra < bx || (extra === bx && a < (best?.d ?? Infinity))) { bx = extra; best = { to: { kind: 'town', id: s.id }, n: take, d: Math.max(8, a) }; }
+  }
+  if (best && best.n >= c.n) { j.to = best.to; c.d = best.d; return null; } // it takes the whole load: that is the trip
+  return best;
+}
+
+/** Units of this train's good already heading to each town by other trains. */
+function waysOf(g: Game, t: Train): Map<string, number> {
+  const m = new Map<string, number>(), k = t.job!.good;
+  for (const o of g.s.trains) {
+    const j = o.job; if (!j || o === t || j.good !== k) continue;
+    const n = o.cargo?.n ?? trainCap(g), v = j.via ? Math.min(n, j.via.n) : 0;
+    if (j.to.kind === 'town') m.set(`town${j.to.id}`, (m.get(`town${j.to.id}`) ?? 0) + n - v);
+    if (j.via) m.set(`town${j.via.to.id}`, (m.get(`town${j.via.to.id}`) ?? 0) + v);
+  }
+  return m;
+}
+
+/** At the stop on the way: fill its order with part of the load, then carry on with the rest. */
+function dropOnTheWay(g: Game, t: Train) {
+  const j = t.job!, c = t.cargo!, v = j.via!; delete j.via;
+  const town = siteOf(g, v.to.id);
+  if (town) {
+    const k = c.good as Good, room = townRoom(g, town, k).order + tradeRoom(g, town, k), n = Math.min(c.n, v.n, Math.floor(room));
+    if (n > 0) { townDelivery(g, t, town, v.to, k, n, v.d); c.n -= n; }
+  }
+  if (c.n <= 0) { t.cargo = undefined; endJob(t); return; }
+  j.phase = 'toDrop'; sendLoaded(g, t);
 }
 
 /** Railway level unlocks, in plain words (index = level). */
@@ -244,11 +296,16 @@ function unload(g: Game, t: Train) {
     if (c.n > 0) { j.to = nearestTown(g, t) ?? j.to; j.phase = 'toDrop'; sendLoaded(g, t); return; }
     t.cargo = undefined; endJob(t); return;
   }
-  const town = siteOf(g, j.to.id)!;
-  const p = deliverToTown(g, town, k, c.n, tradeRoom(g, town, k));
-  let v = (payFor(k, p.order + p.trade, c.d, 'order') + payFor(k, p.steady, c.d, 'steady') + payFor(k, p.surplus, c.d, 'extra')) * payMul(g, town); // 🏛 town projects pay more
-  v -= rushDelivered(g, j.to, k, p.order, v); pay(g, v);
-  t.lastPay = { pay: Math.round(v), at: g.s.t, n: c.n, good: k, to: j.to };
+  townDelivery(g, t, siteOf(g, j.to.id)!, j.to, k, c.n, c.d);
+  t.cargo = undefined; endJob(t);
+}
+
+/** Hand n of a good to a town: its order first, then a trade order, steady buying, the rest sold cheap; pay for it. */
+function townDelivery(g: Game, t: Train, town: Site, to: { kind: 'town' | 'bld'; id: number }, k: Good, n: number, d: number) {
+  const p = deliverToTown(g, town, k, n, tradeRoom(g, town, k));
+  let v = (payFor(k, p.order + p.trade, d, 'order') + payFor(k, p.steady, d, 'steady') + payFor(k, p.surplus, d, 'extra')) * payMul(g, town); // 🏛 town projects pay more
+  v -= rushDelivered(g, to, k, p.order, v); pay(g, v);
+  t.lastPay = { pay: Math.round(v), at: g.s.t, n, good: k, to };
   if (!town.filled && orderDone(g, town)) {
     town.filled = true;
     const r = Math.round(reward(stepOf(town)) * fallsMul(g, town.x, town.y) * rewardMul(g)); pay(g, r); // ⛪ Cathedral +5%
@@ -263,7 +320,6 @@ function unload(g: Game, t: Train) {
     news(g, `🤝 ${town.name}'s trade order is filled: ${o.need} ${GOODS[o.good].icon} from ${islandName(g, o.from)}! +$${r.toLocaleString('en-US')}`);
     checkLevel(g);
   }
-  t.cargo = undefined; endJob(t);
 }
 
 /** The nearest town on the railway from where the train stands. */
@@ -324,13 +380,16 @@ export function tickTrains(g: Game, dt: number) {
       if (isDock(src)) src.landed![j.good as Good]! -= n; else src.stock -= n;
       const ship = planFor(shipPlan(g, t), src, j.good); if (ship) { j.to = ship.to; j.sea = ship.sea; j.then = ship.then; }
       t.cargo = { good: j.good, n, d: ship?.d ?? 8 };
+      delete j.via; const via = j.sea === undefined ? onTheWay(g, t, src) : null; if (via) j.via = via;
       j.phase = 'toDrop'; sendLoaded(g, t);
     } else if (j.phase === 'toDrop') {
       if (j.to.kind === 'bld' && bldOf(g, j.to.id)?.closed && t.dest !== undefined) { sendLoaded(g, t); continue; } // ⛔ the factory closed: on to a town
       if (!parked(t)) continue;
-      if (destSquares(g, j.to).includes(headSquare(g, t)) && !(j.to.kind === 'bld' && bldOf(g, j.to.id)?.closed)) { j.phase = 'unloading'; j.timer = loadTime(g, t); }
+      const at = j.via?.to ?? j.to;
+      if (destSquares(g, at).includes(headSquare(g, t)) && !(at.kind === 'bld' && bldOf(g, at.id)?.closed)) { j.phase = 'unloading'; j.timer = loadTime(g, t); }
       else sendLoaded(g, t);
     } else if (j.phase === 'unloading') {
+      if (j.via) { dropOnTheWay(g, t); continue; }
       if (j.to.kind === 'bld' ? bldOf(g, j.to.id) : siteOf(g, j.to.id)) unload(g, t); else { j.phase = 'toDrop'; sendLoaded(g, t); }
     }
   }
@@ -344,8 +403,8 @@ export function trainStatus(g: Game, t: Train): string {
   const name = src ? INDUSTRIES[src.kind].name : 'the yard';
   if (j.phase === 'toLoad') return `🚂 Going to the ${name} for ${icon}`;
   if (j.phase === 'loading') return `${icon} Loading at the ${name}`;
-  if (j.phase === 'toDrop') return `🚂 Taking ${t.cargo?.n ?? ''} ${icon} to ${where}`;
-  return `${icon} Unloading at ${where}`;
+  if (j.phase === 'toDrop') return j.via ? `🚂 Taking ${t.cargo?.n ?? ''} ${icon} to ${where}, dropping ${j.via.n} at ${destName(g, j.via.to)} on the way` : `🚂 Taking ${t.cargo?.n ?? ''} ${icon} to ${where}`;
+  return `${icon} Unloading at ${j.via ? destName(g, j.via.to) : where}`;
 }
 
 /** One island's trains, as the 🚂 Your trains card shows them. */

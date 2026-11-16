@@ -68,8 +68,9 @@ function enRoute(g: Game, skip?: Train): Map<string, number> {
   const m = new Map<string, number>();
   for (const t of g.s.trains) {
     const j = t.job; if (!j || t === skip) continue;
-    const k = key(j.to, j.good as Good);
-    m.set(k, (m.get(k) ?? 0) + (t.cargo?.n ?? trainCap(g)));
+    const k = key(j.to, j.good as Good), n = t.cargo?.n ?? trainCap(g), v = j.via ? Math.min(n, j.via.n) : 0;
+    m.set(k, (m.get(k) ?? 0) + n - v);
+    if (j.via) { const kv = key(j.via.to, j.good as Good); m.set(kv, (m.get(kv) ?? 0) + v); }
   }
   return m;
 }

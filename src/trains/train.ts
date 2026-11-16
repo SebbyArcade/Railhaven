@@ -42,7 +42,11 @@ export interface Train {
   area?: number[];
   /** what it carries and its job (goods trains) */
   cargo?: { good: string; n: number; d: number };
-  job?: { src: number; to: { kind: 'town' | 'bld'; id: number }; good: string; phase: 'toLoad' | 'loading' | 'toDrop' | 'unloading'; timer: number; sea?: number; then?: number };
+  job?: {
+    src: number; to: { kind: 'town' | 'bld'; id: number }; good: string; phase: 'toLoad' | 'loading' | 'toDrop' | 'unloading'; timer: number; sea?: number; then?: number;
+    /** a town on the way whose open order takes `n` of the load first (at `d` squares from the source) */
+    via?: { to: { kind: 'town'; id: number }; n: number; d: number };
+  };
   /** seconds until an idle train looks for a load again, and what its last delivery paid */
   idle?: number;
   lastPay?: { pay: number; at: number; n: number; good: string; to: { kind: 'town' | 'bld'; id: number } };
