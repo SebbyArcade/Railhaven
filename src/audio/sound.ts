@@ -36,6 +36,13 @@ const SEASON_MUSIC = [
   { key: 55, bpm: 66, bars: [[0, 1], [5, 1], [8, 0], [7, 0]] },  // winter
 ] as const;
 const PENTA_MAJ = [0, 2, 4, 7, 9], PENTA_MIN = [0, 3, 5, 7, 10];
+/** Phones crackle when the sound card runs out of time, so the effects stay within a budget:
+ *  only the loudest few things on screen make their sounds, and no more than this many effect sounds play at once. */
+export const MAX_SOURCES = 8, MAX_VOICES = 28;
+/** Effects are scheduled this far ahead, so their soft start is never cut off by a busy frame (a cut-off start pops). */
+const LEAD = 0.06;
+/** overall level (the gentle level keeper adds less boost than the old hard one, so this is a bit higher) */
+const LOUD = 0.95;
 
 export class Sound {
   settings = loadSettings();
@@ -44,6 +51,8 @@ export class Sound {
   private noise!: AudioBuffer;
   private loops: Record<'sea' | 'wind' | 'rain', { g: GainNode; f: BiquadFilterNode } | null> = { sea: null, wind: null, rain: null };
   private next = new Map<string, number>();
+  /** effect sounds playing right now, and the shared left-right placers (one per pan step instead of one per sound) */
+  voices = 0; private pluckWave?: PeriodicWave; private pans = new Map<number, StereoPannerNode>();
   private wasMoving = new Map<string, boolean>();
   private whistleAt = 0; private thunderAt = 0; private birdAt = 0;
   private bar = 0; private barAt = 0; private note = 7;
@@ -54,11 +63,15 @@ export class Sound {
     if (!this.ac) {
       const AC = window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
       if (!AC) return;
-      const ac = this.ac = new AC();
+      // 'playback' asks for a bigger sound buffer: on phones a small one runs dry on a busy screen and crackles
+      let ac: AudioContext; try { ac = new AC({ latencyHint: 'playback' }); } catch { ac = new AC(); }
+      this.ac = ac;
       // phone speakers buzz on deep bass and crackle when sounds pile up: cut the lowest notes and keep the level safe
-      const hp = ac.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 160;
-      const lim = ac.createDynamicsCompressor(); lim.threshold.value = -18; lim.knee.value = 12; lim.ratio.value = 8; lim.attack.value = 0.005; lim.release.value = 0.25;
-      this.master = ac.createGain(); this.master.gain.value = 0.7; this.master.connect(hp); hp.connect(lim); lim.connect(ac.destination);
+      // a phone speaker can't play low thumps: it rattles on them, which sounds like a pop. Two filters cut below ~220 Hz.
+      const hp = ac.createBiquadFilter(), hp2 = ac.createBiquadFilter(); hp.type = hp2.type = 'highpass'; hp.frequency.value = hp2.frequency.value = 220;
+      // a gentle level keeper: a fast, hard one ducks everything on each chuff, and that quick wobble crackles
+      const lim = ac.createDynamicsCompressor(); lim.threshold.value = -12; lim.knee.value = 10; lim.ratio.value = 4; lim.attack.value = 0.015; lim.release.value = 0.3;
+      this.master = ac.createGain(); this.master.gain.value = LOUD; this.master.connect(hp); hp.connect(hp2); hp2.connect(lim); lim.connect(ac.destination);
       this.musicBus = ac.createGain(); this.musicBus.connect(this.master);
       this.sfxBus = ac.createGain(); this.sfxBus.connect(this.master);
       // a soft echo on the music for warmth
@@ -90,14 +103,14 @@ export class Sound {
     if (!this.ac) return; const t = this.ac.currentTime, S = this.settings;
     this.musicBus.gain.setTargetAtTime(S.music ? 0.16 * VOL_STEPS[S.musicVol]! : 0, t, 0.3);
     this.sfxBus.gain.setTargetAtTime(S.sfx ? 0.8 * VOL_STEPS[S.sfxVol]! : 0, t, 0.2);
-    this.master.gain.setTargetAtTime(S.muted ? 0 : 0.7, t, 0.08);
+    this.master.gain.setTargetAtTime(S.muted ? 0 : LOUD, t, 0.08);
   }
 
   /** Stop all sound while the game is paused or hidden. */
   pause(paused: boolean) {
     if (!this.ac) return;
     if (paused && this.ac.state === 'running') { const ac = this.ac; this.master.gain.setTargetAtTime(0, ac.currentTime, 0.03); setTimeout(() => { if (this.ac?.state === 'running') void ac.suspend(); }, 150); }
-    else if (!paused && this.ac.state === 'suspended') { void this.ac.resume(); this.master.gain.setTargetAtTime(this.settings.muted ? 0 : 0.7, this.ac.currentTime + 0.05, 0.1); this.barAt = Math.max(this.barAt, this.ac.currentTime + 0.2); }
+    else if (!paused && this.ac.state === 'suspended') { void this.ac.resume(); this.master.gain.setTargetAtTime(this.settings.muted ? 0 : LOUD, this.ac.currentTime + 0.05, 0.1); this.barAt = Math.max(this.barAt, this.ac.currentTime + 0.2); }
   }
 
   /** Call every frame with what is audible now. */
@@ -108,8 +121,8 @@ export class Sound {
     if (this.settings.music) this.music(now); else this.barAt = now + 0.3;
     this.ambience(sc, now);
     if (!this.settings.sfx) return;
-    const seen = new Set<string>();
-    for (const h of sc.sources) { seen.add(h.id); this.source(h, now); }
+    const seen = new Set<string>(), loud = [...sc.sources].sort((a, b) => b.vol - a.vol);
+    loud.forEach((h, i) => { seen.add(h.id); this.source(h, now + LEAD, i < MAX_SOURCES); }); // the rest keep their clocks, quietly
     for (const id of [...this.next.keys()]) if (!seen.has(id)) { this.next.delete(id); this.wasMoving.delete(id); }
   }
 
@@ -131,26 +144,28 @@ export class Sound {
     }
   }
   private pad(f: number, t: number, dur: number) {
-    const ac = this.ac!, g = ac.createGain(), lp = ac.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 900;
+    const ac = this.ac!, g = this.env(), lp = ac.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 900;
     g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.05, t + 0.9); g.gain.setTargetAtTime(0, t + dur - 0.4, 0.5);
-    for (const det of [-6, 6]) { const o = ac.createOscillator(); o.type = 'triangle'; o.frequency.value = f; o.detune.value = det; o.connect(lp); o.start(t); o.stop(t + dur + 2); }
+    for (const det of [-6, 6]) { const o = ac.createOscillator(); o.type = 'triangle'; o.frequency.value = f; o.detune.value = det; o.connect(lp); o.start(t); o.stop(t + dur + 1.2); } // faded to ~4% by then: fewer notes ringing on
     lp.connect(g); g.connect(this.musicBus);
   }
   private tone(f: number, t: number, dur: number, vol: number, type: OscillatorType) {
-    const ac = this.ac!, o = ac.createOscillator(), g = ac.createGain(); o.type = type; o.frequency.value = f;
+    const ac = this.ac!, o = ac.createOscillator(), g = this.env(); o.type = type; o.frequency.value = f;
     g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vol, t + 0.05); g.gain.setTargetAtTime(0, t + dur * 0.6, dur * 0.3);
     o.connect(g); g.connect(this.musicBus); o.start(t); o.stop(t + dur + 1);
   }
   private pluck(f: number, t: number, vol: number) {
-    const ac = this.ac!, g = ac.createGain();
+    const ac = this.ac!, g = this.env();
     g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vol, t + 0.01); g.gain.exponentialRampToValueAtTime(0.0005, t + 1.4);
-    for (const [m, v] of [[1, 1], [2, 0.25], [3, 0.08]] as const) { const o = ac.createOscillator(), og = ac.createGain(); o.frequency.value = f * m; og.gain.value = v; o.connect(og); og.connect(g); o.start(t); o.stop(t + 1.5); }
+    // one oscillator with the three overtones built in (was three oscillators: same sound, a third of the work)
+    const o = ac.createOscillator(); o.setPeriodicWave(this.pluckWave ??= ac.createPeriodicWave(new Float32Array([0, 0, 0, 0]), new Float32Array([0, 1, 0.25, 0.08]), { disableNormalization: true }));
+    o.frequency.value = f; o.connect(g); o.start(t); o.stop(t + 1.5);
     g.connect(this.musicBus); g.connect(this.echo);
   }
 
   // ---------- ambience: sea, wind, rain, birds, thunder ----------
   private loop(k: 'sea' | 'wind' | 'rain', type: BiquadFilterType, freq: number) {
-    const ac = this.ac!, src = ac.createBufferSource(), f = ac.createBiquadFilter(), g = ac.createGain();
+    const ac = this.ac!, src = ac.createBufferSource(), f = ac.createBiquadFilter(), g = this.env();
     src.buffer = this.noise; src.loop = true; src.playbackRate.value = k === 'rain' ? 1.3 : 0.7;
     f.type = type; f.frequency.value = freq; g.gain.value = 0;
     src.connect(f); f.connect(g); g.connect(this.sfxBus); src.start();
@@ -166,34 +181,46 @@ export class Sound {
     if (!this.settings.sfx) return;
     if (sc.storm > 0.25 && now > this.thunderAt) { this.thunderAt = now + rnd(9, 20); this.thunder(sc.storm, now + 0.05); }
     const leafy = (sc.forest + sc.grass * 0.5) * (this.season === 3 ? 0 : this.season === 2 ? 0.4 : 1) * (1 - sc.storm);
-    if (leafy > 0.08 && now > this.birdAt) { this.birdAt = now + rnd(1.5, 5) / leafy; this.bird(rnd(-0.6, 0.6), Math.min(0.5, leafy), now); }
+    if (leafy > 0.08 && now > this.birdAt) { this.birdAt = now + rnd(1.5, 5) / leafy; this.bird(rnd(-0.6, 0.6), Math.min(0.5, leafy), now + LEAD); }
   }
 
   // ---------- effects ----------
   private out(pan: number) {
-    const ac = this.ac!, p = ac.createStereoPanner(); p.pan.value = pan; p.connect(this.sfxBus); return p;
+    const k = Math.round(Math.max(-1, Math.min(1, pan)) * 5);
+    let p = this.pans.get(k); if (!p) { p = this.ac!.createStereoPanner(); p.pan.value = k / 5; p.connect(this.sfxBus); this.pans.set(k, p); }
+    return p;
+  }
+  /** A volume control that starts silent: one left at full volume until its fade-in begins lets a click through. */
+  private env() { const g = this.ac!.createGain(); g.gain.value = 0; return g; }
+  /** Count a sound while it plays; false when too many already play (it is skipped, which nobody hears in a crowd). */
+  private voice(n: AudioScheduledSourceNode, must = false) {
+    if (!must && this.voices >= MAX_VOICES) return false;
+    this.voices++; n.addEventListener('ended', () => this.voices--); return true;
   }
   private burst(t: number, dur: number, vol: number, pan: number, type: BiquadFilterType, freq: number, q = 1) {
-    const ac = this.ac!, s = ac.createBufferSource(), f = ac.createBiquadFilter(), g = ac.createGain();
+    if (this.voices >= MAX_VOICES) return;
+    const ac = this.ac!, s = ac.createBufferSource(), f = ac.createBiquadFilter(), g = this.env(); this.voice(s);
     s.buffer = this.noise; s.loop = true; s.playbackRate.value = rnd(0.8, 1.2); f.type = type; f.frequency.value = freq; f.Q.value = q;
-    const a = Math.min(0.012, dur * 0.3); // a short fade in: an instant jump to full volume pops
+    const a = Math.min(0.02, dur * 0.3); // a short fade in: an instant jump to full volume pops
     g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vol, t + a); g.gain.exponentialRampToValueAtTime(0.001, t + dur); g.gain.linearRampToValueAtTime(0, t + dur + 0.02);
     s.connect(f); f.connect(g); g.connect(this.out(pan)); s.start(t, rnd(0, 1.5)); s.stop(t + dur + 0.08);
   }
   private ping(t: number, f: number, dur: number, vol: number, pan: number, type: OscillatorType = 'sine', bend = 1) {
-    const ac = this.ac!, o = ac.createOscillator(), g = ac.createGain(); o.type = type;
+    if (this.voices >= MAX_VOICES) return;
+    const ac = this.ac!, o = ac.createOscillator(), g = this.env(); o.type = type; this.voice(o);
     o.frequency.setValueAtTime(f, t); if (bend !== 1) o.frequency.exponentialRampToValueAtTime(f * bend, t + dur);
-    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vol, t + 0.01); g.gain.exponentialRampToValueAtTime(0.001, t + dur); g.gain.linearRampToValueAtTime(0, t + dur + 0.02);
+    const a = Math.min(0.03, Math.max(0.01, 3 / f), dur * 0.4); // low notes fade in over a few waves: a sudden low note thumps
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vol, t + a); g.gain.exponentialRampToValueAtTime(0.001, t + dur); g.gain.linearRampToValueAtTime(0, t + dur + 0.02);
     o.connect(g); g.connect(this.out(pan)); o.start(t); o.stop(t + dur + 0.08);
   }
   private whistle(t: number, vol: number, pan: number) {
-    const ac = this.ac!, g = ac.createGain(), f = ac.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 1100; f.Q.value = 2;
+    const ac = this.ac!, g = this.env(), f = ac.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 1100; f.Q.value = 2;
     g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vol, t + 0.08); g.gain.setValueAtTime(vol, t + 0.55); g.gain.linearRampToValueAtTime(0, t + 0.9);
     for (const fr of [740, 880, 1110]) { const o = ac.createOscillator(); o.type = 'sawtooth'; o.frequency.value = fr; o.frequency.linearRampToValueAtTime(fr * 0.985, t + 0.9); o.connect(f); o.start(t); o.stop(t + 1); }
     f.connect(g); g.connect(this.out(pan));
   }
   private horn(t: number, vol: number, pan: number) {
-    const ac = this.ac!, g = ac.createGain(), lp = ac.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 600;
+    const ac = this.ac!, g = this.env(), lp = ac.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 600;
     g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vol, t + 0.15); g.gain.setValueAtTime(vol, t + 1.3); g.gain.linearRampToValueAtTime(0, t + 1.8);
     for (const fr of [196, 294]) { const o = ac.createOscillator(); o.type = 'sawtooth'; o.frequency.value = fr; o.connect(lp); o.start(t); o.stop(t + 1.9); }
     lp.connect(g); g.connect(this.out(pan));
@@ -210,14 +237,14 @@ export class Sound {
     this.burst(t + 0.1, 2.8, 0.45 * vol, rnd(-0.3, 0.3), 'lowpass', 420);
   }
   private baa(t: number, vol: number, pan: number) {
-    const ac = this.ac!, o = ac.createOscillator(), g = ac.createGain(), f = ac.createBiquadFilter(), lfo = ac.createOscillator(), lg = ac.createGain();
+    const ac = this.ac!, o = ac.createOscillator(), g = this.env(), f = ac.createBiquadFilter(), lfo = ac.createOscillator(), lg = ac.createGain();
     o.type = 'sawtooth'; o.frequency.value = rnd(330, 420); lfo.frequency.value = 7; lg.gain.value = 12; lfo.connect(lg); lg.connect(o.frequency);
     f.type = 'bandpass'; f.frequency.value = 900; f.Q.value = 3;
     g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.09 * vol, t + 0.05); g.gain.linearRampToValueAtTime(0, t + 0.6);
     o.connect(f); f.connect(g); g.connect(this.out(pan)); o.start(t); lfo.start(t); o.stop(t + 0.7); lfo.stop(t + 0.7);
   }
   private saw(t: number, vol: number, pan: number) {
-    const ac = this.ac!, o = ac.createOscillator(), g = ac.createGain(), f = ac.createBiquadFilter();
+    const ac = this.ac!, o = ac.createOscillator(), g = this.env(), f = ac.createBiquadFilter();
     o.type = 'sawtooth'; o.frequency.setValueAtTime(140, t); o.frequency.linearRampToValueAtTime(180, t + 0.3); o.frequency.linearRampToValueAtTime(150, t + 1.4);
     f.type = 'bandpass'; f.frequency.value = 2200; f.Q.value = 1.5;
     g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.05 * vol, t + 0.2); g.gain.setValueAtTime(0.05 * vol, t + 1.2); g.gain.linearRampToValueAtTime(0, t + 1.5);
@@ -227,7 +254,7 @@ export class Sound {
   /** One-off sounds for things that just happened (see cues.ts). */
   cue(list: Cue[]) {
     const ac = this.ac; if (!ac || ac.state !== 'running' || !this.settings.sfx || this.settings.muted || !list.length) return;
-    const t = ac.currentTime + 0.03, done = new Set<string>();
+    const t = ac.currentTime + LEAD, done = new Set<string>();
     for (const c of list) {
       if (done.has(c.kind)) continue; done.add(c.kind); // ten rails laid at once still clank once
       const v = c.vol, p = c.pan;
@@ -250,7 +277,7 @@ export class Sound {
         case 'level': this.chime([0, 4, 7, 12], t, 0.1); this.chime([5, 9, 12, 17], t + 0.55, 0.1); this.chime([7, 11, 14, 19], t + 1.1, 0.12); break;
         case 'break': this.burst(t, 0.1, 0.18 * v, p, 'bandpass', 1800, 0.7); this.burst(t + 0.03, 0.9, 0.25 * v, p, 'lowpass', 450); break;
         case 'fire': { // a whoomph as it catches
-          const ac2 = this.ac!, s2 = ac2.createBufferSource(), f = ac2.createBiquadFilter(), g = ac2.createGain();
+          const ac2 = this.ac!, s2 = ac2.createBufferSource(), f = ac2.createBiquadFilter(), g = this.env();
           s2.buffer = this.noise; s2.loop = true; f.type = 'bandpass'; f.Q.value = 0.8; f.frequency.setValueAtTime(300, t); f.frequency.exponentialRampToValueAtTime(1800, t + 0.6);
           g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.25 * v, t + 0.15); g.gain.exponentialRampToValueAtTime(0.001, t + 0.9); g.gain.linearRampToValueAtTime(0, t + 0.92);
           s2.connect(f); f.connect(g); g.connect(this.out(p)); s2.start(t); s2.stop(t + 1); break;
@@ -265,13 +292,14 @@ export class Sound {
   }
 
   /** Each sound source plays little events on its own clock. */
-  private source(h: Hear, now: number) {
+  private source(h: Hear, now: number, heard = true) {
     const at = this.next.get(h.id);
     // a train setting off whistles (not too often)
     const was = this.wasMoving.get(h.id); this.wasMoving.set(h.id, !!h.moving);
-    if (h.kind === 'train' && h.moving && was === false && now > this.whistleAt && h.vol > 0.15) { this.whistleAt = now + 8; this.whistle(now + 0.05, 0.12 * h.vol, h.pan); }
+    if (h.kind === 'train' && h.moving && was === false && heard && now > this.whistleAt && h.vol > 0.15) { this.whistleAt = now + 8; this.whistle(now + 0.05, 0.12 * h.vol, h.pan); }
     if (at === undefined) { this.next.set(h.id, now + rnd(0, 1.5)); return; }
     if (now < at) return;
+    if (!heard) { this.next.set(h.id, now + rnd(0.3, 1)); return; }
     const v = h.vol, p = h.pan; let gap = 2;
     switch (h.kind) {
       case 'train': {
@@ -285,7 +313,7 @@ export class Sound {
         this.burst(now, 0.5, 0.1 * v, p, 'lowpass', 600); // the roar
         if (h.moving) this.burst(now, 0.45, 0.1 * v, p, 'bandpass', 5000, 0.5); // water from the hoses
         gap = rnd(0.3, 0.5); break;
-      case 'load': this.burst(now, 0.18, 0.2 * v, p, 'lowpass', 700); this.ping(now, 220, 0.12, 0.06 * v, p); gap = rnd(0.6, 1.4); break;
+      case 'load': this.burst(now, 0.22, 0.14 * v, p, 'bandpass', 900, 0.8); this.ping(now, 330, 0.14, 0.05 * v, p); gap = rnd(0.6, 1.4); break;
       case 'repair': this.ping(now, 1900, 0.12, 0.09 * v, p, 'triangle'); this.ping(now + 0.01, 2850, 0.18, 0.05 * v, p); this.burst(now, 0.05, 0.12 * v, p, 'highpass', 3000); gap = Math.random() < 0.3 ? 1.4 : rnd(0.32, 0.5); break;
       case 'ship':
         if (h.moving && Math.random() < 0.25) this.horn(now, 0.14 * v, p); else this.gull(now, v, p);

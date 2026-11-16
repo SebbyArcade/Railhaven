@@ -24,7 +24,7 @@ import { drawWaterLive } from './terrainArt.ts';
 import { drawTrack } from './track.ts';
 import { drawTrains } from './trains.ts';
 import { drawLightning, drawMishaps, drawStorm } from './events.ts';
-import { drawSeaRoutes, drawShips } from './ships.ts';
+import { drawSeaRoutes, drawShips, drawShipTags } from './ships.ts';
 import { drawExplore, drawPoiZones, drawScouting, drawMaps } from './explore.ts';
 import { islandSpec, SPEC_TEXT } from '../world/specialty.ts';
 import type { Tools } from '../ui/tools.ts';
@@ -76,6 +76,11 @@ export class Renderer {
         if (g.world.terr[y * n + x] === 0 && isRevealed(g, y * n + x)) drawWaterLive(ctx, g.world, x, y, tm);
     }
     const vis = (sq: number) => { const x = sq % n, y = (sq / n) | 0; return x >= x0 - 1 && x <= x1 + 1 && y >= y0 - 1 && y <= y1 + 1; };
+    // 🚢 the Ships card shows every sea route; a ship's card shows its way ahead
+    if (this.tools?.card?.kind === 'ships') drawSeaRoutes(ctx, g, tm, cam.z);
+    else if (this.tools?.card?.kind === 'ship') { const id = this.tools.card.id, s = g.s.ships?.find(x => x.id === id); if (s) drawSeaRoutes(ctx, g, tm, cam.z, s); }
+    // 🚢 ships on the water, before quays, bridges and trains: they sail under a rail bridge, never over it
+    const shipTags = drawShips(ctx, g, tm, (x, y) => x >= x0 - 2 && x <= x1 + 2 && y >= y0 - 2 && y <= y1 + 2 && !!isRevealed(g, Math.round(y) * n + Math.round(x)));
     for (const b of g.s.buildings ?? []) if (b.kind === 'dock' && vis(b.y * n + b.x) && isRevealed(g, b.y * n + b.x)) drawQuay(ctx, g, b); // under the rails
     drawTrack(ctx, g.net, p => p.squares.some(vis), cam.z, p => {
       let k = 0; for (const q of p.squares) if (!g.world.terr[q]) k = Math.max(k, landDistance(g, q));
@@ -93,10 +98,7 @@ export class Renderer {
     this.drawTunnels(ctx, x0, y0, x1, y1); // after trains: they run into the hillside
     drawMishaps(ctx, g, tm, vis);
     for (const b of g.s.buildings ?? []) if (vis(b.y * n + b.x) && isRevealed(g, b.y * n + b.x)) drawBuildingTags(ctx, g, b, tm, cam.z); // names and stock over the trains
-    // 🚢 the Ships card shows every sea route; a ship's card shows its way ahead
-    if (this.tools?.card?.kind === 'ships') drawSeaRoutes(ctx, g, tm, cam.z);
-    else if (this.tools?.card?.kind === 'ship') { const id = this.tools.card.id, s = g.s.ships?.find(x => x.id === id); if (s) drawSeaRoutes(ctx, g, tm, cam.z, s); }
-    drawShips(ctx, g, tm, (x, y) => x >= x0 - 2 && x <= x1 + 2 && y >= y0 - 2 && y <= y1 + 2 && !!isRevealed(g, Math.round(y) * n + Math.round(x)), cam.z);
+    drawShipTags(ctx, shipTags, cam.z); // what each ship carries, over everything it sails under
     drawExplore(ctx, g, this.tools, tm, (x, y) => x >= x0 - 2 && x <= x1 + 2 && y >= y0 - 2 && y <= y1 + 2, cam.z);
     if (tm - this.planAt > 1) { this.planAt = tm; this.plan = shipPlan(g); this.alerts = new Set(stuckList(g, this.plan).filter(x => x.bld !== undefined).map(x => x.bld!)); this.waits = new Set([...waitingForTrain(g, this.plan)].filter(i => !this.alerts.has(i))); this.rates = new Map((g.s.buildings ?? []).map(b => [b.id, outputOf(g, b)])); } // the plan changes slowly: once a second is plenty
     if (this.tools?.card?.kind === 'bld') drawShipArrow(ctx, g, this.plan, this.tools.card.id, tm);
@@ -328,7 +330,7 @@ export class Renderer {
       if (b.kind === 'dock' || isLinked(g, b)) continue;
       const ys = yardSquares(n, b), st = b.horizontal ? 1 : n;
       for (const e of [ys[0]! - st, ys.at(-1)! + st]) if (!g.track.has(e)) glow(e);
-      const m = ys[1]!; pill((m % n + 1) * TILE, ((m / n) | 0) * TILE - 6 * k, '🛤 join at either end of the loading track', '#bfe4ff');
+      const m = ys[1]!; pill((m % n + 1) * TILE, ((m / n) | 0) * TILE - 6 * k, '🛤 rails from either gold end to your track', '#bfe4ff');
     }
   }
 

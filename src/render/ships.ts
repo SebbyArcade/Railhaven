@@ -14,7 +14,7 @@ export const SHIP_TAG_ZOOM = 0.9;
 
 /** A cargo ship: dark hull, cream deck with a wheelhouse and a red-banded funnel, its load on deck as it really rides
  *  (coal heaped, logs, oil drums, crates…), and zoomed in a tag naming what it carries and how much. */
-export function drawShips(ctx: CanvasRenderingContext2D, g: Game, tm: number, vis: (x: number, y: number) => boolean, zoom = 1) {
+export function drawShips(ctx: CanvasRenderingContext2D, g: Game, tm: number, vis: (x: number, y: number) => boolean): Tag[] {
   for (const b of g.s.buildings ?? []) if (b.kind === 'dock' && b.fish && vis(b.x, b.y)) drawFishingBoats(ctx, g, b, tm);
   const tags: Tag[] = [];
   for (const s of g.s.ships ?? []) {
@@ -29,6 +29,11 @@ export function drawShips(ctx: CanvasRenderingContext2D, g: Game, tm: number, vi
     drawShip(ctx, X, Y, p.a, f, tm, true, shipCap(g));
     const goods = cargoText(f.hold); tags.push({ X, Y, a: p.a, text: `🚂 Train ${f.train}${goods ? ` · ${goods}` : ''}`, edge: '#7fd36b' });
   }
+  return tags;
+}
+
+/** The cargo tags, drawn later than the ships (ships sail under bridges and trains, their tags stay on top). */
+export function drawShipTags(ctx: CanvasRenderingContext2D, tags: Tag[], zoom: number) {
   if (zoom >= SHIP_TAG_ZOOM) drawCargoTags(ctx, tags, zoom);
 }
 
@@ -40,7 +45,7 @@ export function cargoText(hold: { good: Good; n: number }[]): string {
   return top.map(([k, v]) => `${GOODS[k].icon} ${Math.floor(v)}`).join(' · ') + (all.length > top.length ? ` +${all.length - top.length}` : '');
 }
 
-type Tag = { X: number; Y: number; a: number; text: string; edge: string };
+export type Tag = { X: number; Y: number; a: number; text: string; edge: string };
 /** Tags over the ships, upright whatever way the ship is heading, the same size on screen at any zoom, pointing at
  *  their ship from just above it (or just below, when another ship's tag is in the way). A tag with no room left (it
  *  would cover another ship or its tag) is skipped rather than drift onto another ship: the deck still shows the load, and the ship's card names it. */

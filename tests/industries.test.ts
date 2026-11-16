@@ -34,7 +34,7 @@ describe('industries and yards', () => {
     const b = build(g, place!); if (typeof b === 'string') throw new Error(b);
     trackChanged(g);
     expect(isLinked(g, b)).toBe(false);
-    expect(startPlan(g, yardSquares(n, b)[0]!)).toBeNull(); // can't start track from a loose yard
+    expect(startPlan(g, yardSquares(n, b)[0]!)!.path).toEqual([yardSquares(n, b)[0]!]); // a line may start at a loose yard (built only once it reaches the railway)
     tickProduction(g, 10); expect(b.stock).toBe(0);
     // lay track from Ashford to the yard's nearer end
     const ys = yardSquares(n, b), end = [ys[0]!, ys.at(-1)!].sort((p, q) => Math.hypot(p % n - a.x, (p / n | 0) - a.y) - Math.hypot(q % n - a.x, (q / n | 0) - a.y))[0]!;
