@@ -35,7 +35,7 @@ import { gameReport } from './ui/report.ts';
 import { SEASONS, seasonOf } from './world/season.ts';
 import { buyFleet, FLEET, type FleetKey, fleetLvl, refundOf, removeBuilding, rushOf, sellOffer, sellStock, toggleRush, upgradeBuilding } from './economy/upgrades.ts';
 import { foundTown, sizeName, tickTowns, upgradeTown } from './economy/towns.ts';
-import { buyTrainAt, buyTrainFor, fleetByIsland, sellTrain, shipTrainTo, tickTrains, trainRefund, trainToSell } from './economy/dispatch.ts';
+import { buyTrainAt, buyTrainFor, fleetByIsland, bringTrainFrom, cancelMove, sellTrain, shipTrainTo, tickTrains, trainRefund, trainToSell } from './economy/dispatch.ts';
 import { moneyTip, type Tip } from './economy/advice.ts';
 import { buyShip, buyShipUp, SHIP_UP, type ShipUpKey, seaLanes, shipPlace, shipUpLvl } from './ships/ships.ts';
 import { CLAIM_TEXT, POI, poisOf } from './world/explore.ts';
@@ -265,6 +265,8 @@ cardEl.onclick = e => {
   }
   if (b.dataset.act === 'fish' && bld) { const why = buyFishing(game, bld); toast(why || `🎣 ${FISHING[(bld.fish ?? 1) - 1]!.name} at the dock`); renderCard(); return; }
   if (b.dataset.act === 'ship' && bld) { const s = buyShip(game, bld); toast(typeof s === 'string' ? s : '🚢 A cargo ship is ready at the dock: it sails where goods wait'); renderCard(); return; }
+  if (b.dataset.act === 'bringfrom' && bld) { const t = bringTrainFrom(game, bld, +b.dataset.to!); toast(typeof t !== 'string' ? `⛴ Train ${t.id} came over by boat and is looking for a load` : t === 'later' ? '⛴ Booked: the train sails over as soon as it has delivered its load' : t); renderCard(); return; }
+  if (b.dataset.act === 'unmove' && bld) { const t = game.s.trains.find(x => x.id === +b.dataset.to!); if (t) { cancelMove(game, t); toast(`Train ${t.id} stays where it is: crossing fee paid back`); } renderCard(); return; }
   if (b.dataset.act === 'shipover' && bld) { const t = shipTrainTo(game, bld); toast(typeof t === 'string' ? t : `⛴ Train ${t.id} came over by boat and is looking for a load`); renderCard(); return; }
   if (b.dataset.act === 'trainat' && bld) { const t = buyTrainAt(game, bld); if (typeof t === 'string') toast(t); else { toast(`🚂 Train ${t.id} came over by boat and is looking for a load`); } renderCard(); return; }
   if (b.dataset.act === 'lvl' && bld) { const why = upgradeBuilding(game, bld); toast(why || `⬆ ${info(bld.kind).name} is now level ${bld.lvl}${(bld.tracks ?? 2) > 2 ? ` · ${bld.tracks} loading tracks` : ''}`); if (!why) { trackChanged(game); game.terrainDirty?.(footprint(game.world.n, bld)); } renderCard(); return; }
