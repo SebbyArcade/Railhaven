@@ -67,6 +67,8 @@ export interface Train {
   rr?: { moves: Move[]; s: number; len: number; wait: number };
   /** 💰 sold: it goes as soon as its load is delivered */
   sellAfter?: boolean;
+  /** ⛴ booked to go over to this landing (dock id) by boat once it has delivered its load; the crossing is paid */
+  moveTo?: number;
   /** seconds since it last had a job (no paying load anywhere) */
   noWork?: number;
 }

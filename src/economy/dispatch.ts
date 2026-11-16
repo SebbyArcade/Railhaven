@@ -143,6 +143,62 @@ export function shipTrainTo(g: Game, dock: Building): Train | string {
   return t;
 }
 
+/** Other islands (with a dock on the railway) whose trains can be shipped over to this landing: train counts, most first. */
+export function trainIslands(g: Game, dock: Building): { island: number; name: string; n: number; free: number; booked: number }[] {
+  const here = islandOfB(g, dock), ports = new Set((g.s.buildings ?? []).filter(b => isDock(b) && isLinked(g, b)).map(b => islandOfB(g, b)));
+  const per = new Map<number, { island: number; name: string; n: number; free: number; booked: number }>();
+  for (const t of g.s.trains) {
+    const i = islandOfTrain(g, t); if (i === here || !ports.has(i)) continue;
+    const e = per.get(i) ?? { island: i, name: islandName(g, i), n: 0, free: 0, booked: 0 }; per.set(i, e);
+    e.n++; if (t.moveTo !== undefined) e.booked++; else if (!t.job && !t.cargo && !t.broke && !t.sellAfter) e.free++;
+  }
+  return [...per.values()].sort((a, b) => b.n - a.n);
+}
+
+/** Can this train go over to the landing now: nothing aboard, not loading, not broken down. */
+const readyToCross = (t: Train) => !t.cargo && t.job?.phase !== 'loading' && !t.broke;
+
+/**
+ * ⛴ Bring a train from another island over to this landing, for the crossing fee. A train with no work goes at once;
+ * when all are busy, the one closest to done is booked and goes as soon as it has delivered its load.
+ * Returns the train shipped, 'later' when one is booked, or why not.
+ */
+export function bringTrainFrom(g: Game, dock: Building, island: number): Train | 'later' | string {
+  if (!isLinked(g, dock)) return 'This landing is not reached by your docks yet';
+  if (FERRY_FEE > g.s.money) return `Need $${(FERRY_FEE - g.s.money).toLocaleString('en-US')} more for the crossing`;
+  const ts = g.s.trains.filter(t => islandOfTrain(g, t) === island && t.moveTo === undefined && !t.sellAfter);
+  if (!ts.length) return `No train on ${islandName(g, island)} can go: every one there is already booked or sold`;
+  // first choice: one waiting for work; then one on its way to load (it drops that job), then one carrying goods, broken last
+  const rank = (t: Train) => (!t.job && !t.cargo && !t.broke ? 0 : readyToCross(t) ? 1 : t.cargo && !t.broke ? 2 : 3);
+  const pick = [...ts].sort((a, b) => rank(a) - rank(b))[0]!;
+  if (rank(pick) === 0 && parked(pick)) { const t = crossNow(g, dock, pick); if (t) { g.s.money -= FERRY_FEE; return t; } }
+  pick.moveTo = dock.id; g.s.money -= FERRY_FEE;
+  return 'later';
+}
+
+/** Take back a booked crossing: the fee is paid back. */
+export function cancelMove(g: Game, t: Train) {
+  if (t.moveTo === undefined) return;
+  delete t.moveTo; g.s.money += FERRY_FEE;
+}
+
+/** Put the train down on the landing's yard (a new train object with the same id), or null if the yard is busy. */
+function crossNow(g: Game, dock: Building, from: Train): Train | null {
+  const t = onYard(g, dock, from.id); if (!t) return null;
+  g.s.trains[g.s.trains.indexOf(from)] = t; g.sys.rebuildHolds();
+  return t;
+}
+
+/** Booked trains that are free now go over (retried while the landing's yard is busy). */
+function tickMoves(g: Game) {
+  for (const t of g.s.trains.filter(x => x.moveTo !== undefined && readyToCross(x))) {
+    const dock = (g.s.buildings ?? []).find(b => b.id === t.moveTo);
+    if (!dock || !isLinked(g, dock) || islandOfTrain(g, t) === islandOfB(g, dock)) { cancelMove(g, t); continue; }
+    const n = crossNow(g, dock, t);
+    if (n) news(g, `⛴ Train ${n.id} crossed by boat to ${islandName(g, islandOfB(g, dock))} and is looking for a load`);
+  }
+}
+
 /** Units of stock (of one good, for docks) already promised to trains on their way to collect. */
 const claimed = (g: Game, b: Building, k?: string) => g.s.trains.reduce((a, t) => a + (t.job?.src === b.id && t.job.phase === 'toLoad' && (k === undefined || t.job.good === k) ? capOf(g, t) : 0), 0);
 
@@ -294,6 +350,7 @@ export function tickTrains(g: Game, dt: number) {
   // bridges cost a little to keep up, every minute, like trains on the move (counted with running costs)
   const br = bridgeSquares(g) * BRIDGE_UPKEEP / 60 * dt;
   if (br > 0) { g.s.money -= br; g.s.upkeep = (g.s.upkeep ?? 0) + br; }
+  if (Math.floor(g.s.t * 2) !== Math.floor((g.s.t - dt) * 2)) tickMoves(g); // booked crossings, twice a second
   for (const t of g.s.trains.filter(x => x.sellAfter && !x.cargo && x.job?.phase !== 'loading')) { // delivered: now it goes
     const v = trainRefund(g); g.s.trains.splice(g.s.trains.indexOf(t), 1); g.s.money += v; g.sys.rebuildHolds();
     news(g, `💰 Train ${t.id} delivered its load and was sold for $${v.toLocaleString('en-US')}`);
@@ -306,7 +363,7 @@ export function tickTrains(g: Game, dt: number) {
     else if (t.stopT) t.stopT = 0;
     if (!j) {
       t.noWork = (t.noWork ?? 0) + dt;
-      if (!parked(t)) continue;
+      if (!parked(t) || t.moveTo !== undefined) continue; // ⛴ booked to cross: it waits for the boat
       if ((t.idle = (t.idle ?? 0) - dt) > 0) continue;
       t.idle = 2; // look again every 2 s
       const best = bestJob(g, t, P()); if (!best) continue;
@@ -391,6 +448,6 @@ export function buyTrainFor(g: Game, island: number): Train | string {
 
 /** The train to sell first on an island: one with no work, then an empty one, then one that delivers its load first. */
 export function trainToSell(g: Game, island: number): Train | undefined {
-  const ts = g.s.trains.filter(t => islandOfTrain(g, t) === island && !t.sellAfter && !t.broke);
+  const ts = g.s.trains.filter(t => islandOfTrain(g, t) === island && !t.sellAfter && !t.broke && t.moveTo === undefined);
   return ts.find(t => !t.job && !t.cargo) ?? ts.find(t => !t.cargo && t.job?.phase !== 'loading') ?? ts[0];
 }

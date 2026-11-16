@@ -8,7 +8,7 @@ import { hasProject, nextParkPrice, orderMul, PARK_PRICE, parkSpot, parksOf, pay
 import { isCapital, islandOfSite, regions, tradeOf, tradeReward, tradeWhy } from '../economy/trade.ts';
 import { foundPrice, orderDone, orderOf, reward, sizeName, steadyGoods, stepOf, townLinked, upgradePrice } from '../economy/towns.ts';
 import { type Dest, destinationsOf, destName, type Ship, shipPlan, siteOf } from '../economy/shipping.ts';
-import { FERRY_FEE, fleetByIsland, islandOfTrain, spareTrains, trainPrice, trainRefund, trainStatus, trainToSell } from '../economy/dispatch.ts';
+import { FERRY_FEE, fleetByIsland, islandOfTrain, trainIslands, trainPrice, trainRefund, trainStatus, trainToSell } from '../economy/dispatch.ts';
 import { JAM_AFTER } from '../economy/jams.ts';
 import { BRIDGE_UPKEEP, bridgeSquares } from '../track/rules.ts';
 import { dockRange, isDock, islandName, islandOfB, seaDist } from '../ships/docks.ts';
@@ -282,14 +282,19 @@ function dockCard(g: Game, b: Building, page?: string): string {
   }
   if (page === 'trains') {
     const p = trainPrice(g) + FERRY_FEE, mine = g.s.trains.filter(t => islandOfTrain(g, t) === islandOfB(g, b));
-    const idle = mine.filter(t => !t.job).length, spare = spareTrains(g, b);
+    const idle = mine.filter(t => !t.job).length;
     h += `<div class="note">🚂 ${mine.length} trains on ${esc(isl)}${idle ? ` · 💤 ${idle} waiting for work` : ''}. Trains stay on their island unless shipped.</div>`;
-    if (spare.length) {
-      const from = islandName(g, islandOfTrain(g, spare[0]!)), n = spare.filter(t => islandOfTrain(g, t) === islandOfTrain(g, spare[0]!)).length;
-      h += `<button class="act" data-act="shipover" data-id="${b.id}" ${linked && g.s.money >= FERRY_FEE ? '' : 'disabled'}>⛴ Bring a spare train from ${esc(from)} (${n} waiting) · ${fmtMoney(FERRY_FEE)}</button>`;
+    // ⛴ bring one from any other island: a free one sails now, a busy one after it has delivered its load
+    const coming = g.s.trains.filter(t => t.moveTo === b.id);
+    for (const t of coming) h += `<div class="row"><b class="ico">⛴</b><div class="grow"><b>Train ${t.id} is coming from ${esc(islandName(g, islandOfTrain(g, t)))}</b><small>${t.cargo ? 'It sails as soon as it has delivered its load' : t.broke ? 'It sails once the repair crew has fixed it' : 'It sails in a moment'}</small></div><button class="mini" data-act="unmove" data-id="${b.id}" data-to="${t.id}">✕ Cancel</button></div>`;
+    const isls = trainIslands(g, b);
+    if (isls.length) h += `<h3>⛴ Bring a train from another island · ${fmtMoney(FERRY_FEE)}</h3>`;
+    for (const x of isls) {
+      const can = x.n > x.booked, sub = !can ? 'every train there is already coming' : x.free ? `${x.free} waiting for work: one sails now` : 'all busy: one sails after its delivery';
+      h += `<div class="row"><b class="ico">🏝</b><div class="grow"><div class="line"><span>${esc(x.name)}</span><span>🚂 ${x.n}</span></div><small>${sub}</small></div><button class="mini" data-act="bringfrom" data-id="${b.id}" data-to="${x.island}" ${linked && can && g.s.money >= FERRY_FEE ? '' : 'disabled'}>⛴ Bring one</button></div>`;
     }
     if (!home) h += `<button class="act" data-act="trainat" data-id="${b.id}" ${linked && g.s.money >= p ? '' : 'disabled'}>🚂 Ship a new train over · ${fmtMoney(p)}</button>`;
-    else if (!spare.length) h += `<div class="note">Buy new trains for ${esc(isl)} at the 🏚 Engine shed. Trains waiting for work on other islands can be shipped here.</div>`;
+    else if (!isls.length) h += `<div class="note">Buy new trains for ${esc(isl)} at the 🏚 Engine shed. Trains on other islands with a dock can be shipped here.</div>`;
     return h + back;
   }
   // front: one status line, then the tiles
@@ -407,7 +412,7 @@ function fleetCard(g: Game, page?: string): string {
     const f = all.find(x => String(x.island) === page); if (!f) return fleetCard(g);
     let h = `<div class="head"><b class="big">🏝</b><div><h2>${esc(f.name)}</h2><span class="chip2">🚂 ${f.trains.length} train${f.trains.length === 1 ? '' : 's'}</span></div></div>`;
     for (const t of f.trains) {
-      const held = (t.stopT ?? 0) >= JAM_AFTER, st = t.sellAfter ? '💰 sold: goes after this delivery' : held ? '🚦 held up' : t.cargo ? `🚚 carrying ${GOODS[t.cargo.good as Good]?.icon ?? ''}` : t.job ? '🚚 on its way to load' : '💤 waiting for work';
+      const held = (t.stopT ?? 0) >= JAM_AFTER, st = t.sellAfter ? '💰 sold: goes after this delivery' : t.moveTo !== undefined ? '⛴ crosses to another island after this delivery' : held ? '🚦 held up' : t.cargo ? `🚚 carrying ${GOODS[t.cargo.good as Good]?.icon ?? ''}` : t.job ? '🚚 on its way to load' : '💤 waiting for work';
       h += `<div class="row${held ? ' alert' : ''}"><b class="ico">🚂</b><div class="grow"><div class="line"><span>Train ${t.id}</span><span>${st}</span></div><small>${trainStatus(g, t)}</small></div><button class="mini" data-act="open" data-kind="train" data-id="${t.id}">Open ›</button></div>`;
     }
     if (!f.trains.length) h += `<div class="note">No trains here yet.</div>`;
