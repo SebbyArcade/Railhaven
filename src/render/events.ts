@@ -4,7 +4,7 @@ import { buildingSquares } from '../buildings/industries.ts';
 import { bodyPoint } from '../trains/train.ts';
 import { TILE } from '../world/terrain.ts';
 import { hash } from '../core/rng.ts';
-import { type CrewRun, runPoint, runValid } from '../world/crews.ts';
+import { type CrewRun, crewPoint, runValid } from '../world/crews.ts';
 
 /**
  * A crew's rail vehicle, on the rails at p: the fire crew's little red engine (ladder, flashing blue lamp, two
@@ -55,11 +55,11 @@ export function drawMishaps(ctx: CanvasRenderingContext2D, g: Game, tm: number, 
       }
     });
     const run = b.fire.run && runValid(g, b.fire.run) ? b.fire.run : null;
-    if (run && t < b.fire.crewAt) { const p = runPoint(g, run, t); if (p) drawCrewCar(ctx, 'fire', p, tm, true); } // on its way along the rails
+    if (run && t < b.fire.crewAt) { const p = crewPoint(g, run, t); if (p) drawCrewCar(ctx, 'fire', p, tm, true); } // on its way along the rails
     if (t >= b.fire.crewAt) { // the fire engine stands on the loading track; two firefighters climb down and spray water
       const tgt = sq[2]!, tx = (tgt % n + 0.5) * TILE, ty = (((tgt / n) | 0) + 0.5) * TILE;
       let ex: number, ey: number;
-      const p = run ? runPoint(g, run, b.fire.crewAt) : null;
+      const p = run ? crewPoint(g, run, b.fire.crewAt) : null;
       if (p) { drawCrewCar(ctx, 'fire', p, tm, false); const k = Math.hypot(tx - p.x, ty - p.y) || 1; ex = p.x + (tx - p.x) / k * 9; ey = p.y + (ty - p.y) / k * 9; } // they stand between the engine and the fire
       else {
         const e = sq.at(-1)!; ex = (e % n + 0.5) * TILE; ey = (((e / n) | 0) + 0.5) * TILE;
@@ -77,11 +77,11 @@ export function drawMishaps(ctx: CanvasRenderingContext2D, g: Game, tm: number, 
   }
   for (const b of g.s.breaks ?? []) { // the repair crew pumping its handcar along the rails to the break
     if (!b.run || t >= b.crewAt || !runValid(g, b.run)) continue;
-    const p = runPoint(g, b.run, t); if (p && vis(Math.floor(p.y / TILE) * n + Math.floor(p.x / TILE))) drawCrewCar(ctx, 'repair', p, tm, true);
+    const p = crewPoint(g, b.run, t); if (p && vis(Math.floor(p.y / TILE) * n + Math.floor(p.x / TILE))) drawCrewCar(ctx, 'repair', p, tm, true);
   }
   for (const r of g.s.crews ?? []) { // crews riding home after the job
     if (!runValid(g, r)) continue;
-    const p = runPoint(g, r, t); if (p && !p.arrived && vis(Math.floor(p.y / TILE) * n + Math.floor(p.x / TILE))) drawCrewCar(ctx, r.kind, p, tm, true);
+    const p = crewPoint(g, r, t); if (p && !p.arrived && vis(Math.floor(p.y / TILE) * n + Math.floor(p.x / TILE))) drawCrewCar(ctx, r.kind, p, tm, true);
   }
   for (const tr of g.s.trains) {
     if (!tr.broke || t >= tr.broke.doneAt || !tr.trail.length) continue;
