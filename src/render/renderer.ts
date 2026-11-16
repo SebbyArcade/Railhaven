@@ -122,6 +122,12 @@ export class Renderer {
     drawStorm(ctx, g, tm);
     drawLightning(ctx, g, tm); // lightning lights only its storm cloud, under the fog
     drawFog(ctx, g, x0, y0, x1, y1, cam.z, tm);
+    // a build outline on fogged squares (an oil seep seen over the fog) stays visible: red, as it can't go there yet
+    const pv = this.tools?.mode === 'build' ? this.tools.preview : null;
+    if (pv) for (const i of [...yardSquares(n, pv), ...buildingSquares(n, pv)]) if (!isRevealed(g, i)) {
+      const x = (i % n) * TILE, y = ((i / n) | 0) * TILE;
+      ctx.fillStyle = 'rgba(255,90,70,.4)'; ctx.fillRect(x + 1, y + 1, TILE - 2, TILE - 2); ctx.strokeStyle = 'rgba(255,120,100,.95)'; ctx.lineWidth = 2; ctx.strokeRect(x + 1, y + 1, TILE - 2, TILE - 2);
+    }
     drawScouting(ctx, g, this.tools, tm, cam.z); // scout routes run into the fog: draw them over it
     drawPoiZones(ctx, g, this.tools, tm, (x, y) => x >= x0 - 12 && x <= x1 + 12 && y >= y0 - 12 && y <= y1 + 12, cam.z); // landmark take-over squares and reach, over the fog
     drawMaps(ctx, g, this.tools, tm, cam.z);
