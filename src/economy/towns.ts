@@ -93,10 +93,28 @@ export function overseas(g: Game, k: Good): boolean {
   return facs.length > 0 && facs.every(m => inputsOf(m).some(i => !!farText(g, i)));
 }
 
-/** The town's order still waits on goods only the outer islands can supply (a long wait: the player must sail first). */
+/**
+ * The goods the town's order still waits on that only the outer islands can supply, when that is all any order on
+ * the railway still waits on (every other order, trade orders included, is filled or waits the same way): a long
+ * wait, the player must sail first. While any order can still use goods the railway makes, the trains serve that.
+ */
 export function waitsAbroad(g: Game, t: Site): Good[] {
-  const o = orderOf(g, t);
-  return (Object.keys(o) as Good[]).filter(k => (t.got?.[k] ?? 0) < o[k]! && overseas(g, k));
+  const mine = orderLeft(g, t).filter(k => overseas(g, k)); if (!mine.length) return [];
+  return allWaitAbroad(g) ? mine : [];
+}
+const orderLeft = (g: Game, s: Site) => { const o = orderOf(g, s); return (Object.keys(o) as Good[]).filter(k => (s.got?.[k] ?? 0) < o[k]!); };
+const stallMemo = new WeakMap<Game, { t: number; v: boolean }>();
+/** Every order on the railway waits only on goods from the outer islands (worked out once per moment of game time). */
+function allWaitAbroad(g: Game): boolean {
+  const m = stallMemo.get(g); if (m && m.t === g.s.t) return m.v;
+  // a 🤝 trade order between islands still open: its goods are wanted
+  let v = !Object.values(g.s.trade ?? {}).some(o => o.got < o.need && !overseas(g, o.good));
+  if (v) for (const s of g.s.sites) {
+    if (s.kind !== 'town' || !townLinked(g, s)) continue;
+    if (orderLeft(g, s).some(k => !overseas(g, k))) { v = false; break; }
+  }
+  stallMemo.set(g, { t: g.s.t, v });
+  return v;
 }
 
 /**

@@ -50,4 +50,5 @@ const e0 = (g.s as any).earned ?? 0, m0 = g.s.money, l0 = g.s.loads ?? 0, o0 = g
 const t0 = Date.now();
 for (let s = 0; s < +mins * 60 * 20; s++) { const dt = 0.05; g.s.t += dt; g.sys.tick(dt); tickProduction(g, dt); tickTowns(g, dt); tickTrains(g, dt); if (+tickBreaks(g) + +tickEvents(g, dt)) breaksChanged(g); }
 console.log(`${file}: ${mins} min, ${g.s.trains.length} trains, turn-backs ${total} (${(total / +mins * 60).toFixed(0)}/h), earned $${Math.round(((g.s as any).earned ?? 0) - e0)} money ${Math.round(m0)}→${Math.round(g.s.money)} loads ${(g.s.loads ?? 0) - l0} orders ${(g.s.orders ?? 0) - o0} untangled ${g.sys.untangled} in ${((Date.now() - t0) / 1000).toFixed(0)}s`);
+if (process.env.NEWS) for (const m of g.news ?? []) if (/✅|🤝|⭐/u.test(m)) console.log("  news", m);
 for (const [k, v] of [...why].sort((a, b) => b[1] - a[1])) console.log(`  ${v}  ${k}`);
