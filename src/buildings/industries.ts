@@ -430,6 +430,17 @@ function flood(g: Game, q: number[], out: Set<number>) {
 /** 'a Sawmill', 'an Iron Mine': the article that fits the name. */
 export const aName = (name: string, cap = false) => `${/^[AEIOU]/.test(name) ? 'an' : 'a'} ${name}`.replace(/^a/, m => cap ? m.toUpperCase() : m);
 
+/**
+ * Goods that only come from far away (iron and oil from outer islands, gold, gems, cocoa and rubber from the far
+ * seas) and that nothing on the railway makes yet: where to get them, in plain words, or '' for other goods.
+ */
+export function farText(g: Game, k: Good): string {
+  const kind = (Object.keys(INDUSTRIES) as IndustryKind[]).find(m => INDUSTRIES[m].makes === k && !isFactory(m)); if (!kind) return '';
+  const where = /\(outer islands\)/.test(INDUSTRIES[kind].needs) ? 'outer islands' : /\(far seas\)/.test(INDUSTRIES[kind].needs) ? 'the far seas' : '';
+  if (!where || (g.s.buildings ?? []).some(b => b.kind === kind && isLinked(g, b))) return '';
+  return `${GOODS[k].name} only comes from ${where}: land on one that has it (⚓ Dock in Build), then build ${aName(INDUSTRIES[kind].name)} there`;
+}
+
 export const isLinked = (g: Game, b: Building) => g.linked?.has(yardSquares(g.world.n, b)[0]!) ?? false;
 
 /**

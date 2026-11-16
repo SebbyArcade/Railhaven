@@ -2,7 +2,7 @@ import { hallOf } from '../buildings/stations.ts';
 import type { Game, Site } from '../state.ts';
 import { fallsMul, POI, POI_RARITY, poisOf, RARITY } from '../world/explore.ts';
 import { isleCard, reportsHtml, scoutCard } from './discover.ts';
-import { aName, buildingSquares, yardSquares, bufOf, growsTracks, stripError, tracksOf, type Building, capOf, GOODS, type Good, INDUSTRIES, type IndustryKind, inputsOf, isFactory, isLinked, lockedText, outputOf, shareAt, forestOf, stumpsOf } from '../buildings/industries.ts';
+import { aName, buildingSquares, farText, yardSquares, bufOf, growsTracks, stripError, tracksOf, type Building, capOf, GOODS, type Good, INDUSTRIES, type IndustryKind, inputsOf, isFactory, isLinked, lockedText, outputOf, shareAt, forestOf, stumpsOf } from '../buildings/industries.ts';
 import { factoryState } from '../economy/production.ts';
 import { hasProject, nextParkPrice, orderMul, PARK_PRICE, parkSpot, parksOf, payMul, projectsFor, projectsOf, rewardMul } from '../buildings/parks.ts';
 import { isCapital, islandOfSite, regions, tradeOf, tradeReward, tradeWhy } from '../economy/trade.ts';
@@ -41,6 +41,7 @@ function sourceText(g: Game, plan: Map<number, Ship>, to: Dest, k: Good): string
   const any = (g.s.buildings ?? []).filter(b => b.kind === m), name = INDUSTRIES[m].name;
   if (any.some(b => isLinked(g, b))) return `🔀 Your ${name} ships to a place that needs it more`;
   if (any.length) return `🔌 Join your ${name} to the railway`;
+  const far = farText(g, k); if (far) return `🏝 ${far}`;
   const lock = lockedText(g, m);
   return lock ? `🏭 Made by ${aName(name)} · ${lock}` : `🏗 Build ${aName(name)}`;
 }
@@ -477,7 +478,7 @@ function shedCard(g: Game, page?: string): string {
         + (dock ? `<button class="mini" data-act="open" data-kind="bld" data-id="${dock.id}" data-page="trains">⛴ Ship ›</button>` : '') + `</div>`;
     }
   }
-  { const nb = bridgeSquares(g); if (nb) h += `<div class="note">🌉 ${nb} bridge square${nb === 1 ? "" : "s"} on your railway: ${fmtMoney(nb * BRIDGE_UPKEEP)} a minute to keep up</div>`; }
+  { const nb = bridgeSquares(g); if (nb) h += `<div class="note">🌉 ${nb} bridge square${nb === 1 ? "" : "s"} on your railway: ${fmtMoney(nb * BRIDGE_UPKEEP)} a minute to keep up${g.s.money > 0 ? '' : ' (paused while you have no money)'}</div>`; }
   return h;
 }
 

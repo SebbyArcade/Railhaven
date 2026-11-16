@@ -2,7 +2,7 @@ import type { Game, Site } from '../state.ts';
 import type { Building } from '../buildings/industries.ts';
 import { destIsland, MAX_RUSH, maxLvlOf, minLoad, type Rush, RUSH_MUL, rushBySea, RUSH_STEP } from '../economy/upgrades.ts';
 import { reachedIslands } from '../progress/missions.ts';
-import { aName, capOf, GOODS, type Good, INDUSTRIES, inputsOf, type IndustryKind, isFactory, isLinked, shareAt } from '../buildings/industries.ts';
+import { aName, capOf, farText, GOODS, type Good, INDUSTRIES, inputsOf, type IndustryKind, isFactory, isLinked, shareAt } from '../buildings/industries.ts';
 import { factoryState } from '../economy/production.ts';
 import { capitalOf, tradeOf, tradeWhy } from '../economy/trade.ts';
 import { islandName } from '../ships/docks.ts';
@@ -63,7 +63,7 @@ export function stuckList(g: Game, plan = shipPlan(g)): Stuck[] {
     const name = placeName(g, b), w = isFactory(b.kind) ? factoryState(g, b).waits : [];
     // a maker standing full makes enough: what's missing is a train to carry it
     const full = !w.length && x.makers.some(m => !m.closed && m.stock >= capOf(m) * 0.9) && !g.s.trains.some(t => !t.job);
-    const fix = b.closed ? `the ${name} is closed: open it again` : w.length ? `the ${name} is short of ${w.map(k => `${GOODS[k].icon} ${GOODS[k].name.toLowerCase()}`).join(' and ')}: bring more in`
+    const fix = b.closed ? `the ${name} is closed: open it again` : w.length ? `the ${name} is short of ${w.map(k => `${GOODS[k].icon} ${GOODS[k].name.toLowerCase()}`).join(' and ')}: ${w.map(k => farText(g, k)).find(Boolean)?.replace(/^./, c => c.toLowerCase()) ?? 'bring more in'}`
       : full ? `the ${placeName(g, x.makers.find(m => m.stock >= capOf(m) * 0.9)!)} is full, but every train is busy: buy another train (🚂 Train)`
       : boxed(b) ? `the ${name} works at ${Math.round(shareAt(g, b) * 100)}%: track or buildings cover its fields. Remove track next to it, or build another on open grass`
       : b.lvl < maxLvlOf(g, b) ? `the ${name} can't keep up: upgrade it or build another` : `the ${name} can't keep up: build another`;
