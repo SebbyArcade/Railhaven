@@ -425,7 +425,9 @@ function lessonTarget(): { el?: Element | null; sq?: number; tip?: string } | nu
   // ✓ is the next tap only when the tool open is the one this lesson uses
   const ready = (m: Mode) => tools.mode === m && $('confirm').style.display !== 'none' && !okb.disabled;
   const k = kindFor(n);
-  const rail = (b: import('./buildings/industries.ts').Building) => ready('rail') ? { el: okb } : tools.mode !== 'rail' ? { el: document.querySelector('#bar [data-mode="rail"]') } : { sq: yardEnd(b), tip: 'Drag to here, then onto the blue track' };
+  // the Rails button, or 🛤 Keep building when the tool has just closed after a build
+  const railBtn = () => tools.againOn()?.mode === 'rail' ? { el: okb } : { el: document.querySelector('#bar [data-mode="rail"]') };
+  const rail = (b: import('./buildings/industries.ts').Building) => ready('rail') ? { el: okb } : tools.mode !== 'rail' ? railBtn() : { sq: yardEnd(b), tip: 'Drag to here, then onto the blue track' };
   const loose = n === 1 ? unlinked(b => b.kind === 'wood') : n === 3 ? unlinked(b => b.kind === 'farm') : n === 8 ? unlinked(b => isFactory(b.kind)) : undefined;
   if (loose) return rail(loose);
   if (k && !(game.s.buildings ?? []).some(b => b.kind === k)) {
@@ -433,7 +435,7 @@ function lessonTarget(): { el?: Element | null; sq?: number; tip?: string } | nu
     if (menuOpen) return { el: menu.querySelector(`[data-k="${k}"]`) };
     return { el: $('buildBtn') };
   }
-  if (n === 2 && !game.s.shed) return ready('rail') ? { el: okb } : tools.mode !== 'rail' ? { el: document.querySelector('#bar [data-mode="rail"]') } : null;
+  if (n === 2 && !game.s.shed) return ready('rail') ? { el: okb } : tools.mode !== 'rail' ? railBtn() : null;
   if (n === 2) return ready('train') ? { el: okb } : tools.mode !== 'train' ? { el: document.querySelector('#bar [data-mode="train"]') } : null;
   if (n === 4) {
     if (tools.card?.kind === 'town' && tools.card.id === a.id) return orderDone(game, a) ? { el: cardEl.querySelector('[data-act="upgrade"]') } : null;
@@ -441,7 +443,7 @@ function lessonTarget(): { el?: Element | null; sq?: number; tip?: string } | nu
   }
   if (n === 5) {
     const t = nearTown();
-    if (t) return ready('rail') ? { el: okb } : tools.mode !== 'rail' ? { el: document.querySelector('#bar [data-mode="rail"]') } : { sq: t.y * N + t.x, tip: `Lay track into ${t.name}` };
+    if (t) return ready('rail') ? { el: okb } : tools.mode !== 'rail' ? railBtn() : { sq: t.y * N + t.x, tip: `Lay track into ${t.name}` };
     if (tools.mode !== 'scout') return { el: document.querySelector('#bar [data-mode="scout"]') };
     if (!tools.scout) return { sq: A, tip: 'Tap Ashford' };
     return ready('scout') ? { el: okb } : null;
@@ -566,7 +568,10 @@ async function saveFile(code: string, name = 'railhaven-save.txt', done = '💾 
 }
 const filePick = document.createElement('input'); filePick.type = 'file'; filePick.accept = '.json,.txt,application/json,text/plain';
 filePick.onchange = async () => { const f = filePick.files?.[0]; filePick.value = ''; if (f) await bringOver(await f.text()); };
-$('ok').onclick = () => tools.confirm();
+$('ok').onclick = () => {
+  if (tools.mode === 'pan' && tools.againOn()) { if (tools.resume() === 'menu') { closeCard(); menuOpen = true; renderMenu(); } return; } // 🛤 Keep building / 🏗 Build more
+  tools.confirm();
+};
 $('undo').onclick = () => tools.undo();
 $('turn').onclick = () => tools.turn();
 $('near').onclick = () => { if (tools.nearestFit() && tools.preview) { const c = game.s.camera, sx = (tools.preview.x + 1.5) * 32, sy = (tools.preview.y + 1.5) * 32; if (Math.abs(sx - c.x) * c.z > view.w * 0.4 || Math.abs(sy - c.y) * c.z > view.h * 0.3) { c.x = sx; c.y = sy; } } };
@@ -621,16 +626,16 @@ function frame(now: number) {
     lastCard = Math.floor(now / 1000);
     checkArrivals(game); // islands just reached queue their arrival card
     const M = msOf(game); // a new act opens its card once nothing else is open
-    if (M.actNew && !tools.card && tools.mode === 'pan' && !menuOpen) { M.actNew = false; openCard({ kind: 'story', id: 0, page: 'act' }); }
+    if (M.actNew && !tools.card && tools.mode === 'pan' && !menuOpen && !tools.againOn()) { M.actNew = false; openCard({ kind: 'story', id: 0, page: 'act' }); }
     else if ((game.arrived?.length || game.reported?.length) && (lessonOn(game) || onHome())) { game.arrived = []; game.reported = []; }
-    else if (game.arrived?.length && !tools.card && tools.mode === 'pan' && !menuOpen) openCard({ kind: 'isle', id: game.arrived.shift()!, fresh: true }); // 🏝 a new island
-    else if (game.reported?.length && !tools.card && (tools.mode === 'pan' || tools.mode === 'scout') && !tools.scout && !menuOpen) { // 🧭 a scout is back: its report
+    else if (game.arrived?.length && !tools.card && tools.mode === 'pan' && !menuOpen && !tools.againOn()) openCard({ kind: 'isle', id: game.arrived.shift()!, fresh: true }); // 🏝 a new island
+    else if (game.reported?.length && !tools.card && (tools.mode === 'pan' || tools.mode === 'scout') && !tools.scout && !menuOpen && !tools.againOn()) { // 🧭 a scout is back: its report
       const id = game.reported.pop()!; game.reported = [];
       game.news = (game.news ?? []).filter(m => !/is back: the map is drawn/.test(m));
       openCard({ kind: 'scout', id });
     }
     else if (game.found?.length && (lessonOn(game) || onHome())) game.found = []; // no discovery cards during the lessons
-    else if (game.found?.length && !tools.card && tools.mode === 'pan' && !menuOpen) { // a landmark just spotted: its discovery card
+    else if (game.found?.length && !tools.card && tools.mode === 'pan' && !menuOpen && !tools.againOn()) { // a landmark just spotted: its discovery card
       const [id, ...rest] = game.found; game.found = [];
       const names = new Set([id, ...rest].map(i => poisOf(game).find(p => p.id === i)).filter(p => p && p.kind !== 'wreck').map(p => `${POI[p!.kind].name} found`));
       game.news = (game.news ?? []).filter(m => ![...names].some(nm => m.includes(nm))); // the card says it: no toast too
