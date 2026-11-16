@@ -76,6 +76,41 @@ export function bridgeSpans(g: Game, water: Iterable<number>, isTrack: (i: numbe
   return out;
 }
 
+/** A coast square facing another island across a shallow gap a bridge could seem to span. */
+export interface StraitCoast { i: number; d: number; isl: number; other: number }
+const straitCache = new WeakMap<object, StraitCoast[]>();
+/**
+ * Every coast edge (square i, side d: 0 E, 1 S, 2 W, 3 N) that looks across at most BRIDGE_MAX_LEN - 1 squares of
+ * shallow water straight at a different island. Rails mode marks them, so a gap that looks like the same coast
+ * shows it is another island before the player paints a bridge there. No drawing here.
+ */
+export function straitCoasts(g: Game): StraitCoast[] {
+  const w = g.world, c = straitCache.get(w.islandOf); if (c) return c;
+  const n = w.n, out: StraitCoast[] = [], D = [[1, 0], [0, 1], [-1, 0], [0, -1]] as const;
+  for (let i = 0; i < n * n; i++) {
+    const a = w.islandOf[i]!; if (a < 0 || !w.terr[i]) continue;
+    const x = i % n, y = (i / n) | 0;
+    for (let d = 0; d < 4; d++) {
+      const [dx, dy] = D[d]!;
+      for (let s = 1; s < BRIDGE_MAX_LEN; s++) {
+        const X = x + dx * s, Y = y + dy * s; if (X < 0 || Y < 0 || X >= n || Y >= n) break;
+        const j = Y * n + X;
+        if (w.terr[j]) { if (s > 1 && w.islandOf[j]! >= 0 && w.islandOf[j] !== a) out.push({ i, d, isl: a, other: w.islandOf[j]! }); break; }
+        if (w.deep[j]) break;
+      }
+    }
+  }
+  straitCache.set(w.islandOf, out); return out;
+}
+
+/** The name of the island a bridge would reach: the one in the set that none of the built track stands on yet. */
+export function otherIslandName(g: Game, islands: Set<number>): string {
+  const on = new Set<number>();
+  for (const i of g.track.keys()) { const k = g.world.islandOf[i]!; if (islands.has(k)) on.add(k); if (on.size === islands.size) break; }
+  const ks = [...islands], k = ks.find(k => !on.has(k)) ?? ks.find(k => k !== g.world.home) ?? ks[0]!;
+  return g.world.islands[k]?.name ?? 'a small island';
+}
+
 /**
  * Bridges may cross rivers, lakes and inlets. Joining two islands takes the 🌉 Bridge Works and a short strait
  * (at most STRAIT_MAX squares of water); anything wider needs a dock and ships. Returns the reason if this layout breaks a rule.
@@ -84,7 +119,7 @@ export function bridgeJoinsIslands(g: Game, water: Iterable<number>, isTrack: (i
   for (const { squares, islands } of bridgeSpans(g, water, isTrack)) {
     if (islands.size > 2) return 'A bridge can join at most two islands';
     if (islands.size === 2) {
-      if (!hasBridgeWorks(g)) return 'A bridge can\'t join two islands yet: build the 🌉 Bridge Works in Ashford (Railway level 6) for short straits, or a dock and ships';
+      if (!hasBridgeWorks(g)) return `The land across is ${otherIslandName(g, islands)}, another island: joining islands needs the 🌉 Bridge Works (Ashford, Railway level 6), or a dock and ships`;
       if (squares.length > STRAIT_MAX) return `A strait bridge between islands can cross at most ${STRAIT_MAX} squares of water (this one is ${squares.length}): for wider seas use a dock and ships`;
     }
     if (squares.length > BRIDGE_MAX_LEN) return `A bridge can be at most ${BRIDGE_MAX_LEN} squares long (this one is ${squares.length})`;

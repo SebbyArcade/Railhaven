@@ -24,8 +24,9 @@ const line = lines.filter(l => (process.env.NEARTOWN ? nearTown(l) : !nearTown(l
 const path = [...line];
 for (let k = 0; k < 4; k++) { const i = path[0]! - st; if (!w.terr[i] || w.terr[i] === 4) break; path.unshift(i); }
 for (let k = 0; k < 4; k++) { const i = path.at(-1)! + st; if (!w.terr[i] || w.terr[i] === 4) break; path.push(i); }
-layPath(g.track, n, path); trackChanged(g);
-g.s.rlv = 6; g.s.money = 60000;
+// NOBRIDGE=1: track only up to the near shore, so the crossing can be tried in Rails mode
+layPath(g.track, n, process.env.NOBRIDGE ? path.slice(0, path.indexOf(line[0]!) + 1) : path); trackChanged(g);
+g.s.rlv = process.env.NOBRIDGE ? 4 : 6; g.s.money = 60000;
 for (const i of path) reveal(g, i % n, (i / n) | 0, 14);
 const mid = line[(line.length / 2) | 0]!;
 g.s.camera = { x: ((mid % n) + 0.5) * 32, y: (((mid / n) | 0) + 0.5) * 32, z: 1.6 };

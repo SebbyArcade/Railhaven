@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { buildWorld, newGame } from '../src/game.ts';
 import type { Game } from '../src/state.ts';
 import { generateWorld, MAP_N, MAP_VERSION } from '../src/world/terrain.ts';
-import { bridgeJoinsIslands, STRAIT_COST, STRAIT_MAX } from '../src/track/rules.ts';
+import { bridgeJoinsIslands, STRAIT_COST, STRAIT_MAX, straitCoasts } from '../src/track/rules.ts';
+import { projectOf } from '../src/buildings/parks.ts';
 import { planCost, straitSquares } from '../src/track/paint.ts';
 import { reachedIslands } from '../src/progress/missions.ts';
 
@@ -57,5 +58,25 @@ describe('🌉 sister islands and strait bridges', () => {
     expect(reachedIslands(g).has(kb)).toBe(false);
     g.linked = new Set([line.at(-1)!]);
     expect(reachedIslands(g).has(kb)).toBe(true);
+  });
+});
+
+describe('🏝 telling the player a crossing reaches another island', () => {
+  it('the refusal names the island across, says the Bridge Works is built in Ashford, and rails mode marks those coasts', () => {
+    const g = newGame(4242), line = straits(g)[0]!, water = line.slice(1, -1), on = new Set(line);
+    const far = g.world.islandOf[line.at(-1)!]!, near = g.world.islandOf[line[0]!]!;
+    g.track.set(line[0]!, { links: 0 } as never); // the track already stands on the near side
+    const msg = bridgeJoinsIslands(g, water, i => on.has(i));
+    expect(msg).toContain(g.world.islands[far]!.name!);
+    expect(msg).toMatch(/Bridge Works \(Ashford, Railway level 6\)/);
+    const coasts = straitCoasts(g);
+    expect(coasts.some(c => c.i === line[0] && c.other === far)).toBe(true);
+    expect(coasts.some(c => c.i === line.at(-1) && c.other === near)).toBe(true);
+    // never a coast facing its own island, nor across open sea
+    expect(coasts.every(c => c.isl !== c.other && g.world.terr[c.i] !== 0)).toBe(true);
+  });
+
+  it('the Bridge Works card says it works anywhere on the map', () => {
+    expect(projectOf('bridgeworks')!.text).toMatch(/anywhere on the map/);
   });
 });
