@@ -41,6 +41,31 @@ export function drawTownBadges(ctx: CanvasRenderingContext2D, g: Game, plan: Map
   }
 }
 
+/**
+ * The town whose badge (⬆ or its row of order rings) is under world point (wx, wy), with `slack` world units of finger
+ * room around it. Same sizes as drawTownBadges: zoomed out, the badge sits well above the town's own square
+ * (he tapped a ⬆ in map mode and the map circle moved there instead of opening the town).
+ */
+export function townBadgeAt(g: Game, zoom: number, wx: number, wy: number, slack: number): Site | undefined {
+  const s = Math.max(1, 1 / zoom * 1.4);
+  let best: Site | undefined, bd = Infinity;
+  for (const t of g.s.sites) {
+    if (t.kind !== 'town' || !townLinked(g, t)) continue;
+    const X = (t.x + 0.5) * TILE, Y = (t.y - 1.1) * TILE;
+    let half: number, r: number;
+    if (orderDone(g, t)) { r = 9 * s + 3; half = r; } // + the bounce
+    else {
+      const o = orderOf(g, t), k = Object.keys(o).filter(q => (t.got?.[q as Good] ?? 0) < o[q as Good]!).length; if (!k) continue;
+      r = 7.5 * s; half = (k - 1) * 17 * s / 2 + r;
+    }
+    const dx = Math.abs(wx - X), dy = Math.abs(wy - Y);
+    if (dx > half + slack || dy > r + slack) continue;
+    const d = Math.hypot(Math.max(0, dx - half), Math.max(0, dy - r)) + Math.hypot(wx - X, wy - Y) * 1e-3;
+    if (d < bd) { bd = d; best = t; }
+  }
+  return best;
+}
+
 /** For a town not on the railway (its name board shows 🔌): the squares of track still missing when your line comes close. */
 function drawUnlinked(ctx: CanvasRenderingContext2D, g: Game, t: Site, tm: number) {
   const n = g.world.n, p = 0.5 + 0.5 * Math.sin(tm * 3);
