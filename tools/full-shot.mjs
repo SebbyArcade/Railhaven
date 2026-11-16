@@ -10,7 +10,7 @@ const url = 'file://' + resolve('dist/index.html');
 const errors = [];
 const rect = (page, sel) => page.$eval(sel, e => { const r = e.getBoundingClientRect(); return { x: r.x, y: r.y, w: r.width, h: r.height }; });
 const hit = (a, b) => a.w && b.w && a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
-for (const [w, h, name] of [[412, 860, 'folded'], [740, 840, 'unfolded']]) {
+for (const [w, h, name] of [[412, 860, 'folded'], [740, 840, 'unfolded'], [860, 950, 'unfolded-wide']]) {
   const page = await browser.newPage({ viewport: { width: w, height: h }, hasTouch: true, deviceScaleFactor: 2 });
   page.on('pageerror', e => errors.push(String(e)));
   await page.goto(url + '?new'); await page.waitForTimeout(1200);
@@ -24,7 +24,9 @@ for (const [w, h, name] of [[412, 860, 'folded'], [740, 840, 'unfolded']]) {
   await page.tap('#full'); await page.waitForTimeout(500);
   console.log(name, 'second tap: full screen =', await page.evaluate(() => !!document.fullscreenElement), 'button says', await page.getAttribute('#full', 'title'));
   await page.evaluate(() => { const r = window.railhaven; r.openCard({ kind: 'town', id: r.game.s.sites.find(s => s.kind === 'town').id }); }); await page.waitForTimeout(300);
-  console.log(name, 'with a card open, overlaps card:', hit(await rect(page, '#full'), await rect(page, '#card')));
+  const card = await rect(page, '#card'), x = await rect(page, '#card .x'), wide = w >= 700;
+  for (const b of ['#full', '#mute']) { const r = await rect(page, b); console.log(name, `with a card open, ${b} overlaps ${wide ? 'card' : 'card ✕'}:`, hit(r, wide ? card : x)); }
+  console.log(name, 'card ✕ tappable:', await page.evaluate(([cx, cy]) => !!document.elementFromPoint(cx, cy)?.closest('#card .x'), [x.x + x.w / 2, x.y + x.h / 2]));
   await page.screenshot({ path: `${out}/full-${name}-card.png` });
   await page.close();
 }
