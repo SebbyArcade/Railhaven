@@ -2,7 +2,7 @@ import type { Game } from '../state.ts';
 import { buildingSquares, isLinked } from '../buildings/industries.ts';
 import { townLinked } from '../economy/towns.ts';
 import { isRevealed } from './fog.ts';
-import { poisOf } from './explore.ts';
+import { poisOf, toldIslands } from './explore.ts';
 
 /**
  * 🗺 Area maps, bought at a town or dock on the railway. A map marks what hides in the fog inside its circle (towns,
@@ -42,10 +42,20 @@ export function mapFinds(g: Game, x: number, y: number, r: number): Find[] {
   return out;
 }
 
-/** Every ? shown on the map: finds inside bought maps that are still in the fog. */
+/** What still hides in the fog on one island (an explorer's camp's notes). */
+export function islandFinds(g: Game, k: number): Find[] {
+  const n = g.world.n, on = (x: number, y: number) => g.world.islandOf[y * n + x] === k && !isRevealed(g, y * n + x), out: Find[] = [];
+  for (const s of g.s.sites) if ((s.kind === 'town' || s.kind === 'plot') && on(s.x, s.y)) out.push({ x: s.x, y: s.y, what: s.kind });
+  for (const p of poisOf(g)) if (!p.seen && !p.got && p.kind !== 'wreck' && on(p.x, p.y)) out.push({ x: p.x, y: p.y, what: 'poi' });
+  return out;
+}
+
+/** Every ? shown on the map: finds inside bought maps, and on islands whose explorer's camp is yours, still in the fog. */
 export function rumours(g: Game): Find[] {
   const seen = new Set<number>(), out: Find[] = [];
-  for (const m of g.s.maps ?? []) for (const f of mapFinds(g, m.x, m.y, m.r)) { const k = f.y * g.world.n + f.x; if (!seen.has(k)) { seen.add(k); out.push(f); } }
+  const add = (f: Find) => { const k = f.y * g.world.n + f.x; if (!seen.has(k)) { seen.add(k); out.push(f); } };
+  for (const m of g.s.maps ?? []) for (const f of mapFinds(g, m.x, m.y, m.r)) add(f);
+  for (const k of toldIslands(g)) for (const f of islandFinds(g, k)) add(f);
   return out;
 }
 
