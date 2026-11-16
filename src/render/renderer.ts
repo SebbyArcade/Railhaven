@@ -172,7 +172,7 @@ export class Renderer {
   private drawStraits(ctx: CanvasRenderingContext2D, tm: number, x0: number, y0: number, x1: number, y1: number) {
     const t = this.tools, g = this.g, n = g.world.n;
     if (t?.mode !== 'rail' && t?.mode !== 'double') return;
-    const k = Math.max(1, 1 / g.s.camera.z), labels = new Map<number, { x: number; y: number; c: number }>();
+    const k = Math.max(1, 1 / g.s.camera.z), labels = new Map<number, { x: number; y: number; c: number; sq: number[] }>();
     if (this.railed.size !== g.track.size) { const s = new Set<number>(); for (const i of g.track.keys()) s.add(g.world.islandOf[i]!); this.railed = { size: g.track.size, set: s }; }
     const railed = this.railed.set;
     ctx.save(); ctx.strokeStyle = `rgba(255,120,80,${0.65 + 0.2 * Math.sin(tm * 3)})`; ctx.lineWidth = 2.2 * k; ctx.setLineDash([5 * k, 4 * k]); ctx.lineCap = 'round';
@@ -186,13 +186,25 @@ export class Renderer {
       else if (e.d === 2) { ctx.moveTo(X, Y); ctx.lineTo(X, Y + TILE); }
       else { ctx.moveTo(X, Y); ctx.lineTo(X + TILE, Y); }
       if (railed.has(e.isl)) continue; // name only the islands the railway hasn't reached
-      const l = labels.get(e.isl) ?? { x: 0, y: 0, c: 0 }; l.x += x; l.y += y; l.c++; labels.set(e.isl, l);
+      const l = labels.get(e.isl) ?? { x: 0, y: 0, c: 0, sq: [] }; l.x += x; l.y += y; l.c++; l.sq.push(e.i); labels.set(e.isl, l);
     }
     ctx.stroke(); ctx.restore();
     ctx.font = `700 ${11 * k}px system-ui`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     for (const [isl, l] of labels) {
-      const name = g.world.islands[isl]?.name ?? 'Small island', X = (l.x / l.c + 0.5) * TILE, Y = (l.y / l.c + 0.5) * TILE;
-      const text = `🏝 ${name}`, w = ctx.measureText(text).width + 12 * k, h = 17 * k;
+      // the label sits fully on explored squares (on the coast or just off it, nearest the middle of the dashed coast),
+      // never half in the fog; with no room for it, the dashed line shows alone. An island whose middle is still in
+      // the fog isn't named yet ("Spoiler in fog", 2026-11-16)
+      const o = g.world.islands[isl], known = !!o && isRevealed(g, Math.round(o.cy) * n + Math.round(o.cx));
+      const text = `🏝 ${known ? o!.name ?? 'Small island' : 'Island'}`, w = ctx.measureText(text).width + 12 * k, h = 17 * k;
+      const half = Math.ceil((w / 2) / TILE - 0.5), mx = l.x / l.c, my = l.y / l.c;
+      const fits = (x: number, y: number) => { for (let d = -half; d <= half; d++) if (x + d < 0 || x + d >= n || !isRevealed(g, y * n + x + d)) return false; return true; };
+      let best: { x: number; y: number; d: number } | undefined;
+      for (const i of l.sq) for (let off = -half; off <= half; off++) {
+        const x = i % n + off, y = (i / n) | 0; if (!fits(x, y)) continue;
+        const d = Math.hypot(x - mx, y - my) + Math.abs(off) * 0.5; if (!best || d < best.d) best = { x, y, d };
+      }
+      if (!best) continue;
+      const X = (best.x + 0.5) * TILE, Y = (best.y + 0.5) * TILE;
       ctx.fillStyle = 'rgba(20,16,12,.8)'; ctx.beginPath(); ctx.roundRect(X - w / 2, Y - h / 2, w, h, 7 * k); ctx.fill(); ctx.fillStyle = '#ffb08a'; ctx.fillText(text, X, Y + 0.5 * k);
     }
   }

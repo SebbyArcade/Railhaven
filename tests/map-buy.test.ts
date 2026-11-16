@@ -3,7 +3,9 @@ import fs from 'node:fs';
 import { loadFrom } from '../src/save/save.ts';
 import type { Game } from '../src/state.ts';
 import { buildingSquares } from '../src/buildings/industries.ts';
-import { mapAt, mappedShare, MAP_R, surveyedInFog } from '../src/world/maps.ts';
+import { mapAt, mappedShare, MAP_R } from '../src/world/maps.ts';
+import { drawMaps } from '../src/render/explore.ts';
+import { isRevealed } from '../src/world/fog.ts';
 import { trackChanged } from '../src/game.ts';
 
 const load = () => { const raw = fs.readFileSync('tests/saves/save-seb-2026-11-16d.json', 'utf8'); return loadFrom({ getItem: () => raw, setItem: () => {} } as unknown as Storage)! as Game; };
@@ -40,15 +42,22 @@ describe('area maps and island surveys', () => {
     expect([...g.s.fog]).toEqual([...fog0]); // and left the fog as it was
   });
 
-  // his bug report 10 (2026-11-16): empty white rings over unexplored fog. Every coal and stone deposit in the fog was
-  // drawn as a ringed mark, giving away what the fog hides
-  it('only surveyed iron and oil are marked over the fog, never other deposits', () => {
+  // his bug report 10 (2026-11-16): empty white rings over unexplored fog (every coal and stone deposit was drawn).
+  // Then (2026-11-16, "Spoiler in fog"): an oil barrel a landing crew surveyed showed deep in the fog. Nothing under
+  // the fog gets its own icon now: only the ? of a map he bought
+  it('nothing under the fog is marked except the ? of a bought map', () => {
     const raw = fs.readFileSync('tests/saves/save-seb-2026-11-16e.json', 'utf8');
     const g = loadFrom({ getItem: () => raw, setItem: () => {} } as unknown as Storage)! as Game, n = g.world.n;
-    const fogged = g.s.sites.filter(s => s.kind === 'dep' && !s.hidden && !(g.s.fog[(s.y * n + s.x) >> 3]! >> ((s.y * n + s.x) & 7) & 1));
-    expect(fogged.some(s => s.res !== 'iron' && s.res !== 'oil')).toBe(true); // coal and stone sit in his fog
-    const marks = surveyedInFog(g);
-    expect(marks.every(s => s.res === 'iron' || s.res === 'oil')).toBe(true);
-    expect(marks.every(s => !s.hidden)).toBe(true);
+    const fogged = g.s.sites.filter(s => s.kind === 'dep' && !isRevealed(g, s.y * n + s.x));
+    expect(fogged.length).toBeGreaterThan(0);
+    for (const s of fogged) if (s.res === 'iron' || s.res === 'oil') s.hidden = false; // as if a landing crew surveyed them
+    expect(fogged.some(s => (s.res === 'iron' || s.res === 'oil') && !s.hidden)).toBe(true);
+    const texts: string[] = [], ctx = new Proxy({}, { get: (_o, k) => k === 'fillText' ? (t: string) => texts.push(t) : k === 'measureText' ? () => ({ width: 10 }) : () => {}, set: () => true }) as unknown as CanvasRenderingContext2D;
+    g.s.maps = []; drawMaps(ctx, g, undefined, 0, 1);
+    expect(texts.every(t => t === '?')).toBe(true); // an explorer's camp he took over may mark ?; never a barrel or magnet
+    const before = texts.length;
+    g.s.maps = [{ x: fogged[0]!.x, y: fogged[0]!.y, r: MAP_R }]; drawMaps(ctx, g, undefined, 0, 1);
+    expect(texts.length).toBeGreaterThanOrEqual(before);
+    expect(texts.every(t => t === '?')).toBe(true);
   });
 });
