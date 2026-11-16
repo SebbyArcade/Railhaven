@@ -285,13 +285,17 @@ export class Renderer {
     }
   }
 
-  /** Winter: a few soft flakes drifting down the screen. */
+  /** Winter flakes: each with its own random start, speed, size, sway and wind; a new random spot each time it falls. */
+  private flakes: { x: number; y: number; sp: number; r: number; sw: number; sf: number; ph: number; wind: number; a: number }[] = [];
   private drawSnow(ctx: CanvasRenderingContext2D, view: View, tm: number) {
-    ctx.fillStyle = 'rgba(255,255,255,.75)';
-    for (let k = 0; k < 70; k++) {
-      const sx = (k * 137.5) % view.w, sp = 18 + (k % 7) * 5;
-      const y = ((tm * sp + k * 61.7) % (view.h + 20)) - 10, x = (sx + Math.sin(tm * 0.8 + k) * 12 + view.w) % view.w;
-      ctx.beginPath(); ctx.arc(x, y, 0.8 + (k % 3) * 0.5, 0, 7); ctx.fill();
+    const want = Math.round(view.w * view.h / 3500), H = view.h + 20;
+    while (this.flakes.length < want) this.flakes.push({ x: Math.random(), y: Math.random(), sp: 14 + Math.random() * 26, r: 0.6 + Math.random() * 1.4, sw: 4 + Math.random() * 14, sf: 0.4 + Math.random() * 1.2, ph: Math.random() * 7, wind: (Math.random() - 0.3) * 8, a: 0.45 + Math.random() * 0.45 });
+    for (let k = 0; k < want; k++) {
+      const f = this.flakes[k]!, fall = f.y * H + tm * f.sp, lap = Math.floor(fall / H);
+      // each time it starts again at the top it gets a fresh random column, so no flake keeps to one line
+      const h = Math.sin((k + 1) * 12.9898 + lap * 78.233) * 43758.5453, rx = h - Math.floor(h);
+      const y = fall - lap * H - 10, x = (((f.x + rx) * view.w + tm * f.wind + Math.sin(tm * f.sf + f.ph) * f.sw) % view.w + view.w) % view.w;
+      ctx.fillStyle = `rgba(255,255,255,${f.a})`; ctx.beginPath(); ctx.arc(x, y, f.r, 0, 7); ctx.fill();
     }
   }
 
