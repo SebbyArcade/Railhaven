@@ -47,9 +47,14 @@ export function hallOf(track: TrackMap, n: number, town: Site, terr: Uint8Array,
   }
   for (const [ox, oy] of [[0, -1], [0, 1], [-1, 0], [1, 0]] as const) {
     const horizontal = oy !== 0, along = horizontal ? bit(0) | bit(2) : bit(1) | bit(3);
-    const cx = town.x + ox, cy = town.y + oy, [dx, dy] = horizontal ? [1, 0] : [0, 1];
-    const ok = [-1, 0, 1].every(k => track.get((cy + dy * k) * n + cx + dx * k)?.links === along);
-    if (ok) { const h = make(n, town, cx, cy, horizontal); if (dry(h)) return h; }
+    const bx = town.x + ox, by = town.y + oy, [dx, dy] = horizontal ? [1, 0] : [0, 1];
+    // centred beside the town; else slid one square along the line, still beside the town, where the line bends
+    // just past it (a line that ran past the town keeps its station when it is carried on round a corner)
+    for (const sh of [0, -1, 1]) {
+      const cx = bx + dx * sh, cy = by + dy * sh;
+      const ok = [-1, 0, 1].every(k => track.get((cy + dy * k) * n + cx + dx * k)?.links === along);
+      if (ok) { const h = make(n, town, cx, cy, horizontal); if (dry(h)) return h; }
+    }
   }
   // a line that ends right beside the town (a mountain or the sea in the way, or just the end of a branch): a dead-end
   // station, its platforms running back along the line from the square beside the town
@@ -114,7 +119,7 @@ export function stationLinkError(track: TrackMap, n: number, sites: Site[], a: n
     const inHall = (x: number, y: number) => horizontal ? y === hy && Math.abs(x - hx) <= 1 : x === hx && Math.abs(y - hy) <= 1;
     const side = `Track can only enter ${s.name} station at its two ends, not from the side: the arrows show where`;
     if ((inHall(ax, ay) || inHall(bx, by)) && horizontalLink !== horizontal) return side;
-    if (!cur) { // this link creates the hall: no track may already cross the squares it will cover
+    if (!cur && !h) { // this link creates the hall: no track may already cross the squares it will cover
       const across = horizontal ? bit(1) | bit(3) : bit(0) | bit(2);
       for (const k of [-1, 1]) { const o = track.get(horizontal ? c + k : c + k * n); if (o && o.links & across) return side; }
     }

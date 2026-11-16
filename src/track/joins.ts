@@ -1,9 +1,10 @@
 import type { Game, Site } from '../state.ts';
 import { hallOf } from '../buildings/stations.ts';
+import { townLinked } from '../economy/towns.ts';
 import { railNoGo } from '../buildings/nogo.ts';
 import { isRevealed } from '../world/fog.ts';
 import { layPath } from './edit.ts';
-import { planCost, planError } from './paint.ts';
+import { planCost, planError, withPath } from './paint.ts';
 import type { TrackMap } from './types.ts';
 import { yardSet } from '../buildings/industries.ts';
 
@@ -86,8 +87,9 @@ export function stationSpots(g: Game, t: Site): StationSpot[] {
   const ok = (i: number) => isRevealed(g, i) && g.world.terr[i] !== 0 && !yards.has(i) && (g.track.has(i) || !railNoGo(g, i));
   const spot = (cx: number, cy: number, horizontal: boolean) => {
     const [dx, dy] = horizontal ? [1, 0] : [0, 1], at = (k: number) => (cy + dy * k) * n + cx + dx * k;
-    const squares = [at(-1), at(0), at(1)];
-    if (!squares.every(ok)) return;
+    const along = horizontal ? 5 : 10, squares = [at(-1), at(0), at(1)];
+    // platforms go on open land, or on track you already have that runs straight the same way (never on a bend)
+    if (!squares.every(i => ok(i) && (!g.track.has(i) || (g.track.get(i)!.links | along) === along))) return;
     const ends = ([[at(-2), at(-1)], [at(2), at(1)]] as [number, number][]).filter(([e]) => ok(e));
     if (ends.length) out.push({ squares, ends });
   };
@@ -108,12 +110,33 @@ export function bestSpot(g: Game, t: Site): SpotPick | null {
   let m = spotMemo.get(g.linked); if (!m) { m = new Map(); spotMemo.set(g.linked, m); }
   if (m.has(t.id)) return m.get(t.id)!;
   const n = g.world.n; let best: SpotPick | null = null;
-  for (const spot of stationSpots(g, t)) for (const end of spot.ends) {
+  const spots = stationSpots(g, t), was = lastSpot.get(t.id);
+  // keep showing the spot it showed before while it still fits, so the guide doesn't turn while you build toward it
+  const kept = was && spots.find(sp => sp.squares.join() === was);
+  for (const spot of kept ? [kept] : spots) for (const end of spot.ends) {
     const ex = end[0] % n, ey = (end[0] / n) | 0;
     for (const i of g.linked) {
       const d = Math.abs(i % n - ex) + Math.abs(((i / n) | 0) - ey);
       if (!best || d < best.d) best = { spot, end, from: i, d };
     }
   }
+  if (best) lastSpot.set(t.id, best.spot.squares.join());
   m.set(t.id, best); return best;
+}
+/** the spot last shown for each town (not saved: a fresh session may pick again) */
+const lastSpot = new Map<number, string>();
+
+/**
+ * What a planned stroke does to stations, for the confirm bar: towns it puts on the railway (🚉) and towns whose
+ * station it would take away (⚠), in words. '' when it changes none.
+ */
+export function stationsText(g: Game, path: number[]): string {
+  const n = g.world.n, tr = withPath(g, path), yards = yardSet(g), on = new Set(path), gain: string[] = [], lose: string[] = [];
+  for (const t of g.s.sites) {
+    if (t.kind !== 'town' || !path.some(i => Math.abs(i % n - t.x) <= 3 && Math.abs(((i / n) | 0) - t.y) <= 3)) continue;
+    const was = townLinked(g, t), h = hallOf(tr, n, t, g.world.terr, yards);
+    const now = !!h && h.squares.some(i => on.has(i) || !!g.linked?.has(i));
+    if (now && !was) gain.push(t.name ?? 'a town'); else if (was && !now) lose.push(t.name ?? 'a town');
+  }
+  return (gain.length ? ` · 🚉 links ${gain.join(', ')}` : '') + (lose.length ? ` · ⚠ ${lose.join(', ')} loses its station: run the line straight past it` : '');
 }

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { newGame, trackChanged } from '../src/game.ts';
 import { layPath } from '../src/track/edit.ts';
 import { buildPlan } from '../src/track/paint.ts';
-import { bestSpot, joinGap, stationSpots } from '../src/track/joins.ts';
+import { bestSpot, joinGap, stationSpots, stationsText } from '../src/track/joins.ts';
 import { townLinked } from '../src/economy/towns.ts';
 import { reveal } from '../src/world/fog.ts';
 import type { Game, Site } from '../src/state.ts';
@@ -23,8 +23,8 @@ function setup(): { g: Game; t: Site; sq: (x: number, y: number) => number; line
 describe('the gold squares that join a town to the railway', () => {
   it('a line that runs beside the town but curves away there leaves it unlinked, and the gap squares link it when laid', () => {
     const { g, t, line } = setup(), a = g.s.sites[0]!;
-    // east from Ashford, down past the town's east side, then curving away east right beside it (Stonecroft)
-    layPath(g.track, g.world.n, line([[a.x, a.y], [a.x + 7, a.y], [a.x + 7, a.y + 5], [a.x + 9, a.y + 5]])); trackChanged(g);
+    // east from Ashford, down the town's east side, then curving away east on the square right beside it (Stonecroft)
+    layPath(g.track, g.world.n, line([[a.x, a.y], [a.x + 7, a.y], [a.x + 7, a.y + 4], [a.x + 9, a.y + 4]])); trackChanged(g);
     expect(townLinked(g, t)).toBe(false);
     const j = joinGap(g, t)!;
     expect(j).not.toBeNull();
@@ -74,5 +74,33 @@ describe('the gold squares that join a town to the railway', () => {
     // the end it picks is the one nearest your track
     const n = g.world.n, dist = (e: number) => Math.min(...[...g.linked!].map(i => Math.abs(i % n - e % n) + Math.abs(((i / n) | 0) - ((e / n) | 0))));
     for (const sp of spots) for (const [e] of sp.ends) expect(pick.d).toBeLessThanOrEqual(dist(e));
+  });
+
+  it('laying track along the dots and through the 🚉 outline links the town', () => {
+    const { g, t, line } = setup(), a = g.s.sites[0]!, n = g.world.n;
+    t.x += 10; t.y += 6; reveal(g, t.x, t.y, 6);
+    for (let y = t.y - 3; y <= t.y + 3; y++) for (let x = t.x - 3; x <= t.x + 3; x++) g.world.terr[y * n + x] = 1;
+    layPath(g.track, n, line([[a.x, a.y], [a.x - 2, a.y]])); trackChanged(g);
+    const pick = bestSpot(g, t)!, sq = pick.spot.squares, [e, inner] = pick.end;
+    const far = sq[0] === inner ? sq[2]! : sq[0]!, xy = (i: number): [number, number] => [i % n, (i / n) | 0];
+    // from the railway square it names, round to the arrow square, then straight through the outline to its far end
+    const f = xy(pick.from), ee = xy(e), ff = xy(far), path = ee[0] === ff[0] ? line([f, [f[0], ee[1] + Math.sign(ee[1] - ff[1]) * 2], [ee[0], ee[1] + Math.sign(ee[1] - ff[1]) * 2], ff]) : line([f, [ee[0] + Math.sign(ee[0] - ff[0]) * 2, f[1]], [ee[0] + Math.sign(ee[0] - ff[0]) * 2, ee[1]], ff]);
+    expect(stationsText(g, path)).toContain(`🚉 links ${t.name}`);
+    expect(buildPlan(g, { path })).not.toBeTypeOf('string'); trackChanged(g);
+    expect(townLinked(g, t)).toBe(true);
+  });
+
+  it('the outline never sits on a bend of your track, and the bar warns when a stroke would take a station away', () => {
+    const { g, t, sq, line } = setup(), a = g.s.sites[0]!;
+    // a line ending beside the town (a dead-end station there)
+    layPath(g.track, g.world.n, line([[a.x, a.y], [a.x, t.y + 1], [t.x, t.y + 1]])); trackChanged(g);
+    expect(townLinked(g, t)).toBe(true);
+    // carrying it on one square and up past the town's corner bends it right at the station's end: no station left
+    const path = [sq(t.x, t.y + 1), sq(t.x + 1, t.y + 1), sq(t.x + 1, t.y), sq(t.x + 1, t.y - 1), sq(t.x + 1, t.y - 2)];
+    const txt = stationsText(g, path);
+    if (txt.includes('⚠')) expect(txt).toContain(`⚠ ${t.name} loses its station`);
+    else expect(txt).toBe(''); // the station slid back along the straight part
+    // curves of your own track are never offered as platforms
+    for (const sp of stationSpots(g, t)) for (const i of sp.squares) if (g.track.has(i)) expect([1, 4, 5, 2, 8, 10]).toContain(g.track.get(i)!.links); // straight, or the straight end of a line
   });
 });
