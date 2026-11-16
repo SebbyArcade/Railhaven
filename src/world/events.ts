@@ -8,6 +8,7 @@ import { hallOf } from '../buildings/stations.ts';
 import { backRun, type CrewRun, crewRun, moveCrews, railPath, runTime } from './crews.ts';
 import { hash } from '../core/rng.ts';
 import { TILE } from './terrain.ts';
+import { isRevealed } from './fog.ts';
 
 /**
  * Events that make the railway feel alive: storms drifting across the map, trains breaking down and building fires.
@@ -36,6 +37,29 @@ export function nearName(g: Game, x: number, y: number): string {
 function crewTime(g: Game, x: number, y: number, from?: { x: number; y: number }) {
   const f = from ?? g.s.shed ?? g.s.sites[0]!;
   return 4 + Math.hypot(x - f.x, y - f.y) * 0.6;
+}
+
+/** Squares a second a storm drifts. */
+const STORM_SPEED = 0.12;
+
+/**
+ * A storm over the track square (ax, ay): it starts upwind and drifts over the line, along a path that stays on land
+ * you have discovered, never in the fog (he asked). It tries other wind directions, then a slower drift, and at last
+ * stands still over the line.
+ */
+function stormPath(g: Game, ax: number, ay: number, ang0: number, life: number): Storm {
+  const n = g.world.n, seen = (x: number, y: number) => {
+    const ix = Math.round(x), iy = Math.round(y);
+    return ix >= 0 && iy >= 0 && ix < n && iy < n && !!isRevealed(g, iy * n + ix);
+  };
+  for (const speed of [STORM_SPEED, STORM_SPEED / 2, STORM_SPEED / 4]) for (let k = 0; k < 12; k++) {
+    const ang = ang0 + k * Math.PI / 6, vx = Math.cos(ang) * speed, vy = Math.sin(ang) * speed;
+    const x0 = ax - vx * life / 2, y0 = ay - vy * life / 2, steps = Math.ceil(speed * life * 2);
+    let ok = true;
+    for (let i = 0; i <= steps && ok; i++) ok = seen(x0 + vx * life * i / steps, y0 + vy * life * i / steps);
+    if (ok) return { x: x0, y: y0, vx, vy, r: 7, t0: g.s.t, until: g.s.t + life };
+  }
+  return { x: ax, y: ay, vx: 0, vy: 0, r: 7, t0: g.s.t, until: g.s.t + life };
 }
 
 export function inStorm(g: Game, x: number, y: number): boolean {
@@ -74,9 +98,8 @@ export function tickEvents(g: Game, dt: number): boolean {
   } else if (s.t >= ne.storm && g.track.size) {
     ne.storm = gap(g, 1, STORM_GAP);
     const tr = [...g.track.keys()], n = g.world.n, at = tr[Math.floor(hash(s.seed, Math.floor(s.t), 2, 54) * tr.length)]!;
-    const ax = at % n, ay = (at / n) | 0, ang = hash(s.seed, Math.floor(s.t), 3, 55) * Math.PI * 2, life = 100 + hash(s.seed, Math.floor(s.t), 4, 56) * 50;
-    const speed = 0.12; // squares a second: it starts upwind and drifts over the line
-    s.storm = { x: ax - Math.cos(ang) * speed * life / 2, y: ay - Math.sin(ang) * speed * life / 2, vx: Math.cos(ang) * speed, vy: Math.sin(ang) * speed, r: 7, t0: s.t, until: s.t + life };
+    const ax = at % n, ay = (at / n) | 0, ang0 = hash(s.seed, Math.floor(s.t), 3, 55) * Math.PI * 2, life = 100 + hash(s.seed, Math.floor(s.t), 4, 56) * 50;
+    s.storm = stormPath(g, ax, ay, ang0, life);
     news(`⛈ A storm is rolling in ${nearName(g, ax, ay)}: trains slow down under it`);
   }
   // 🔧 breakdowns: a moving train stops and waits for the crew

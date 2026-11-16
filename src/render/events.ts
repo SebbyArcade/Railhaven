@@ -109,7 +109,7 @@ export function drawMishaps(ctx: CanvasRenderingContext2D, g: Game, tm: number, 
 /** The storm: a dark cloud shadow drifting over the land, with rain. */
 export function drawStorm(ctx: CanvasRenderingContext2D, g: Game, tm: number) {
   const st = g.s.storm; if (!st || g.s.t >= st.until) return;
-  const life = Math.max(0, Math.min(1, (st.until - g.s.t) / 20, (g.s.t - (st.t0 ?? st.until - 150)) / 20)); // fade in and out
+  const life = stormLife(g); // fade in and out
   const x = st.x * TILE, y = st.y * TILE, R = st.r * TILE;
   const gr = ctx.createRadialGradient(x, y, R * 0.2, x, y, R * 1.1);
   gr.addColorStop(0, `rgba(30,38,52,${0.38 * life})`); gr.addColorStop(1, 'rgba(30,38,52,0)');
@@ -124,18 +124,43 @@ export function drawStorm(ctx: CanvasRenderingContext2D, g: Game, tm: number) {
   ctx.stroke();
 }
 
-/** Can you see the storm: its dark middle on screen and not hidden in the fog? (He saw white flashes with no storm
- *  in sight: a storm just below the screen edge flashed too.) */
-export function stormInView(g: Game, cam: { x: number; y: number; z: number }, view: { w: number; h: number }): boolean {
-  const st = g.s.storm; if (!st) return false;
-  const rs = st.r * TILE * cam.z * 0.5;
-  return Math.abs(st.x * TILE - cam.x) * cam.z < view.w / 2 + rs && Math.abs(st.y * TILE - cam.y) * cam.z < view.h / 2 + rs
-    && !!isRevealed(g, Math.round(st.y) * g.world.n + Math.round(st.x));
+/** How strongly the storm shows (0-1): it fades in over its first 20 s and out over its last 20 s. */
+export function stormLife(g: Game): number {
+  const st = g.s.storm; if (!st || g.s.t >= st.until) return 0;
+  return Math.max(0, Math.min(1, (st.until - g.s.t) / 20, (g.s.t - (st.t0 ?? st.until - 150)) / 20));
 }
 
-/** A lightning flash over the whole screen now and then while the storm is on screen. */
-export function stormFlash(g: Game, tm: number): number {
-  const st = g.s.storm; if (!st || g.s.t >= st.until) return 0;
+/** A lightning strike: brightness (0-1), and the bolt's zigzag in world pixels. */
+export interface Lightning { a: number; bolt: { x: number; y: number }[] }
+
+/**
+ * Lightning now and then inside the storm cloud, or null between strikes. It lights only the cloud, never the whole
+ * screen, so a storm off screen or in the fog shows no flash, and it is as faint as the cloud while the storm fades in
+ * or out. (He saw white flashes with no storm in sight, even after the flash needed the storm on screen.)
+ */
+export function lightning(g: Game, tm: number): Lightning | null {
+  const st = g.s.storm, life = stormLife(g); if (!st || life <= 0) return null;
+  if (!isRevealed(g, Math.round(st.y) * g.world.n + Math.round(st.x))) return null; // the storm is in the fog
   const k = Math.floor(tm / 7), at = k * 7 + hash(g.s.seed, k, 9, 75) * 5, dt = tm - at;
-  return hash(g.s.seed, k, 8, 76) < 0.5 && dt >= 0 && dt < 0.25 ? (dt < 0.08 || dt > 0.15 ? 0.35 : 0.1) : 0;
+  if (!(hash(g.s.seed, k, 8, 76) < 0.5 && dt >= 0 && dt < 0.25)) return null;
+  const a = (dt < 0.08 || dt > 0.15 ? 1 : 0.3) * life; if (a < 0.05) return null;
+  // the bolt drops from high in the cloud, zigzagging, and stays inside it
+  const R = st.r * TILE, x = st.x * TILE + (hash(g.s.seed, k, 10, 77) - 0.5) * R * 0.8, y0 = st.y * TILE - R * 0.5;
+  const bolt = [{ x, y: y0 }];
+  for (let s = 1; s <= 5; s++) bolt.push({ x: x + (hash(g.s.seed, k, s, 78) - 0.5) * R * 0.25, y: y0 + s * R * 0.17 });
+  return { a, bolt };
+}
+
+/** Draw the strike: a glow over the cloud and a white bolt (drawn under the fog, so fogged parts stay dark). */
+export function drawLightning(ctx: CanvasRenderingContext2D, g: Game, tm: number) {
+  const l = lightning(g, tm), st = g.s.storm; if (!l || !st) return;
+  const x = st.x * TILE, y = st.y * TILE, R = st.r * TILE * 1.1;
+  const gr = ctx.createRadialGradient(l.bolt[0]!.x, l.bolt[0]!.y + R * 0.3, 0, x, y, R);
+  gr.addColorStop(0, `rgba(235,240,255,${0.5 * l.a})`); gr.addColorStop(1, 'rgba(235,240,255,0)');
+  ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(x, y, R, 0, 7); ctx.fill();
+  ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+  for (const [w, c] of [[6, `rgba(200,215,255,${0.35 * l.a})`], [2, `rgba(255,255,255,${l.a})`]] as const) {
+    ctx.strokeStyle = c; ctx.lineWidth = w; ctx.beginPath();
+    l.bolt.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y))); ctx.stroke();
+  }
 }

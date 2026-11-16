@@ -6,6 +6,7 @@ import { bestPlacement, build, nearestSpot, yardSquares } from '../src/buildings
 import { tickProduction } from '../src/economy/production.ts';
 import { EVENTS_START, inStorm, STORM_SLOW, tickEvents, trainSpeedMul } from '../src/world/events.ts';
 import { TILE } from '../src/world/terrain.ts';
+import { isRevealed } from '../src/world/fog.ts';
 
 function setup() {
   const g = newGame(4242), n = g.world.n, a = g.s.sites[0]!, at = (dx: number, dy: number) => (a.y + dy) * n + a.x + dx;
@@ -63,6 +64,23 @@ describe('storms, breakdowns and fires', () => {
     g.s.t = st.until - 0.01; run(g, 0.1);
     expect(g.s.storm).toBeUndefined();
     expect(trainSpeedMul(g, t)).toBe(1);
+  });
+
+  it('a storm stays over discovered land from start to end, never in the fog (he asked)', () => {
+    const { g } = setup(), n = g.world.n;
+    let moving = 0;
+    for (let k = 0; k < 40; k++) {
+      g.s.storm = undefined; g.s.t = EVENTS_START + 61 + k * 37; g.s.nextEvent = { storm: g.s.t, breakdown: 1e9, fire: 1e9 };
+      tickEvents(g, 0.01);
+      const st = g.s.storm!; expect(st).toBeDefined();
+      if (st.vx || st.vy) moving++;
+      const life = st.until - g.s.t;
+      for (let i = 0; i <= 40; i++) {
+        const x = Math.round(st.x + st.vx * life * i / 40), y = Math.round(st.y + st.vy * life * i / 40);
+        expect(isRevealed(g, y * n + x)).toBeTruthy();
+      }
+    }
+    expect(moving).toBeGreaterThan(30); // most still drift across
   });
 
   it('a building on fire makes nothing until the fire crew puts it out, and keeps its stock', () => {
