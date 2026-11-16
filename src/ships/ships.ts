@@ -70,6 +70,14 @@ export interface CargoShip {
   face?: number;
 }
 
+/**
+ * ⛴ A boat taking a new train over to another island (he asked, 2026-11-16: a new train leaves the engine shed, runs
+ * to the nearest dock and is shipped over, it doesn't just appear). It sails like a cargo ship, with the train aboard
+ * instead of goods; `train` is the train's number, `isl` the island it goes to, and `paid` what the train and its crossing cost (paid back if the
+ * landing is gone when it arrives).
+ */
+export interface Ferry extends CargoShip { train: number; paid: number; /** the island it sails to */ isl: number }
+
 /** A sea route: two docks on the railway, on different islands, where one reaches the other by sea. */
 export interface Lane { a: number; b: number; d: number }
 
@@ -269,7 +277,7 @@ function takenSlots(g: Game, dock: number, except?: CargoShip): Set<number> {
 }
 
 /** The first free berth at a dock (pier berths first, then anchor spots). */
-function freeSlot(g: Game, dock: number, except?: CargoShip): number {
+export function freeSlot(g: Game, dock: number, except?: CargoShip): number {
   const t = takenSlots(g, dock, except); let k = 0;
   while (t.has(k)) k++;
   return k;

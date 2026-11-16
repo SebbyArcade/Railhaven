@@ -74,6 +74,9 @@ export interface Train {
   sellAfter?: boolean;
   /** ⛴ booked to go over to this landing (dock id) by boat once it has delivered its load; the crossing is paid */
   moveTo?: number;
+  /** ⛴ a new train for another island: it runs to the nearest dock, then a boat takes it to this landing (dock id).
+   *  `paid`: the train and crossing; `tries`: times no way to the dock was found (it gives up after a few) */
+  ferry?: { to: number; paid: number; tries?: number };
   /** seconds since it last had a job (no paying load anywhere) */
   noWork?: number;
   /** running costs since its last delivery, and what its last few trips earned after running costs */

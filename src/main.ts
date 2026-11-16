@@ -233,7 +233,7 @@ cardEl.onclick = e => {
   if (b.dataset.act === 'buyon') { // 🚂 Your trains: one more train for this island
     const isl = +b.dataset.isl!, p = fleetByIsland(game).find(f => f.island === isl)?.price ?? 0, t = buyTrainFor(game, isl);
     if (typeof t === 'string') { toast(t); return; }
-    toast(`🚂 Train ${t.id} bought for ${fmtMoney(p)}: it looks for a load by itself`); renderCard(); return;
+    toast(t.ferry ? `🚂 Train ${t.id} bought for ${fmtMoney(p)}: it leaves the engine shed for the dock, and a boat takes it over` : `🚂 Train ${t.id} bought for ${fmtMoney(p)}: it looks for a load by itself`); renderCard(); return;
   }
   if (b.dataset.act === 'sellon') { // 🚂 Your trains: sell one train on this island (one with no work first)
     const isl = +b.dataset.isl!, t = trainToSell(game, isl); if (!t) { toast('No train here to sell'); return; }
@@ -274,7 +274,7 @@ cardEl.onclick = e => {
   if (b.dataset.act === 'bringfrom' && bld) { const t = bringTrainFrom(game, bld, +b.dataset.to!); toast(typeof t !== 'string' ? `⛴ Train ${t.id} came over by boat and is looking for a load` : t === 'later' ? '⛴ Booked: the train sails over as soon as it has delivered its load' : t); renderCard(); return; }
   if (b.dataset.act === 'unmove' && bld) { const t = game.s.trains.find(x => x.id === +b.dataset.to!); if (t) { cancelMove(game, t); toast(`Train ${t.id} stays where it is: crossing fee paid back`); } renderCard(); return; }
   if (b.dataset.act === 'shipover' && bld) { const t = shipTrainTo(game, bld); toast(typeof t === 'string' ? t : `⛴ Train ${t.id} came over by boat and is looking for a load`); renderCard(); return; }
-  if (b.dataset.act === 'trainat' && bld) { const t = buyTrainAt(game, bld); if (typeof t === 'string') toast(t); else { toast(`🚂 Train ${t.id} came over by boat and is looking for a load`); } renderCard(); return; }
+  if (b.dataset.act === 'trainat' && bld) { const t = buyTrainAt(game, bld); if (typeof t === 'string') toast(t); else { toast(`🚂 Train ${t.id} leaves the engine shed for the dock: a boat takes it over from there`); } renderCard(); return; }
   if (b.dataset.act === 'lvl' && bld) { const why = upgradeBuilding(game, bld); toast(why || `⬆ ${info(bld.kind).name} is now level ${bld.lvl}${(bld.tracks ?? 2) > 2 ? ` · ${bld.tracks} loading tracks` : ''}`); if (!why) { trackChanged(game); game.terrainDirty?.(footprint(game.world.n, bld)); } renderCard(); return; }
   if (b.dataset.act === 'shut' && bld) { const on = !bld.closed, why = setClosed(bld, on); toast(why || (on ? `⛔ ${INDUSTRIES[bld.kind].name} closed: barriers come down once the last train leaves` : `✅ ${INDUSTRIES[bld.kind].name} open again`)); renderCard(); return; }
   if (b.dataset.act === 'sell' && bld) { const o = sellOffer(bld), why = sellStock(game, bld); toast(why || `💸 Sold ${o.n} for ${fmtMoney(o.pay)}`); renderCard(); return; }
