@@ -12,8 +12,9 @@ import { poisOf, toldIslands } from './explore.ts';
 export interface AreaMap { x: number; y: number; r: number }
 export interface Find { x: number; y: number; what: 'town' | 'plot' | 'poi' }
 
-/** circle radius from a town, from a dock (sea charts reach further), and how far from the railway its middle may go */
-export const MAP_R = 45, MAP_R_SEA = 70, MAP_FAR = 40;
+/** circle radius (the same from a town or a dock: he found 45 and 70 far too big and the difference confusing,
+ *  2026-11-16), and how far from the railway its middle may go */
+export const MAP_R = 20, MAP_R_SEA = MAP_R, MAP_FAR = 40;
 export const mapCost = (g: Game) => Math.round(1000 * Math.pow(1.5, (g.s.maps ?? []).length) / 100) * 100;
 
 /** Towns and docks on the railway: where maps are sold. */
@@ -31,7 +32,18 @@ export function mapAt(g: Game, x: number, y: number): { x: number; y: number; r:
   const ps = mapPlaces(g); if (!ps.length) return 'Join a town to your railway first: maps are sold there';
   const p = ps.sort((a, b) => Math.hypot(a.x - x, a.y - y) - Math.hypot(b.x - x, b.y - y))[0]!;
   if (Math.hypot(p.x - x, p.y - y) > MAP_FAR) return `Too far from your railway: centre the map within ${MAP_FAR} squares of a town or dock on it`;
-  return { x, y, r: p.dock ? MAP_R_SEA : MAP_R, near: p.name };
+  return { x, y, r: MAP_R, near: p.name };
+}
+
+/** Share of a circle (0..1) already covered by maps you bought, so you don't pay twice for the same land. */
+export function mappedShare(g: Game, x: number, y: number, r: number): number {
+  const ms = g.s.maps ?? []; if (!ms.length) return 0;
+  let all = 0, got = 0;
+  for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
+    if (dx * dx + dy * dy > r * r) continue;
+    all++; if (ms.some(m => Math.hypot(x + dx - m.x, y + dy - m.y) <= m.r)) got++;
+  }
+  return all ? got / all : 0;
 }
 
 /** What still hides in the fog inside a circle. */

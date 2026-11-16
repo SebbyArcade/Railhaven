@@ -109,7 +109,25 @@ export function drawMaps(ctx: CanvasRenderingContext2D, g: Game, t: Tools | unde
     ctx.strokeStyle = '#ffd27a'; ctx.lineWidth = 1.6 * s; ctx.stroke();
     ctx.fillStyle = '#ffd27a'; ctx.font = `800 ${Math.round(12 * s)}px system-ui`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('?', X, Y + 0.5 * s);
   }
-  const m = t?.mode === 'map' ? t.mapPv : null; if (!m) return;
+  // iron and oil the landing crew surveyed on an island: their icon over the fog (no holes punched in it)
+  const n = g.world.n;
+  for (const d of g.s.sites) if (d.kind === 'dep' && !d.hidden && !isRevealed(g, d.y * n + d.x)) {
+    const X = (d.x + 0.5) * TILE, Y = (d.y + 0.5) * TILE, r = 9 * s;
+    ctx.fillStyle = 'rgba(40,30,18,.85)'; ctx.beginPath(); ctx.arc(X, Y, r, 0, 7); ctx.fill();
+    ctx.strokeStyle = 'rgba(200,220,240,.8)'; ctx.lineWidth = 1.2 * s; ctx.stroke();
+    ctx.font = `${Math.round(11 * s)}px system-ui`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(d.res === 'oil' ? '🛢' : d.res === 'iron' ? '🧲' : '⛏', X, Y + 0.5 * s);
+  }
+  if (t?.mode !== 'map') return;
+  // maps you already bought: green circles, so you don't pay twice for the same land
+  for (const b of g.s.maps ?? []) {
+    const X = (b.x + 0.5) * TILE, Y = (b.y + 0.5) * TILE, R = b.r * TILE;
+    ctx.fillStyle = 'rgba(120,220,140,.10)'; ctx.beginPath(); ctx.arc(X, Y, R, 0, 7); ctx.fill();
+    ctx.strokeStyle = 'rgba(140,230,150,.75)'; ctx.lineWidth = 2 * s; ctx.stroke();
+    ctx.fillStyle = 'rgba(140,230,150,.95)'; ctx.font = `700 ${Math.round(13 * s)}px system-ui`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('✅ mapped', X, Y - R + 16 * s);
+  }
+  const m = t.mapPv; if (!m) return;
   const X = (m.x + 0.5) * TILE, Y = (m.y + 0.5) * TILE, R = m.r * TILE;
   ctx.fillStyle = 'rgba(255,231,168,.10)'; ctx.beginPath(); ctx.arc(X, Y, R, 0, 7); ctx.fill();
   ctx.strokeStyle = `rgba(255,214,120,${0.7 + 0.3 * pulse})`; ctx.lineWidth = 3 * s; ctx.setLineDash([10 * s, 8 * s]); ctx.lineDashOffset = -tm * 20 * s;
