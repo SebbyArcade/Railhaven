@@ -1,5 +1,5 @@
 import type { Game } from '../state.ts';
-import { aName, capOf, GOODS, type Good, INDUSTRIES, inputsOf, isFactory, isLinked, outputOf } from '../buildings/industries.ts';
+import { aName, capOf, footprint, GOODS, type Good, INDUSTRIES, inputsOf, isFactory, isLinked, outputOf } from '../buildings/industries.ts';
 import { factoryState } from '../economy/production.ts';
 import { orderDone, orderOf, sizeName, stepOf, townLinked } from '../economy/towns.ts';
 import { isRevealed } from '../world/fog.ts';
@@ -18,7 +18,7 @@ export const VIEWS: { k: MapView; b: string; d: string }[] = [
 ];
 
 /** One label on a map view, at a square (x, y). A bar shows a stock filling up. */
-export interface Mark { x: number; y: number; icon: string; text: string; col: string; bar?: number; big?: boolean }
+export interface Mark { x: number; y: number; icon: string; text: string; col: string; bar?: number; big?: boolean; low?: boolean; short?: string }
 
 const lc = (k: Good) => GOODS[k].name.toLowerCase();
 const seen = (g: Game, x: number, y: number) => !!isRevealed(g, y * g.world.n + x);
@@ -54,15 +54,17 @@ export function viewMarks(g: Game, v: MapView): Mark[] {
       if (!isLinked(g, b)) { out.push({ x: b.x, y: b.y, icon: '🔌', text: `${INDUSTRIES[b.kind].name}: not on the railway`, col: C.bad }); continue; }
       if (isFactory(b.kind)) {
         const f = factoryState(g, b), ins = inputsOf(b.kind).map(i => `${GOODS[i].icon} ${Math.floor(b.inbuf?.[i] ?? 0)}`).join(' ');
-        out.push({ x: b.x, y: b.y, icon: f.busy ? '🏭' : '⏳', text: `${ins} → ${GOODS[k].icon} ${st}/${cap}${f.busy ? '' : f.waits.length ? ' · waiting' : ' · full'}`, col: f.busy ? C.ok : C.warn, bar: st / cap });
-      } else out.push({ x: b.x, y: b.y, icon: GOODS[k].icon, text: `${st}/${cap} · +${Math.round(outputOf(g, b) * 60)}/min`, col: st >= cap ? C.gold : C.ok, bar: st / cap });
+        out.push({ x: b.x, y: b.y, icon: f.busy ? '🏭' : '⏳', text: `${ins} → ${GOODS[k].icon} ${st}/${cap}${f.busy ? '' : f.waits.length ? ' · waiting' : ' · full'}`, col: f.busy ? C.ok : C.warn, bar: st / cap, short: `${GOODS[k].icon} ${st}/${cap}` });
+      } else out.push({ x: b.x, y: b.y, icon: GOODS[k].icon, text: `${st}/${cap} · +${Math.round(outputOf(g, b) * 60)}/min`, col: st >= cap ? C.gold : C.ok, bar: st / cap, short: `+${Math.round(outputOf(g, b) * 60)}/min` });
     }
-    const used = new Set((g.s.buildings ?? []).map(b => `${b.x},${b.y}`));
+    // a deposit with a building on it is in use: only the building shows
+    const usedDep = new Set<number>(), usedSq = new Set<number>();
+    for (const b of g.s.buildings ?? []) { if (b.dep !== undefined) usedDep.add(b.dep); for (const q of footprint(n, b)) usedSq.add(q); }
     for (const d of g.s.sites) {
-      if (d.kind !== 'dep' || d.hidden || !seen(g, d.x, d.y) || used.has(`${d.x},${d.y}`)) continue;
+      if (d.kind !== 'dep' || d.hidden || !seen(g, d.x, d.y) || usedDep.has(d.id) || usedSq.has(d.y * n + d.x)) continue;
       const kind = (d.res ?? 'stone') as keyof typeof INDUSTRIES, I = INDUSTRIES[kind];
       if (!I) continue;
-      out.push({ x: d.x, y: d.y, icon: GOODS[I.makes].icon, text: `${GOODS[I.makes].name}${d.rich ? ' ★ rich' : ''}: build ${aName(I.name)} here`, col: C.dep });
+      out.push({ x: d.x, y: d.y, icon: GOODS[I.makes].icon, text: `${GOODS[I.makes].name}${d.rich ? ' ★ rich' : ''}: build ${aName(I.name)} here`, col: C.dep, low: true });
     }
     return out;
   }
