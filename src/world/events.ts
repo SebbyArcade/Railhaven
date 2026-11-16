@@ -5,7 +5,7 @@ import { buildingSquares, capOf, INDUSTRIES, isLinked, type Building, yardSquare
 import { townLinked } from '../economy/towns.ts';
 import { breakRail } from '../track/breaks.ts';
 import { hallOf } from '../buildings/stations.ts';
-import { backRun, type CrewRun, crewRun, railPath, runTime } from './crews.ts';
+import { backRun, type CrewRun, crewRun, moveCrews, railPath, runTime } from './crews.ts';
 import { hash } from '../core/rng.ts';
 import { TILE } from './terrain.ts';
 
@@ -107,5 +107,6 @@ export function tickEvents(g: Game, dt: number): boolean {
       news(`🔥 Fire at the ${INDUSTRIES[b.kind].name} ${nearName(g, x, y)}! It stops working until the fire crew${base?.name ? ` from ${base.name}` : ''} ${run ? 'rides out along the rails and ' : ''}puts it out`);
     }
   }
+  moveCrews(g, dt); // crews ride on (or wait for trains), and hold the stretch they stand on
   return railsBroke;
 }

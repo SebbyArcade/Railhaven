@@ -101,6 +101,8 @@ export class TrainSystem {
   speedOf?: (t: Train) => number;
   /** pieces trains may not enter (broken rails) */
   blocked = new Set<number>();
+  /** pieces a work crew's car stands on or is about to ride onto (see world/crews.ts): trains wait or go round */
+  crew = new Set<number>();
   /** platform and yard tracks: either lane is fine there (keep-left is for the open line) */
   anyLane = new Set<number>();
   /** the short stretches just outside stations and yards (their throats): a train that turned back on a platform may
@@ -137,7 +139,7 @@ export class TrainSystem {
 
   private free(t: Train, piece: number): boolean {
     const own = (p: number) => { const h = this.holder.get(p); return h === undefined || h === t.id; };
-    return !this.blocked.has(piece) && own(piece) && this.net.conflicts[piece]!.every(own);
+    return !this.blocked.has(piece) && !this.crew.has(piece) && own(piece) && this.net.conflicts[piece]!.every(own);
   }
 
   /**
@@ -425,7 +427,7 @@ export class TrainSystem {
     const bodies = new Set<number>();
     for (const o of this.trains) if (o !== t) for (const s of o.trail) { bodies.add(s.piece); for (const c of this.net.conflicts[s.piece]!) bodies.add(c); }
     const base = { head: t.trail.at(-1)!, tail: t.trail[0]!, trail: t.trail, trainLen: L, canReverseNow: true };
-    const cost = (s: Step) => bodies.has(s.piece) ? Infinity : this.laneCost(s) + (() => { const h = this.holder.get(s.piece); return h !== undefined && h !== t.id ? 4000 : 0; })();
+    const cost = (s: Step) => bodies.has(s.piece) ? Infinity : this.laneCost(s) + (this.crew.has(s.piece) ? 4000 : 0) + (() => { const h = this.holder.get(s.piece); return h !== undefined && h !== t.id ? 4000 : 0; })();
     const route = this.route({ ...base, goal, extra: cost, push: this.pushOf(t), ...(t.area ? { revParity: this.backIn(t) } : {}) }) ?? this.route({ ...base, goal, extra: cost });
     // a long way round to dodge a train that will move on in a moment costs more than waiting for it: wait a while first
     const own = this.planLen(t.plan), extra = route ? this.planLen(route) - own : 0;

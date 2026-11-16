@@ -45,7 +45,7 @@ export function storyHtml(g: Game, page?: string): string {
       if (k !== g.world.home && !reached.has(k) && !isRevealed(g, isl.cy * n + isl.cx)) { hidden++; return; }
       const sp = islandSpec(g, k), home = k === g.world.home;
       const what = home ? 'Your home island' : reached.has(k) ? `⚓ Reached${sp ? ' · ' + SPEC_TEXT[sp] : ''}` : `${compass(isl.cx - a.x, isl.cy - a.y)} of Ashford · ${rumourOf(g, k)}`;
-      h += `<div class="row${reached.has(k) ? ' ok' : ''}"><b class="ico">${reached.has(k) ? '🏝' : '❔'}</b><div class="grow"><div class="line"><span>${esc(home ? 'Ashford Isle' : isl.name)}</span></div><small>${esc(what)}</small></div></div>`;
+      h += `<div class="row${reached.has(k) ? ' ok' : ''}"><b class="ico">${reached.has(k) ? '🏝' : '❔'}</b><div class="grow"><div class="line"><span>${esc(home ? 'Ashford Isle' : isl.name)}</span></div><small>${esc(what)}</small></div>${reached.has(k) && !home ? `<button class="mini" data-act="isle" data-id="${k}">Open ›</button>` : ''}</div>`;
     });
     if (hidden) h += `<div class="note">🌫 ${hidden} more island${hidden === 1 ? '' : 's'} still in the fog: scout by boat from a dock</div>`;
     return h + back;
@@ -61,6 +61,6 @@ export function storyHtml(g: Game, page?: string): string {
     h += `<h3>✨ Side missions</h3>`;
     M.side.forEach((s, i) => { const p = progressText(g, s); h += `<div class="row side"><div class="grow"><div class="line"><span>${esc(s.title)}${p.text ? ` · ${p.text}` : ''}</span><span>+${fmtMoney(s.reward)}</span></div></div><button class="mini" data-go="${i + 1}">Go ›</button></div>`; });
   }
-  h += `<div class="tiles"><button class="tile" data-act="page" data-page="journal">📜 Journal<small>${M.done.length || !(g.s.orders ?? 0) ? `${M.done.length} done` : `📋 ${g.s.orders} orders filled`}</small></button><button class="tile" data-act="page" data-page="isl">🏝 Islands<small>${reachedIslands(g).size} reached</small></button></div>`;
+  h += `<div class="tiles"><button class="tile" data-act="page" data-page="journal">📜 Journal<small>${M.done.length || !(g.s.orders ?? 0) ? `${M.done.length} done` : `📋 ${g.s.orders} orders filled`}</small></button><button class="tile" data-act="page" data-page="isl">🏝 Islands<small>${reachedIslands(g).size} reached</small></button><button class="tile" data-act="reports">🧭 Scout reports<small>${(g.s.reports ?? []).length || 'none yet'}</small></button></div>`;
   return h;
 }
