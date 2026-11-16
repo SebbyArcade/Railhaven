@@ -3,6 +3,7 @@ import { FIREFIGHTER, FITTER, GANG, worker } from './art.ts';
 import { buildingSquares } from '../buildings/industries.ts';
 import { bodyPoint } from '../trains/train.ts';
 import { TILE } from '../world/terrain.ts';
+import { isRevealed } from '../world/fog.ts';
 import { hash } from '../core/rng.ts';
 import { type CrewRun, crewPoint, runValid } from '../world/crews.ts';
 
@@ -121,6 +122,15 @@ export function drawStorm(ctx: CanvasRenderingContext2D, g: Game, tm: number) {
     ctx.moveTo(rx, ry); ctx.lineTo(rx - 2, ry + 6);
   }
   ctx.stroke();
+}
+
+/** Can you see the storm: its dark middle on screen and not hidden in the fog? (He saw white flashes with no storm
+ *  in sight: a storm just below the screen edge flashed too.) */
+export function stormInView(g: Game, cam: { x: number; y: number; z: number }, view: { w: number; h: number }): boolean {
+  const st = g.s.storm; if (!st) return false;
+  const rs = st.r * TILE * cam.z * 0.5;
+  return Math.abs(st.x * TILE - cam.x) * cam.z < view.w / 2 + rs && Math.abs(st.y * TILE - cam.y) * cam.z < view.h / 2 + rs
+    && !!isRevealed(g, Math.round(st.y) * g.world.n + Math.round(st.x));
 }
 
 /** A lightning flash over the whole screen now and then while the storm is on screen. */

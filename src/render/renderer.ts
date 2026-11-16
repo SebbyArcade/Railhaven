@@ -22,7 +22,7 @@ import { TerrainCache } from './terrainCache.ts';
 import { drawWaterLive } from './terrainArt.ts';
 import { drawTrack } from './track.ts';
 import { drawTrains } from './trains.ts';
-import { drawMishaps, drawStorm, stormFlash } from './events.ts';
+import { drawMishaps, drawStorm, stormFlash, stormInView } from './events.ts';
 import { drawSeaRoutes, drawShips } from './ships.ts';
 import { drawExplore, drawPoiZones, drawScouting, drawMaps } from './explore.ts';
 import { islandSpec, SPEC_TEXT } from '../world/specialty.ts';
@@ -116,7 +116,9 @@ export class Renderer {
     this.drawIslandNames(ctx, cam.z);
     ctx.restore();
     if (seasonOf(g.s.t) === 3) this.drawSnow(ctx, view, tm);
-    const st = g.s.storm, fl = st && Math.hypot(st.x * TILE - cam.x, st.y * TILE - cam.y) * cam.z < Math.max(view.w, view.h) ? stormFlash(g, tm) : 0;
+    // lightning only when you can see the storm: its dark middle on screen and not hidden in the fog (he saw white
+    // flashes with no storm in sight: one just below the screen edge used to flash too)
+    const fl = stormInView(g, cam, view) ? stormFlash(g, tm) : 0;
     if (fl) { ctx.fillStyle = `rgba(235,240,255,${fl})`; ctx.fillRect(0, 0, view.w, view.h); } // lightning
     const v = this.tools?.view; if (v) drawView(ctx, g, v, view, this.views.get(g, v, tm), tm, this.arrows);
   }
