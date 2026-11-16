@@ -75,7 +75,19 @@ function buildFor(k: Good): boolean {
     trackChanged(g);
     if (linkBuilding(b)) { log.push(`  built ${info(kind).name}`); return true; }
   }
-  return false;
+  return explore(k);
+}
+
+/** Like a player who reads "lay track toward the mountains": run a line out toward the nearest deposit of k still in the fog. */
+const explored = new Set<number>();
+function explore(k: Good): boolean {
+  const dep = g.s.sites.filter(s => s.kind === 'dep' && s.res === k && !s.hidden && !explored.has(s.id) && g.world.islandOf[s.y * n + s.x] === g.world.islandOf[ash.y * n + ash.x])
+    .sort((a, b) => Math.hypot(a.x - ash.x, a.y - ash.y) - Math.hypot(b.x - ash.x, b.y - ash.y))[0];
+  if (!dep || g.s.money < 3000) return false;
+  explored.add(dep.id);
+  const near: number[] = [];
+  for (let dy = -4; dy <= 4; dy++) for (let dx = -4; dx <= 4; dx++) { const i = (dep.y + dy) * n + dep.x + dx; if (Math.hypot(dx, dy) <= 2 && (g.world.terr[i] === 1 || g.world.terr[i] === 2)) near.push(i); }
+  const ok = lay(near); log.push(`  explored toward the ${k} deposit ${ok ? '' : '(failed)'}`); return ok;
 }
 
 function linkTown(t: Site): boolean {
