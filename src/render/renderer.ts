@@ -14,7 +14,7 @@ import { drawFields } from './fields.ts';
 import { shedSquare } from '../buildings/shed.ts';
 import { hallsOf } from '../buildings/stations.ts';
 import { landDistance, straitCoasts } from '../track/rules.ts';
-import { buildingSquares, footprint, type IndustryKind, isLinked, yardSquares } from '../buildings/industries.ts';
+import { buildingSquares, footprint, type IndustryKind, isLinked, outputOf, yardSquares } from '../buildings/industries.ts';
 import { buildNoGo, railNoGo } from '../buildings/nogo.ts';
 import { turnSquares } from '../ui/tools.ts';
 import { townLinked } from '../economy/towns.ts';
@@ -29,7 +29,7 @@ import { islandSpec, SPEC_TEXT } from '../world/specialty.ts';
 import type { Tools } from '../ui/tools.ts';
 import { bodyPoint } from '../trains/train.ts';
 import { type Plan, shipPlan } from '../economy/shipping.ts';
-import { drawAlerts, drawDockTags, drawRushTags, drawShipArrow, drawTownBadges, drawWaitBadges } from './orders.ts';
+import { drawAlerts, drawDockTags, drawMakeTags, drawRushTags, drawShipArrow, drawTownBadges, drawWaitBadges, MAKE_ZOOM } from './orders.ts';
 import { stuckList, waitingForTrain } from '../ui/orders.ts';
 import { drawView, ViewCache } from './views.ts';
 import { seasonOf } from '../world/season.ts';
@@ -51,6 +51,7 @@ export class Renderer {
   private planAt = -9;
   private alerts = new Set<number>();
   private waits = new Set<number>();
+  private rates = new Map<number, number>();
   private views = new ViewCache();
   /** the map view's edge arrows on screen, so a tap on one can go there */
   readonly arrows: { sx: number; sy: number; m: import('../ui/mapviews.ts').Mark }[] = [];
@@ -95,7 +96,7 @@ export class Renderer {
     else if (this.tools?.card?.kind === 'ship') { const id = this.tools.card.id, s = g.s.ships?.find(x => x.id === id); if (s) drawSeaRoutes(ctx, g, tm, cam.z, s); }
     drawShips(ctx, g, tm, (x, y) => x >= x0 - 2 && x <= x1 + 2 && y >= y0 - 2 && y <= y1 + 2 && !!isRevealed(g, Math.round(y) * n + Math.round(x)));
     drawExplore(ctx, g, this.tools, tm, (x, y) => x >= x0 - 2 && x <= x1 + 2 && y >= y0 - 2 && y <= y1 + 2, cam.z);
-    if (tm - this.planAt > 1) { this.planAt = tm; this.plan = shipPlan(g); this.alerts = new Set(stuckList(g, this.plan).filter(x => x.bld !== undefined).map(x => x.bld!)); this.waits = new Set([...waitingForTrain(g, this.plan)].filter(i => !this.alerts.has(i))); } // the plan changes slowly: once a second is plenty
+    if (tm - this.planAt > 1) { this.planAt = tm; this.plan = shipPlan(g); this.alerts = new Set(stuckList(g, this.plan).filter(x => x.bld !== undefined).map(x => x.bld!)); this.waits = new Set([...waitingForTrain(g, this.plan)].filter(i => !this.alerts.has(i))); this.rates = new Map((g.s.buildings ?? []).map(b => [b.id, outputOf(g, b)])); } // the plan changes slowly: once a second is plenty
     if (this.tools?.card?.kind === 'bld') drawShipArrow(ctx, g, this.plan, this.tools.card.id, tm);
     // an open dock card shows the sea it reaches
     const open = this.tools?.card?.kind === 'bld' ? g.s.buildings?.find(b => b.id === this.tools!.card!.id) : undefined;
@@ -107,7 +108,8 @@ export class Renderer {
       }
     }
     drawTownBadges(ctx, g, this.plan, cam.z, tm);
-    if (!this.tools?.view) { drawAlerts(ctx, g, this.alerts, cam.z, tm); drawWaitBadges(ctx, g, this.waits, cam.z); drawDockTags(ctx, g, cam.z); drawRushTags(ctx, g, cam.z, tm); }
+    if (!this.tools?.view && cam.z < MAKE_ZOOM) { drawMakeTags(ctx, g, this.rates, this.alerts, this.waits, cam.z, (x, y) => x >= x0 - 4 && x <= x1 + 4 && y >= y0 - 4 && y <= y1 + 4); drawDockTags(ctx, g, cam.z); drawRushTags(ctx, g, cam.z, tm); }
+    else if (!this.tools?.view) { drawAlerts(ctx, g, this.alerts, cam.z, tm); drawWaitBadges(ctx, g, this.waits, cam.z); drawDockTags(ctx, g, cam.z); drawRushTags(ctx, g, cam.z, tm); }
     this.drawNoGo(ctx, tm, x0, y0, x1, y1);
     this.drawStraits(ctx, tm, x0, y0, x1, y1);
     this.drawOverlay(ctx, tm);
