@@ -1,6 +1,6 @@
 import { type Network, entryNode } from '../track/network.ts';
 import { pointAt } from '../track/geometry.ts';
-import { findRoute, isRev, type Move, type RouteRequest, sameStep } from '../track/route.ts';
+import { findRoute, isRev, type Move, REVERSE_COST, STAND_REVERSE_COST, type RouteRequest, sameStep } from '../track/route.ts';
 import type { NodeKey, Step } from '../track/types.ts';
 
 /** Rolling stock sizes in world px (old game: 18% smaller to fit tight curves). */
@@ -329,6 +329,9 @@ export class TrainSystem {
     const goal = this.goalFor(dest, area, trainLength(t));
     const req: RouteRequest = {
       head: t.trail.at(-1)!, tail: t.trail[0]!, trail: t.trail, trainLen: trainLength(t), canReverseNow: true,
+      // setting off from a stop (standing, no trip yet): changing ends there is only a short pause, so a train backs
+      // out the short way rather than run round a long loop to face the other way (his bug report 11)
+      startRevCost: t.v < 0.5 && t.dest === undefined ? STAND_REVERSE_COST : REVERSE_COST,
       goal,
       extra: s => this.laneCost(s) + (() => { const h = this.holder.get(s.piece); return h !== undefined && h !== t.id ? 200 : 0; })(),
     };

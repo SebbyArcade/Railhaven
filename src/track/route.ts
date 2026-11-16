@@ -15,6 +15,8 @@ export const sameStep = (a: Move | undefined, b: Step) => !!a && !isRev(a) && a.
 
 /** Reversing costs this much extra, so trains only do it when it really is the way. */
 export const REVERSE_COST = 12 * 32;
+/** Reversing a train that already stands still (setting off from a stop) only costs the short pause to change ends. */
+export const STAND_REVERSE_COST = 6 * 32;
 
 /**
  * Steps a train runs onto past the end of `s` before it can reverse there: straight on, until the whole train
@@ -47,6 +49,8 @@ export interface RouteRequest {
   extra?: (s: Step) => number;
   /** may the train reverse at the start */
   canReverseNow?: boolean;
+  /** cost of that reversal at the start (default REVERSE_COST; STAND_REVERSE_COST when the train stands still) */
+  startRevCost?: number;
   /** last check on a whole route that reached a goal; false keeps searching */
   accept?: (moves: Move[]) => boolean;
   /**
@@ -100,7 +104,7 @@ export function findRoute(net: Network, q: RouteRequest): Move[] | null {
   };
   const stepOf = (k0: number): Step => { const k = P === 2 ? k0 >> 1 : k0; return { piece: k >> 1, dir: k & 1 ? -1 : 1 }; };
   relax(0, q.head, START, []);
-  if (q.canReverseNow) relax(REVERSE_COST, rev(q.tail), START, [{ rev: true, clear: null }], P === 2 ? 1 : 0);
+  if (q.canReverseNow) relax(q.startRevCost ?? REVERSE_COST, rev(q.tail), START, [{ rev: true, clear: null }], P === 2 ? 1 : 0);
   while (heap.length) {
     const [d, k, s] = popH();
     if (d > (dist.get(k) ?? Infinity)) continue;
