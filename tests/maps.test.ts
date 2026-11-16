@@ -17,7 +17,7 @@ describe('🗺 area maps', () => {
     const fogOff = (i: number) => { g.s.fog[i >> 3]! &= ~(1 << (i & 7)); }, fogOn = (i: number) => { g.s.fog[i >> 3]! |= 1 << (i & 7); };
     fogOff(t.y * n + t.x);
     expect(mapFinds(g, p.x, p.y, MAP_R).some(f => f.x === t.x && f.y === t.y)).toBe(true);
-    expect(rumours(g).length).toBe(0); // nothing shows before buying
+    expect(rumours(g).some(f => f.x === t.x && f.y === t.y)).toBe(false); // nothing shows before buying (an explorer's camp of yours may mark its own island)
     const c1 = mapCost(g), m0 = g.s.money, r = buyMap(g, p.x, p.y);
     if (typeof r === 'string') throw new Error(r);
     expect(r.refund).toBe(0); expect(g.s.money).toBe(m0 - c1);

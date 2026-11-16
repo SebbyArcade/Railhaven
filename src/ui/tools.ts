@@ -11,7 +11,7 @@ import { buyTrain, trainPrice } from '../economy/dispatch.ts';
 import { bodyPoint, trainLength } from '../trains/train.ts';
 import { fmtMoney, toast } from './hud.ts';
 import type { Card } from './cards.ts';
-import { badSquares, bestPlacement, build, footprint, INDUSTRIES, type IndustryKind, isLinked, placeError, placementsAt, priceOf, shareAt, harmOf, harmText, nearestSpot, noSpotText, lockedText, linkedSquares, yardSquares, yardLen, DOCK_LEN } from '../buildings/industries.ts';
+import { badSquares, bestPlacement, build, footprint, INDUSTRIES, type IndustryKind, isLinked, placeError, placementsAt, priceOf, islandAtYard, shareAt, harmOf, harmText, nearestSpot, noSpotText, lockedText, linkedSquares, yardSquares, yardLen, DOCK_LEN } from '../buildings/industries.ts';
 import { refundOf, removeBuilding } from '../economy/upgrades.ts';
 import { townLinked } from '../economy/towns.ts';
 import { hallOf } from '../buildings/stations.ts';
@@ -384,7 +384,7 @@ export class Tools {
       return { text: `⚠ ${this.previewErr}`, ok: '✓ Build', can: false, turn: true, near: !lockedText(g, this.preview.kind) };
     }
     if (this.mode === 'build' && this.preview) {
-      const k = this.preview.kind, price = priceOf(g, k), out = Math.round(INDUSTRIES[k].rate * shareAt(g, this.preview) * 60);
+      const k = this.preview.kind, price = priceOf(g, k, islandAtYard(g, this.preview)), out = Math.round(INDUSTRIES[k].rate * shareAt(g, this.preview) * 60);
       return { text: `${INDUSTRIES[k].icon} ${INDUSTRIES[k].name} · ${fmtMoney(price)} · makes ${out}/min${harmText(harmOf(g, footprint(g.world.n, this.preview)))}`, ok: '✓ Build', can: price <= g.s.money, turn: true };
     }
     return null;

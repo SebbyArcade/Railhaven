@@ -35,6 +35,7 @@ import { gameReport } from './ui/report.ts';
 import { SEASONS, seasonOf } from './world/season.ts';
 import { buyFleet, FLEET, type FleetKey, fleetLvl, refundOf, removeBuilding, rushBySea, rushFee, rushMore, rushOf, sellOffer, sellStock, startRush, stopRush, upgradeBuilding } from './economy/upgrades.ts';
 import { foundTown, sizeName, tickTowns, upgradeTown } from './economy/towns.ts';
+import { checkArrivals } from './progress/arrivals.ts';
 import { buyTrainAt, buyTrainFor, fleetByIsland, sellTrain, shipTrainTo, tickTrains, trainRefund, trainToSell } from './economy/dispatch.ts';
 import { moneyTip, type Tip } from './economy/advice.ts';
 import { buyShip, buyShipUp, SHIP_UP, type ShipUpKey, seaLanes, shipPlace, shipUpLvl } from './ships/ships.ts';
@@ -199,6 +200,10 @@ cardEl.onclick = e => {
     if (sq.length) { const n = game.world.n, c = game.s.camera; c.x = ((sq[0]! % n) + 0.5) * 32; c.y = (Math.floor(sq[0]! / n) + 0.5) * 32; }
     toast('═ The held-up stretch is marked: check it and tap ✓ Double, or tap squares to change it'); return;
   }
+  if (b.dataset.act === 'lookxy') { const x = +b.dataset.x!, y = +b.dataset.y!; closeCard(); lookAt(x, y); tools.flash = { square: y * game.world.n + x, until: performance.now() + 2500 }; return; }
+  if (b.dataset.act === 'report') { openCard({ kind: 'scout', id: +b.dataset.id! }); return; }
+  if (b.dataset.act === 'reports') { openCard({ kind: 'scout', id: 0 }); return; }
+  if (b.dataset.act === 'isle') { openCard({ kind: 'isle', id: +b.dataset.id! }); return; }
   if (b.dataset.act === 'lookpoi') { const p = poisOf(game).find(x => x.id === +b.dataset.id!); closeCard(); if (p) { lookAt(p.x, p.y); tools.flash = { square: p.y * game.world.n + p.x, until: performance.now() + 2500 }; } return; }
   if (b.dataset.act === 'areamap') { const why = tools.openMap(+b.dataset.x!, +b.dataset.y!); if (why) { toast(why); return; } closeCard(); const c = game.s.camera; c.x = (+b.dataset.x! + 0.5) * 32; c.y = (+b.dataset.y! + 0.5) * 32; c.z = Math.max(0.1, Math.min(c.z, 0.9 * Math.min(view.w, view.h) / (2 * (tools.mapPv?.r ?? 45) * 32))); return; }
   if (b.dataset.act === 'view') { setView((b.dataset.v || null) as MapView | null); closeCard(); return; }
@@ -292,7 +297,7 @@ cardEl.onclick = e => {
   }
   if (b.dataset.act === 'builddock') { closeCard(); startBuild('dock'); return; }
   if (b.dataset.act === 'shipup') { const k = b.dataset.k as ShipUpKey, why = buyShipUp(game, k); toast(why || `${SHIP_UP[k].icon} ${SHIP_UP[k].name}: ${SHIP_UP[k].text(shipUpLvl(game, k))}`); renderCard(); return; }
-  if (b.dataset.act === 'fleet') { const k = b.dataset.k as FleetKey, why = buyFleet(game, k); toast(why || `${FLEET[k].icon} ${FLEET[k].name}: ${FLEET[k].text(fleetLvl(game, k))}`); renderCard(); return; }
+  if (b.dataset.act === 'fleet') { const k = b.dataset.k as FleetKey, isl = b.dataset.isl !== undefined ? +b.dataset.isl : game.world.home, why = buyFleet(game, k, isl); toast(why || `${FLEET[k].icon} ${FLEET[k].name}: ${FLEET[k].text(fleetLvl(game, k, isl))}`); renderCard(); return; }
   if (b.dataset.act === 'found') {
     const p = game.s.sites.find(s => s.id === +b.dataset.id!)!, name = p.name;
     const why = foundTown(game, p);
@@ -486,14 +491,16 @@ function renderMenu() {
   // deposits found far out (iron, oil, the far-sea chains) show once one is uncovered; far-sea factories once their expedition went
   const far = (k: IndustryKind) => !!info(k).ring && !isFactory(k) || k === 'iron' || k === 'oil';
   const kinds = (Object.keys(INDUSTRIES) as IndustryKind[]).filter(k => far(k) ? game.s.sites.some(s => s.kind === 'dep' && s.res === k && !s.hidden) : (info(k).ring ?? 0) <= (game.s.rings ?? 0));
+  // prices are per island: the island in the middle of the screen (Ashford Isle over the sea)
+  const cam = game.s.camera, ci = Math.floor(cam.y / 32) * game.world.n + Math.floor(cam.x / 32), menuIsl = (game.world.islandOf[ci] ?? -1) >= 0 ? game.world.islandOf[ci]! : game.world.home;
   const tile = (k: IndustryKind) => {
-    const d = info(k), p = priceOf(game, k), lock = lockedText(game, k);
+    const d = info(k), p = priceOf(game, k, menuIsl), lock = lockedText(game, k);
     // factories show what goes in and what comes out, as icons: 🪵 → planks
     const recipe = isFactory(k) ? `<span class="rcp" title="${inputsOf(k).map(g => GOODS[g].name).join(' + ')} → ${GOODS[d.makes].name}">${inputsOf(k).map(g => GOODS[g].icon).join('+')}→${GOODS[d.makes].icon}</span>` : '';
     return `<button data-k="${k}" class="${tools.buildKind === k ? 'on' : ''}${lock ? ' locked' : ''}"><b>${d.icon}</b>${d.name}<small>${lock ? (d.ring && d.ring > (game.s.rings ?? 0) ? '🔒 🗺 Expedition' : '🔒 Level ' + d.unlock) : fmtMoney(p)}</small>${recipe}</button>`;
   };
   const r = recommendedBuild(game);
-  menu.innerHTML = (r ? `<button data-k="${r.k}" class="rec"><b>${info(r.k).icon}</b><span style="font-size:11px;font-weight:800;color:#ffd24a;letter-spacing:.05em">⭐ RECOMMENDED NEXT BUILD${r.mission ? ' · YOUR MISSION' : ''}</span><br>${info(r.k).name} · ${fmtMoney(priceOf(game, r.k))}<small>${r.why}</small></button>` : '')
+  menu.innerHTML = (r ? `<button data-k="${r.k}" class="rec"><b>${info(r.k).icon}</b><span style="font-size:11px;font-weight:800;color:#ffd24a;letter-spacing:.05em">⭐ RECOMMENDED NEXT BUILD${r.mission ? ' · YOUR MISSION' : ''}</span><br>${info(r.k).name} · ${fmtMoney(priceOf(game, r.k, menuIsl))}<small>${r.why}</small></button>` : '')
     + kinds.filter(k => !isFactory(k) && k !== 'dock').map(tile).join('') + `<div class="mhead">🏭 Factories: turn raw goods into products</div>` + kinds.filter(isFactory).map(tile).join('')
     + `<div class="mhead">⚓ Sea: docks reach other islands</div>` + tile('dock');
 }
@@ -604,8 +611,16 @@ function frame(now: number) {
   if (game.news?.length && now > newsAt && !(tools.card?.kind === 'story' && tools.card.page === 'act')) { toast(game.news.shift()!, 4000); newsAt = now + 4200; }
   if (Math.floor(now / 1000) !== lastCard) {
     lastCard = Math.floor(now / 1000);
+    checkArrivals(game); // islands just reached queue their arrival card
     const M = msOf(game); // a new act opens its card once nothing else is open
     if (M.actNew && !tools.card && tools.mode === 'pan' && !menuOpen) { M.actNew = false; openCard({ kind: 'story', id: 0, page: 'act' }); }
+    else if ((game.arrived?.length || game.reported?.length) && (lessonOn(game) || onHome())) { game.arrived = []; game.reported = []; }
+    else if (game.arrived?.length && !tools.card && tools.mode === 'pan' && !menuOpen) openCard({ kind: 'isle', id: game.arrived.shift()!, fresh: true }); // 🏝 a new island
+    else if (game.reported?.length && !tools.card && (tools.mode === 'pan' || tools.mode === 'scout') && !tools.scout && !menuOpen) { // 🧭 a scout is back: its report
+      const id = game.reported.pop()!; game.reported = [];
+      game.news = (game.news ?? []).filter(m => !/is back: the map is drawn/.test(m));
+      openCard({ kind: 'scout', id });
+    }
     else if (game.found?.length && (lessonOn(game) || onHome())) game.found = []; // no discovery cards during the lessons
     else if (game.found?.length && !tools.card && tools.mode === 'pan' && !menuOpen) { // a landmark just spotted: its discovery card
       const [id, ...rest] = game.found; game.found = [];

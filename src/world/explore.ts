@@ -2,6 +2,7 @@ import type { Game } from '../state.ts';
 import { Rng } from '../core/rng.ts';
 import { isRevealed, reveal } from './fog.ts';
 import { T } from './terrain.ts';
+import { squareCost } from '../track/rules.ts';
 import { buildingSquares, isLinked } from '../buildings/industries.ts';
 import { townLinked } from '../economy/towns.ts';
 
@@ -17,7 +18,7 @@ import { townLinked } from '../economy/towns.ts';
 
 // ---- landmarks
 
-export type PoiKind = 'ruins' | 'lighthouse' | 'lookout' | 'wreck' | 'halt' | 'falls' | 'ranger' | 'mill';
+export type PoiKind = 'ruins' | 'lighthouse' | 'lookout' | 'wreck' | 'halt' | 'falls' | 'ranger' | 'mill' | 'shaft' | 'camp';
 export interface Poi { id: number; kind: PoiKind; x: number; y: number; seen?: boolean; got?: boolean; pay?: number }
 export const POI: Record<PoiKind, { icon: string; name: string; perk: string }> = {
   ruins: { icon: '🏛', name: 'Old ruins', perk: 'buildings with any part within 6 squares make 10% more' },
@@ -28,14 +29,19 @@ export const POI: Record<PoiKind, { icon: string; name: string; perk: string }> 
   falls: { icon: '💧', name: 'Silver Falls', perk: 'tourists come: town orders within 12 squares pay 10% bigger rewards' },
   ranger: { icon: '🌲', name: 'Ranger hut', perk: 'lumber camps with any part within 8 squares make 10% more' },
   mill: { icon: '🌾', name: 'Old windmill', perk: 'wheat farms with any part within 8 squares make 10% more' },
+  // frontier finds: only on islands across the sea
+  shaft: { icon: '⛏', name: 'Old mine shaft', perk: 'mines and quarries with any part within 8 squares make 10% more' },
+  camp: { icon: '🏕', name: "Explorer's camp", perk: "the explorer's notes mark everything still hidden on this island with a ?" },
 };
+/** Landmarks found only on islands across the sea. */
+export const FRONTIER: PoiKind[] = ['shaft', 'camp'];
 /** how special a find is, for its discovery card: 0 interesting, 1 rare, 2 legendary */
-export const POI_RARITY: Record<PoiKind, 0 | 1 | 2> = { ruins: 0, ranger: 0, mill: 0, lookout: 1, halt: 1, lighthouse: 1, wreck: 1, falls: 2 };
+export const POI_RARITY: Record<PoiKind, 0 | 1 | 2> = { ruins: 0, ranger: 0, mill: 0, shaft: 0, lookout: 1, halt: 1, lighthouse: 1, wreck: 1, camp: 1, falls: 2 };
 export const RARITY = [{ icon: '⚪', name: 'Interesting find', col: '#d8d2c4' }, { icon: '🔵', name: 'Rare find', col: '#6fb4ff' }, { icon: '🟣', name: 'Legendary find', col: '#c58bff' }] as const;
 export const HALT_PAY = 2000, FALLS_R = 12, FALLS_BONUS = 1.1, KIND_R = 8, KIND_BONUS = 1.1;
-export const CLAIM_R = 2, RUINS_R = 6, RUINS_BONUS = 1.1, LIGHT_R = 10, LIGHT_BONUS = 1.2, LOOKOUT_R = 10;
+export const CLAIM_R = 2, RUINS_R = 6, RUINS_BONUS = 1.1, LIGHT_R = 10, LIGHT_BONUS = 1.2, LOOKOUT_R = 10, CAMP_R = 8;
 /** How far a landmark's gift reaches, in squares (drawn as a circle when it is tapped); none for one-off gifts. */
-export const POI_REACH: Partial<Record<PoiKind, number>> = { ruins: RUINS_R, lighthouse: LIGHT_R, lookout: LOOKOUT_R, falls: FALLS_R, ranger: KIND_R, mill: KIND_R };
+export const POI_REACH: Partial<Record<PoiKind, number>> = { ruins: RUINS_R, lighthouse: LIGHT_R, lookout: LOOKOUT_R, falls: FALLS_R, ranger: KIND_R, mill: KIND_R, shaft: KIND_R };
 /** How to take a landmark over, in plain words. */
 export const CLAIM_TEXT = 'bring track into the dashed square around it (2 squares out, corners count too)';
 
@@ -95,11 +101,66 @@ export function morePois(g: Game, have: Poi[]): Poi[] {
   return out;
 }
 
+/**
+ * Landmarks on the islands across the sea (own random stream per island, so maps made before keep theirs): every
+ * named island but Ashford Isle may get an old mine shaft (by the mountains) and an explorer's camp. Islands that have
+ * no landmark at all yet (the far seas an expedition found) get the whole set first. Only islands numbered `from` or
+ * later are looked at (an expedition passes its first new island).
+ */
+export function frontierPois(g: Game, have: Poi[], from = 0): Poi[] {
+  const w = g.world, n = w.n, out: Poi[] = [], all = () => [...have, ...out];
+  const busy = (x: number, y: number) => g.s.sites.some(s => Math.abs(s.x - x) <= 3 && Math.abs(s.y - y) <= 3) || all().some(p => Math.abs(p.x - x) <= 4 && Math.abs(p.y - y) <= 4);
+  const coast = (i: number) => [i + 1, i - 1, i + n, i - n].some(j => w.ocean[j]);
+  const land = (i: number) => w.terr[i] !== T.Water && w.terr[i] !== T.Mountain;
+  const byHills = (i: number) => land(i) && [i + 1, i - 1, i + n, i - n, i + 2, i - 2, i + 2 * n, i - 2 * n].some(j => w.terr[j] === T.Mountain);
+  let id = Math.max(0, ...have.map(p => p.id));
+  const on = new Map<number, Set<PoiKind>>();
+  for (const p of have) { const k = w.islandOf[p.y * n + p.x]!; if (!on.has(k)) on.set(k, new Set()); on.get(k)!.add(p.kind); }
+  w.islands.forEach((isl, k) => {
+    if (!isl.name || k === w.home || k < from) return;
+    const kinds = on.get(k) ?? new Set<PoiKind>();
+    if (FRONTIER.some(f => kinds.has(f))) return; // already done
+    const rng = new Rng(g.s.seed * 97 + k * 131 + 5);
+    const sq: number[] = []; for (let i = 0; i < n * n; i++) if (w.islandOf[i] === k) sq.push(i);
+    const pick = (ok: (i: number) => boolean, kind: PoiKind) => {
+      for (let t = 0; t < 300; t++) {
+        const i = sq[rng.int(sq.length)]!, x = i % n, y = (i / n) | 0;
+        if (x < 2 || y < 2 || x >= n - 2 || y >= n - 2 || !ok(i) || busy(x, y)) continue;
+        out.push({ id: ++id, kind, x, y }); return true;
+      }
+      return false;
+    };
+    if (!kinds.size) { // a far-sea island: the landmarks every island has
+      pick(i => w.terr[i] === T.Grass || w.terr[i] === T.Forest, 'ruins');
+      pick(i => land(i) && coast(i), 'lighthouse');
+      pick(i => w.terr[i] === T.Hills, 'lookout');
+      if (rng.next() < 0.7) pick(i => w.terr[i] === T.Grass, 'halt');
+      if (rng.next() < 0.5) pick(i => w.terr[i] === T.Hills, 'falls');
+      if (rng.next() < 0.6) pick(i => w.terr[i] === T.Forest, 'ranger');
+      if (rng.next() < 0.5) pick(i => w.terr[i] === T.Grass, 'mill');
+      for (let t = 0; t < 200; t++) { // a wreck in the water off its coast
+        const i = sq[rng.int(sq.length)]!; if (!coast(i)) continue;
+        const a = rng.next() * Math.PI * 2, d = 3 + rng.int(4), x = Math.round((i % n) + Math.cos(a) * d), y = Math.round(((i / n) | 0) + Math.sin(a) * d);
+        if (x < 1 || y < 1 || x >= n - 1 || y >= n - 1 || !w.ocean[y * n + x]) continue;
+        out.push({ id: ++id, kind: 'wreck', x, y, pay: 1500 + rng.int(4) * 500 }); break;
+      }
+    }
+    if (rng.next() < 0.75) pick(byHills, 'shaft');
+    const inland = (i: number) => [i + 1, i - 1, i + n, i - n, i + n + 1, i + n - 1, i - n + 1, i - n - 1].every(j => w.terr[j] !== T.Water); // room round it for track
+    if (sq.length >= 60 && rng.next() < 0.85) pick(i => land(i) && w.terr[i] !== T.Forest && inland(i), 'camp');
+  });
+  return out;
+}
+
 export const poisOf = (g: Game) => {
   if (!g.s.pois) g.s.pois = makePois(g);
   if (!g.s.poiV) { g.s.poiV = 2; g.s.pois.push(...morePois(g, g.s.pois)); } // older games get the new landmarks too
+  if (g.s.poiV < 3) { g.s.poiV = 3; g.s.pois.push(...frontierPois(g, g.s.pois)); } // and the frontier finds across the sea
   return g.s.pois;
 };
+
+/** Islands whose explorer's camp is yours: everything still hidden there shows as a ? on the map. */
+export const toldIslands = (g: Game) => new Set((g.s.pois ?? []).filter(p => p.kind === 'camp' && p.got).map(p => g.world.islandOf[p.y * g.world.n + p.x]!));
 
 const news = (g: Game, s: string) => (g.news ??= []).push(s);
 
@@ -115,6 +176,7 @@ export function checkPois(g: Game) {
     p.got = true;
     if (p.kind === 'lookout') reveal(g, p.x, p.y, LOOKOUT_R);
     if (p.kind === 'halt') { g.s.money += HALT_PAY; g.s.earned = (g.s.earned ?? 0) + HALT_PAY; }
+    if (p.kind === 'camp') reveal(g, p.x, p.y, CAMP_R);
     news(g, `${POI[p.kind].icon} ${POI[p.kind].name} is yours: ${POI[p.kind].perk}`);
   }
 }
@@ -139,9 +201,10 @@ export function ruinsMul(g: Game, x: number, y: number, sq: number[] = [y * g.wo
   return (g.s.pois ?? []).some(p => p.kind === 'ruins' && p.got && touches(p, sq, g.world.n, RUINS_R)) ? RUINS_BONUS : 1;
 }
 
-/** Output bonus from a ranger hut (lumber camps) or old windmill (wheat farms) that is yours, any part in reach. */
+const MINES = new Set(['stone', 'coal', 'iron', 'gold', 'gems']);
+/** Output bonus from a ranger hut (lumber camps), old windmill (wheat farms) or old mine shaft (mines and quarries) that is yours, any part in reach. */
 export function kindMul(g: Game, kind: string, x: number, y: number, sq: number[] = [y * g.world.n + x]): number {
-  const k = kind === 'wood' ? 'ranger' : kind === 'farm' ? 'mill' : null; if (!k) return 1;
+  const k = kind === 'wood' ? 'ranger' : kind === 'farm' ? 'mill' : MINES.has(kind) ? 'shaft' : null; if (!k) return 1;
   return (g.s.pois ?? []).some(p => p.kind === k && p.got && touches(p, sq, g.world.n, KIND_R)) ? KIND_BONUS : 1;
 }
 
@@ -158,7 +221,25 @@ export function lightMul(g: Game, x: number, y: number): number {
 // ---- scouts
 
 export const SCOUT_CAP = { land: 36, sea: 50 }, SCOUT_SPEED = 2, SCOUT_R = 3, MAX_SCOUTS = 2;
-export interface Scout { id: number; path: number[]; pos: number; boat: boolean; paid: number }
+export interface Scout {
+  id: number; path: number[]; pos: number; boat: boolean; paid: number;
+  /** where it set out from, for its report */ from?: string;
+  /** what it uncovered on the way: sites (towns, settlement sites, deposits), landmarks, islands sighted */
+  saw?: { sites: number[]; pois: number[]; isl: number[] };
+}
+
+/** 🧭 What a scout brought back: written when it is home, kept in the journal (the last REPORTS_KEPT). */
+export interface ScoutReport {
+  id: number;
+  /** game minute it came back */ min: number;
+  from: string; boat: boolean;
+  /** squares walked or sailed, first and last square */ steps: number; start: number; end: number;
+  sites: number[]; pois: number[]; isl: number[];
+  /** money back when the route met the wrong ground and turned back early */ back?: number;
+  /** each town found and how far it is from your railway: squares and track cost (null: no way over land you can see) */
+  link?: Record<number, { sq: number; cost: number } | null>;
+}
+export const REPORTS_KEPT = 12;
 /** A route of n squares: 20 per square plus a little more for each square farther out (twice the old game, Sébastien found scouting too cheap); boats cost half again. */
 export const scoutCost = (n: number, boat: boolean) => Math.round(2 * (10 * n + n * (n + 1)) * (boat ? 1.5 : 1)); // twice the old game's price (Sébastien found scouting too cheap)
 
@@ -192,15 +273,79 @@ export function sendScout(g: Game, path: number[], boat: boolean): Scout | strin
   const c = scoutCost(steps, boat);
   if (c > g.s.money) return `Need $${(c - Math.floor(g.s.money)).toLocaleString('en-US')} more`;
   g.s.money -= c;
-  const s: Scout = { id: g.s.nextId++, path, pos: 0, boat, paid: c };
+  const s: Scout = { id: g.s.nextId++, path, pos: 0, boat, paid: c, from: scoutStarts(g).find(x => x.sq === path[0])?.name ?? (boat ? 'the dock' : 'a town'), saw: { sites: [], pois: [], isl: [] } };
   (g.s.scouts ??= []).push(s);
   return s;
 }
 
-/** Scouts walk (or sail) their routes, uncovering land as they go. */
+/** Uncover the land round (x, y) for a scout, noting what came out of the fog for its report. */
+function scoutReveal(g: Game, s: Scout, x: number, y: number) {
+  const n = g.world.n, r = SCOUT_R + 1, near = (o: { x: number; y: number }) => Math.abs(o.x - x) <= r && Math.abs(o.y - y) <= r;
+  const hid = (o: { x: number; y: number }) => !isRevealed(g, o.y * n + o.x);
+  const sites = g.s.sites.filter(o => near(o) && hid(o)), pois = poisOf(g).filter(p => near(p) && hid(p));
+  const isl = new Set<number>();
+  for (let j = y - r; j <= y + r; j++) for (let i = x - r; i <= x + r; i++) if (i >= 0 && j >= 0 && i < n && j < n && g.world.terr[j * n + i] && !isRevealed(g, j * n + i)) isl.add(g.world.islandOf[j * n + i]!);
+  reveal(g, x, y, SCOUT_R);
+  const saw = (s.saw ??= { sites: [], pois: [], isl: [] });
+  for (const o of sites) if (!hid(o) && !saw.sites.includes(o.id)) saw.sites.push(o.id);
+  for (const p of pois) if (!hid(p) && !saw.pois.includes(p.id)) saw.pois.push(p.id);
+  for (const k of isl) if (k >= 0 && k !== g.world.home && g.world.islands[k]?.name && !saw.isl.includes(k)) saw.isl.push(k);
+}
+
+/** How far a square is from your railway over land you can see: squares and track cost along the cheapest way (null: none within reach). */
+export function linkEstimate(g: Game, x: number, y: number, max = 120): { sq: number; cost: number } | null {
+  const n = g.world.n, linked = g.linked; if (!linked?.size) return null;
+  const start = y * n + x; if (linked.has(start)) return { sq: 0, cost: 0 };
+  const best = new Map<number, number>([[start, 0]]), steps = new Map<number, number>([[start, 0]]);
+  const heap: [number, number][] = [[0, start]];
+  const push = (e: [number, number]) => { heap.push(e); let i = heap.length - 1; while (i > 0) { const p = (i - 1) >> 1; if (heap[p]![0] <= e[0]) break; heap[i] = heap[p]!; i = p; } heap[i] = e; };
+  const pop = (): [number, number] => {
+    const top = heap[0]!, last = heap.pop()!;
+    if (heap.length) {
+      let i = 0;
+      for (;;) {
+        const a = 2 * i + 1, b = a + 1; let m = -1, mv = last[0];
+        if (a < heap.length && heap[a]![0] < mv) { m = a; mv = heap[a]![0]; }
+        if (b < heap.length && heap[b]![0] < mv) { m = b; }
+        if (m < 0) break;
+        heap[i] = heap[m]!; i = m;
+      }
+      heap[i] = last;
+    }
+    return top;
+  };
+  const own = (i: number) => { const c = squareCost(g, i); return typeof c === 'number' ? c : null; };
+  while (heap.length) {
+    const [c, i] = pop(); if (c > best.get(i)!) continue;
+    const st = steps.get(i)!; if (st >= max) continue;
+    const ix = i % n, iy = (i / n) | 0;
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+      const X = ix + dx, Y = iy + dy; if (X < 0 || Y < 0 || X >= n || Y >= n) continue;
+      const j = Y * n + X;
+      if (linked.has(j)) return { sq: st + 1, cost: Math.round(c) };
+      const k = g.track.has(j) ? 0 : own(j); if (k === null) continue;
+      const nc = c + k; if (nc >= (best.get(j) ?? Infinity)) continue;
+      best.set(j, nc); steps.set(j, st + 1); push([nc, j]);
+    }
+  }
+  return null;
+}
+
+/** Write a scout's report and add it to the journal (newest last). */
+function fileReport(g: Game, s: Scout, back?: number): ScoutReport {
+  const saw = s.saw ?? { sites: [], pois: [], isl: [] }, link: NonNullable<ScoutReport['link']> = {};
+  for (const id of saw.sites) { const t = g.s.sites.find(o => o.id === id); if (t?.kind === 'town') link[id] = linkEstimate(g, t.x, t.y); }
+  const r: ScoutReport = { id: s.id, min: Math.floor(g.s.t / 60), from: s.from ?? (s.boat ? 'the dock' : 'a town'), boat: s.boat, steps: s.path.length - 1, start: s.path[0]!, end: s.path.at(-1)!, sites: saw.sites, pois: saw.pois, isl: saw.isl, link, ...(back ? { back } : {}) };
+  const list = (g.s.reports ??= []); list.push(r);
+  while (list.length > REPORTS_KEPT) list.shift();
+  (g.reported ??= []).push(r.id);
+  return r;
+}
+
+/** Scouts walk (or sail) their routes, uncovering land as they go; back home, each one files a 🧭 report. */
 export function tickScouts(g: Game, dt: number) {
   const list = g.s.scouts; if (!list?.length) return;
-  const n = g.world.n;
+  const n = g.world.n, backs = new Map<Scout, number>();
   for (const s of list) {
     const before = Math.floor(s.pos);
     s.pos = Math.min(s.path.length - 1, s.pos + SCOUT_SPEED * dt);
@@ -209,18 +354,19 @@ export function tickScouts(g: Game, dt: number) {
       if (water !== s.boat) { // wrong ground under the fog: the trip ends one square back
         s.pos = k - 1; const done = k - 1, left = s.path.length - 1 - done;
         const back = Math.round((s.paid - scoutCost(done, s.boat)) * 0.9);
-        g.s.money += back; s.path = s.path.slice(0, k);
+        g.s.money += back; s.path = s.path.slice(0, k); backs.set(s, back);
         news(g, `${s.boat ? '⛵ The boat' : '🚶 The scout'} met ${s.boat ? 'land' : 'water'} and turned back: ${left} squares unused, $${back.toLocaleString('en-US')} back`);
         break;
       }
-      reveal(g, i % n, (i / n) | 0, SCOUT_R);
+      scoutReveal(g, s, i % n, (i / n) | 0);
       if (s.boat) salvageAt(g, i % n, (i / n) | 0);
     }
   }
   const done = list.filter(s => s.pos >= s.path.length - 1);
-  for (const s of done) { const e = s.path.at(-1)!; reveal(g, e % n, (e / n) | 0, SCOUT_R); }
-  if (done.length) { g.s.scouts = list.filter(s => !done.includes(s)); news(g, `${done[0]!.boat ? '⛵ The boat' : '🚶 The scout'} is back: the map is drawn`); }
+  for (const s of done) { const e = s.path.at(-1)!; scoutReveal(g, s, e % n, (e / n) | 0); }
+  if (done.length) g.s.scouts = list.filter(s => !done.includes(s));
   checkPois(g);
+  for (const s of done) fileReport(g, s, backs.get(s)); // after checkPois, so its landmarks count as seen
 }
 
 /** Where a scout is drawn (square coordinates, fractional). */

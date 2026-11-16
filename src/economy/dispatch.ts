@@ -10,7 +10,7 @@ import { isDock, islandName, islandOfB } from '../ships/docks.ts';
 import { tickShips } from '../ships/ships.ts';
 import { tickScouts } from '../world/explore.ts';
 import { reachedIslands, tickMissions } from '../progress/missions.ts';
-import { expressMul, fleetMulOf, minLoad, rushDelivered, trainCap } from './upgrades.ts';
+import { capOf, expressMul, fleetIsl, fleetMulOf, FLEET, minLoad, rushDelivered } from './upgrades.ts';
 import { V_MAX } from '../trains/train.ts';
 import { isRev } from '../track/route.ts';
 import { GRAND_LOAD, hasGrandStation, payMul, rewardMul } from '../buildings/parks.ts';
@@ -144,7 +144,7 @@ export function shipTrainTo(g: Game, dock: Building): Train | string {
 }
 
 /** Units of stock (of one good, for docks) already promised to trains on their way to collect. */
-const claimed = (g: Game, b: Building, k?: string) => g.s.trains.reduce((a, t) => a + (t.job?.src === b.id && t.job.phase === 'toLoad' && (k === undefined || t.job.good === k) ? trainCap(g) : 0), 0);
+const claimed = (g: Game, b: Building, k?: string) => g.s.trains.reduce((a, t) => a + (t.job?.src === b.id && t.job.phase === 'toLoad' && (k === undefined || t.job.good === k) ? capOf(g, t) : 0), 0);
 
 /** What a building has ready of a good: its stock, or for a dock what ships landed. */
 export const readyOf = (b: Building, k: string) => isDock(b) ? b.landed?.[k as Good] ?? 0 : b.stock;
@@ -161,15 +161,20 @@ const parked = (t: Train) => t.dest === undefined && t.plan.length === 0 && t.re
  * Running cost of a trip of this many squares (there and on to the drop), counting the slow parts: starting, stopping,
  * turning back and waiting at signals take about three times as long as running flat out.
  */
-export const tripCost = (g: Game, squares: number) => UPKEEP * fleetMul(g.s.trains.length) * fleetMulOf(g, 'rep') * (squares * 32 / g.sys.vmax * 3 + 10);
+/** The fastest engines bought on any island (trains elsewhere run at their island's share of it). */
+export const topEng = (g: Game) => Math.max(1, ...Object.values(g.s.fleetI ?? {}).map(l => FLEET.eng.lv[l.eng ?? 0]!));
+/** A train's speed against the fastest island's: its own island's engines. */
+export const engShare = (g: Game, t: Train) => fleetMulOf(g, 'eng', fleetIsl(g, t)) / topEng(g);
+
+export const tripCost = (g: Game, squares: number, isl = g.world.home) => UPKEEP * fleetMul(g.s.trains.length) * fleetMulOf(g, 'rep', isl) * (squares * 32 / (V_MAX * fleetMulOf(g, 'eng', isl) * expressMul(g)) * 3 + 10);
 
 /** Goods nobody is waiting for (past-order buying or surplus) that pay less than the trip costs are not worth fetching. */
-export const losesMoney = (g: Game, ship: Ship, pay: number, reach: number) =>
-  (ship.why === 'steady' || ship.why === 'extra') && !ship.rush && ship.sea === undefined && pay < tripCost(g, reach + ship.d);
+export const losesMoney = (g: Game, ship: Ship, pay: number, reach: number, isl = g.world.home) =>
+  (ship.why === 'steady' || ship.why === 'extra') && !ship.rush && ship.sea === undefined && pay < tripCost(g, reach + ship.d, isl);
 
 /** Pick the best waiting load for an idle train: open orders (and factories making what one waits for) first, then by pay per square of travel. */
 function bestJob(g: Game, t: Train, plan: Plan): { b: Building; k: Good; ship: Ship } | null {
-  const at = headSquare(g, t);
+  const at = headSquare(g, t), isl = fleetIsl(g, t), cap = capOf(g, t);
   let best: { b: Building; k: Good; ship: Ship } | null = null, bs = -Infinity;
   for (const b of g.s.buildings ?? []) {
     if (!isLinked(g, b) || b.closed) continue; // ⛔ closed: no train is sent there
@@ -177,13 +182,13 @@ function bestJob(g: Game, t: Train, plan: Plan): { b: Building; k: Good; ship: S
     const goods = isDock(b) ? Object.keys(b.landed ?? {}) as Good[] : [INDUSTRIES[b.kind].makes];
     for (const k of goods) {
       const ship = planFor(plan, b, k); if (!ship) continue;
-      const avail = readyOf(b, k) - claimed(g, b, isDock(b) ? k : undefined); if (avail < minLoad(g)) continue;
-      const v = payFor(k, Math.min(trainCap(g), avail), ship.d, ship.why);
-      if (losesMoney(g, ship, v, reach)) continue; // a load that pays less than the trip costs: the train waits for better work, for free
+      const avail = readyOf(b, k) - claimed(g, b, isDock(b) ? k : undefined); if (avail < minLoad(g, isl)) continue;
+      const v = payFor(k, Math.min(cap, avail), ship.d, ship.why);
+      if (losesMoney(g, ship, v, reach, isl)) continue; // a load that pays less than the trip costs: the train waits for better work, for free
       // goods an order waits for: the load that fills it soonest (most units per square run, empty and loaded), whatever
       // the good is worth; other loads: the best pay per square
       const urgent = ship.why === 'order' || ship.feeds || ship.rush || ship.sea !== undefined;
-      const s = urgent ? 1e3 + Math.min(trainCap(g), avail) / (reach + ship.d + 8) : v / (reach + ship.d + 8);
+      const s = urgent ? 1e3 + Math.min(cap, avail) / (reach + ship.d + 8) : v / (reach + ship.d + 8);
       if (s > bs) { bs = s; best = { b, k, ship }; }
     }
   }
@@ -283,8 +288,9 @@ export function tickTrains(g: Game, dt: number) {
   if (Math.floor(g.s.t) !== Math.floor(g.s.t - dt)) { tickMissions(g); if (Math.floor(g.s.t) % 5 === 0) { checkLevel(g); tickTrade(g); } } // reaching an island can let a held level through
   let plan: Plan | null = null;
   const P = () => (plan ??= shipPlan(g));
-  const fm = fleetMul(g.s.trains.length) * fleetMulOf(g, 'rep');
-  g.sys.vmax = V_MAX * fleetMulOf(g, 'eng') * expressMul(g);
+  const fm = fleetMul(g.s.trains.length);
+  // each island has its own engines: vmax is the fastest, slower islands' trains run at their share of it (speedOf)
+  g.sys.vmax = V_MAX * topEng(g) * expressMul(g);
   // bridges cost a little to keep up, every minute, like trains on the move (counted with running costs)
   const br = bridgeSquares(g) * BRIDGE_UPKEEP / 60 * dt;
   if (br > 0) { g.s.money -= br; g.s.upkeep = (g.s.upkeep ?? 0) + br; }
@@ -293,7 +299,7 @@ export function tickTrains(g: Game, dt: number) {
     news(g, `💰 Train ${t.id} delivered its load and was sold for $${v.toLocaleString('en-US')}`);
   }
   for (const t of g.s.trains) {
-    if (t.v > 0) { const c = UPKEEP * fm * dt; g.s.money -= c; g.s.upkeep = (g.s.upkeep ?? 0) + c; }
+    if (t.v > 0) { const c = UPKEEP * fm * fleetMulOf(g, 'rep', fleetIsl(g, t)) * dt; g.s.money -= c; g.s.upkeep = (g.s.upkeep ?? 0) + c; }
     const j = t.job;
     // held up: a train with somewhere to go standing still (not loading, reversing, broken down or resting aside)
     if (j && (j.phase === 'toLoad' || j.phase === 'toDrop') && t.v === 0 && t.pause <= 0 && !t.broke && !t.rr && t.plan.length) t.stopT = (t.stopT ?? 0) + dt;
@@ -319,7 +325,7 @@ export function tickTrains(g: Game, dt: number) {
       j.phase = 'loading'; j.timer = loadTime(g, t);
     } else if (j.phase === 'loading') {
       if (!src) { endJob(t); continue; }
-      const n = Math.min(trainCap(g), Math.floor(readyOf(src, j.good)));
+      const n = Math.min(capOf(g, t), Math.floor(readyOf(src, j.good)));
       if (n <= 0) { endJob(t); continue; }
       if (isDock(src)) src.landed![j.good as Good]! -= n; else src.stock -= n;
       const ship = planFor(shipPlan(g, t), src, j.good); if (ship) { j.to = ship.to; j.sea = ship.sea; j.then = ship.then; }
@@ -339,7 +345,7 @@ export function tickTrains(g: Game, dt: number) {
 /** What a train is doing, in plain words. */
 export function trainStatus(g: Game, t: Train): string {
   const j = t.job;
-  if (!j) return t.v > 0 ? '🚂 On its way' : `💤 Waiting for a load (a building needs ${minLoad(g)} ready)`;
+  if (!j) return t.v > 0 ? '🚂 On its way' : `💤 Waiting for a load (a building needs ${minLoad(g, fleetIsl(g, t))} ready)`;
   const src = (g.s.buildings ?? []).find(b => b.id === j.src), where = destName(g, j.to), icon = GOODS[j.good as Good]?.icon ?? '';
   const name = src ? INDUSTRIES[src.kind].name : 'the yard';
   if (j.phase === 'toLoad') return `🚂 Going to the ${name} for ${icon}`;

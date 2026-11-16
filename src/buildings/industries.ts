@@ -180,11 +180,18 @@ export function stripError(g: Game, b: Building): string {
   return '';
 }
 
-/** Price of the next building of this kind: +25% for every one already built. */
-export function priceOf(g: Game, kind: IndustryKind): number {
-  const have = (g.s.buildings ?? []).filter(b => b.kind === kind).length;
-  return Math.round(INDUSTRIES[kind].price * Math.pow(1.25, have) / 50) * 50;
+/** Each island is its own economy: a building costs 25% more for every one of its kind on the same island, 5% more for every one elsewhere. */
+export const SAME_ISLAND = 1.25, ELSEWHERE = 1.05;
+/** The ramp for the next one of something: `same` already on this island, `other` on other islands. */
+export const ramp = (base: number, same: number, other: number) => Math.round(base * Math.pow(SAME_ISLAND, same) * Math.pow(ELSEWHERE, other) / 50) * 50;
+/** Price of the next building of this kind on an island (Ashford Isle when none is given). */
+export function priceOf(g: Game, kind: IndustryKind, isl = g.world.home): number {
+  const n = g.world.n; let same = 0, other = 0;
+  for (const b of g.s.buildings ?? []) if (b.kind === kind) { if (g.world.islandOf[yardSquares(n, b)[0]!] === isl) same++; else other++; }
+  return ramp(INDUSTRIES[kind].price, same, other);
 }
+/** The island a building (or a planned one) stands on. */
+export const islandAtYard = (g: Game, b: Pick<Building, 'x' | 'y' | 'horizontal' | 'side'>) => g.world.islandOf[yardSquares(g.world.n, b as Building)[0]!]!;
 
 /** Squares within `r` of the building row (for forest, fields and pasture). */
 function around(g: Game, b: Pick<Building, 'x' | 'y' | 'horizontal' | 'side'>, r: number): number[] {
@@ -344,7 +351,7 @@ const dist = (n: number, a: number, b: number) => Math.abs((a % n) - (b % n)) + 
 /** Build it: pay, lay the yard track, and add it. */
 export function build(g: Game, p: ReturnType<typeof placementsAt>[number]): Building | string {
   const e = lockedText(g, p.kind) || placeError(g, p); if (e) return e;
-  const price = priceOf(g, p.kind);
+  const price = priceOf(g, p.kind, islandAtYard(g, p));
   if (price > g.s.money) return `Need $${(price - g.s.money).toLocaleString('en-US')} more`;
   g.s.money -= price;
   const dep = depositUnder(g, p);
