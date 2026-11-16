@@ -44,7 +44,7 @@ export const bldDist = (g: Game, b: Building) => railDist(g, 'b' + b.id, yardSqu
 export type Dest = { kind: 'town' | 'bld'; id: number };
 export type Why = 'order' | 'factory' | 'steady' | 'extra';
 /** where a load goes; `sea` = the far dock when it goes to a dock for a ship */
-export interface Ship { to: Dest; why: Why; d: number; rush?: boolean; sea?: number; /** a second sea route: the far dock passes it on to this dock */ then?: number }
+export interface Ship { to: Dest; why: Why; d: number; /** a factory whose product an open order is waiting for */ feeds?: boolean; rush?: boolean; sea?: number; /** a second sea route: the far dock passes it on to this dock */ then?: number }
 type Pair = { s: { b: Building; k: Good; sk: string }; b: Building; to: Dest; d: number; t?: Site; f?: Building };
 type Targets = (from: Building, k: Good, d0: number, dist: Int32Array, push: (p: Omit<Pair, 's' | 'b'>) => void) => void;
 /** The plan: building id → where its goods go; `docks` holds landed goods at docks, keyed `dockId/good`. */
@@ -102,13 +102,19 @@ export function shipPlan(g: Game, skip?: Train): Plan {
   for (const s of srcs) targets(s.b, s.k, 0, bldDist(g, s.b), p => pairs.push({ ...p, s, b: s.b }));
   pairs.sort((p, q) => p.d - q.d);
   const left = new Map<string, number>();
+  // a factory's inputs count as needed only while an open order on the railway waits for what it makes;
+  // otherwise it is fed after the open orders, like a town that keeps buying
+  const wanted = new Set<Good>();
+  for (const t of towns) { const o = orderOf(g, t); for (const k of Object.keys(o) as Good[]) if (townRoom(g, t, k).order + tradeRoom(g, t, k) > 0) wanted.add(k); }
+  const feeds = (f: Building) => wanted.has(goodOf(f));
   const room = (p: Pair, why: 'need' | 'steady'): number => {
     const k = p.s.k, kk = key(p.to, k) + why;
     if (!left.has(kk)) {
       let r = 0;
-      if (why === 'need') r = p.f ? factoryRoom(p.f, k) : (orderOf(g, p.t!)[k] ? townRoom(g, p.t!, k).order : 0) + tradeRoom(g, p.t!, k); // 🤝 a capital's trade order counts like its own order
+      if (p.f) r = (why === 'need') === feeds(p.f) ? factoryRoom(p.f, k) : 0;
+      else if (why === 'need') r = (orderOf(g, p.t!)[k] ? townRoom(g, p.t!, k).order : 0) + tradeRoom(g, p.t!, k); // 🤝 a capital's trade order counts like its own order
       else r = p.t && steadyGoods(p.t, g).includes(k) ? Math.max(townRoom(g, p.t, k).steady, 1) : 0;
-      left.set(kk, r - (why === 'need' ? way.get(key(p.to, k)) ?? 0 : 0));
+      left.set(kk, r - (why === 'need' || p.f ? way.get(key(p.to, k)) ?? 0 : 0));
     }
     return left.get(kk)!;
   };
@@ -127,18 +133,19 @@ export function shipPlan(g: Game, skip?: Train): Plan {
     const pin = s.b.pin; if (!pin || isDock(s.b) || out.has(s.sk)) continue;
     const p = pairs.find(q => q.s === s && q.to.kind === pin.kind && q.to.id === pin.id); if (!p) continue;
     const why: Why = p.f ? 'factory' : room(p, 'need') > 0 ? 'order' : room(p, 'steady') > 0 ? 'steady' : 'extra';
-    out.set(s.sk, { to: p.to, why, d: p.d });
-    if (why === 'order' || why === 'factory') { const kk = key(p.to, s.k) + 'need'; left.set(kk, left.get(kk)! - trainCap(g)); }
+    out.set(s.sk, { to: p.to, why, d: p.d, ...(p.f && feeds(p.f) ? { feeds: true } : {}) });
+    if (why === 'order' || why === 'factory') { const kk = key(p.to, s.k) + (p.f && !feeds(p.f) ? 'steady' : 'need'); room(p, p.f && !feeds(p.f) ? 'steady' : 'need'); left.set(kk, left.get(kk)! - trainCap(g)); }
   }
   const take = (why: 'need' | 'steady') => {
     for (const p of pairs) {
       if (out.has(p.s.sk) || room(p, why) <= 0) continue;
-      out.set(p.s.sk, { to: p.to, why: why === 'steady' ? 'steady' : p.f ? 'factory' : 'order', d: p.d });
+      out.set(p.s.sk, { to: p.to, why: p.f ? 'factory' : why === 'steady' ? 'steady' : 'order', d: p.d, ...(p.f && why === 'need' ? { feeds: true } : {}) });
       const kk = key(p.to, p.s.k) + why; left.set(kk, left.get(kk)! - trainCap(g));
     }
   };
   take('need');
-  seaNeeds(g, srcs.filter(s => !out.has(s.sk) && !isDock(s.b)), out, targets, room);
+  // across the sea a factory draws goods whether or not an order waits for its product (as before)
+  seaNeeds(g, srcs.filter(s => !out.has(s.sk) && !isDock(s.b)), out, targets, (p: Pair, w: 'need') => p.f ? factoryRoom(p.f, p.s.k) - (way.get(key(p.to, p.s.k)) ?? 0) : room(p, w));
   take('steady');
   for (const p of pairs) if (!out.has(p.s.sk) && p.t) out.set(p.s.sk, { to: p.to, why: 'extra', d: p.d });
   const plan = new Map<number, Ship>() as Plan; plan.docks = new Map();

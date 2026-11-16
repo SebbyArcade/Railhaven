@@ -167,7 +167,7 @@ export const tripCost = (g: Game, squares: number) => UPKEEP * fleetMul(g.s.trai
 export const losesMoney = (g: Game, ship: Ship, pay: number, reach: number) =>
   (ship.why === 'steady' || ship.why === 'extra') && !ship.rush && ship.sea === undefined && pay < tripCost(g, reach + ship.d);
 
-/** Pick the best waiting load for an idle train: needed goods first, then by pay per square of travel. */
+/** Pick the best waiting load for an idle train: open orders (and factories making what one waits for) first, then by pay per square of travel. */
 function bestJob(g: Game, t: Train, plan: Plan): { b: Building; k: Good; ship: Ship } | null {
   const at = headSquare(g, t);
   let best: { b: Building; k: Good; ship: Ship } | null = null, bs = -Infinity;
@@ -180,7 +180,7 @@ function bestJob(g: Game, t: Train, plan: Plan): { b: Building; k: Good; ship: S
       const avail = readyOf(b, k) - claimed(g, b, isDock(b) ? k : undefined); if (avail < minLoad(g)) continue;
       const v = payFor(k, Math.min(trainCap(g), avail), ship.d, ship.why);
       if (losesMoney(g, ship, v, reach)) continue; // a load that pays less than the trip costs: the train waits for better work, for free
-      const s = v / (reach + ship.d + 8) + (ship.why === 'order' || ship.rush || ship.sea !== undefined ? 1e3 : 0);
+      const s = v / (reach + ship.d + 8) + (ship.why === 'order' || ship.feeds || ship.rush || ship.sea !== undefined ? 1e3 : 0);
       if (s > bs) { bs = s; best = { b, k, ship }; }
     }
   }
