@@ -478,7 +478,7 @@ function shedCard(g: Game, page?: string): string {
         + (dock ? `<button class="mini" data-act="open" data-kind="bld" data-id="${dock.id}" data-page="trains">⛴ Ship ›</button>` : '') + `</div>`;
     }
   }
-  { const nb = bridgeSquares(g); if (nb) h += `<div class="note">🌉 ${nb} bridge square${nb === 1 ? "" : "s"} on your railway: ${fmtMoney(nb * BRIDGE_UPKEEP)} a minute to keep up</div>`; }
+  { const nb = bridgeSquares(g); if (nb) h += `<div class="note">🌉 ${nb} bridge square${nb === 1 ? "" : "s"} on your railway: ${fmtMoney(nb * BRIDGE_UPKEEP)} a minute to keep up${g.s.money > 0 ? '' : ' (paused while you have no money)'}</div>`; }
   return h;
 }
 

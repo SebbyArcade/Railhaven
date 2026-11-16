@@ -76,6 +76,9 @@ export interface Train {
   moveTo?: number;
   /** seconds since it last had a job (no paying load anywhere) */
   noWork?: number;
+  /** running costs since its last delivery, and what its last few trips earned after running costs */
+  run?: number;
+  nets?: number[];
 }
 
 export const trainLength = (t: Train) => ENGINE_LEN + t.cars * (CAR_LEN + COUPLING);
