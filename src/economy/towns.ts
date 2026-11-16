@@ -138,15 +138,21 @@ export function upgradeTown(g: Game, t: Site): string {
   return '';
 }
 
-/** Founding a town on a settlement site (the old game's price, money only). */
+/** Founding a town on a settlement site: $2,500, then 25% more for every town founded on the same island, 5% for every one elsewhere. */
 export const FOUND_PRICE = 2500;
+export function foundPrice(g: Game, p: Site): number {
+  const isl = (s: Site) => g.world.islandOf[s.y * g.world.n + s.x], k = isl(p); let same = 0, other = 0;
+  for (const s of g.s.sites) if (s.founded) { if (isl(s) === k) same++; else other++; }
+  return Math.round(FOUND_PRICE * Math.pow(1.25, same) * Math.pow(1.05, other) / 50) * 50;
+}
 
 /** Turn a settlement site into a new hamlet. Returns why it can't, or ''. */
 export function foundTown(g: Game, p: Site): string {
   if (p.kind !== 'plot') return 'Towns can only be founded on 🚩 settlement sites';
-  if (g.s.money < FOUND_PRICE) return `Need ${'$' + (FOUND_PRICE - Math.floor(g.s.money)).toLocaleString('en-US')} more to found a town`;
-  g.s.money -= FOUND_PRICE;
-  p.kind = 'town'; p.pop = 15; p.lvl = 0; p.got = {};
+  const price = foundPrice(g, p);
+  if (g.s.money < price) return `Need ${'$' + (price - Math.floor(g.s.money)).toLocaleString('en-US')} more to found a town`;
+  g.s.money -= price;
+  p.kind = 'town'; p.founded = true; p.pop = 15; p.lvl = 0; p.got = {};
   reveal(g, p.x, p.y, 3);
   return '';
 }

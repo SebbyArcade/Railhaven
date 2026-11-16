@@ -1,5 +1,8 @@
 import type { Game, GameState, Site } from './state.ts';
 import { trainSpeedMul } from './world/events.ts';
+import { engShare } from './economy/dispatch.ts';
+import { fleetPerIsland } from './economy/upgrades.ts';
+import { reachedIslands } from './progress/missions.ts';
 import { checkPois } from './world/explore.ts';
 import { chartSea, islandOfB, linkedDocks } from './ships/docks.ts';
 const isHomeDock = (g: Game, b: import('./buildings/industries.ts').Building) => islandOfB(g, b) === g.world.home;
@@ -52,8 +55,9 @@ function assemble(s: GameState): Game {
   s.trains ??= []; s.nextId ??= 1;
   const g = { s, world, track } as Game;
   g.linked = linkedSquares(g); placeShed(g); g.linked = linkedSquares(g); // the shed lays its siding first
+  fleetPerIsland(g, reachedIslands(g)); // older saves: fleet upgrades bought for the whole fleet stay on every island reached
   const net = makeNetwork(track, world.n, s.sites, s.buildings ?? [], world.terr, shedSiding(g));
-  g.net = net; g.sys = new TrainSystem(net, s.trains); g.sys.speedOf = t => trainSpeedMul(g, t);
+  g.net = net; g.sys = new TrainSystem(net, s.trains); g.sys.speedOf = t => trainSpeedMul(g, t) * engShare(g, t);
   g.sys.onMidReverse = (_t, sq) => { const r = (g.revs ??= new Map()).get(sq); g.revs.set(sq, { n: (r?.n ?? 0) + 1, at: g.s.t }); };
   if (s.netKey !== networkKey(net)) {
     // the rails were built by different code: find every train again by where it stood

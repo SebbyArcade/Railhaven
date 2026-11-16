@@ -16,6 +16,8 @@ export interface Site {
   x: number;
   y: number;
   name?: string;
+  /** a town the player founded on a settlement site (founding the next one costs more) */
+  founded?: boolean;
   /** town population, 0 = ruins waiting to be linked */
   pop?: number;
   /** deposit resource */
@@ -80,6 +82,8 @@ export interface GameState {
   stumps?: Record<number, number>;
   /** Engine shed fleet upgrade levels */
   fleet?: Partial<Record<'wag' | 'eng' | 'rep', number>>;
+  /** Fleet upgrade levels per island (island number -> levels); `fleet` is only read once, from older saves */
+  fleetI?: Record<number, Partial<Record<'wag' | 'eng' | 'rep', number>>>;
   /** goods being rushed (at most three) */
   rush?: { to: { kind: 'town' | 'bld'; id: number }; good: import('./buildings/industries.ts').Good; left: number }[];
   rlv?: number;

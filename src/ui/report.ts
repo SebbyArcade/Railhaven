@@ -19,9 +19,9 @@ export function gameReport(g: Game): string {
   lines.push(`Railway level ${L} · ${o} orders filled${RLV[L + 1] !== undefined ? ` (next level at ${RLV[L + 1]})` : ' (top level)'}`);
   const isl = reachedIslands(g);
   lines.push(`Islands reached: ${[...isl].map(j => g.world.islands[j]?.name ?? `island ${j}`).join(', ')}`);
-  const fl = s.fleet ?? {};
   const idle = s.trains.filter(t => !t.job).length;
-  lines.push(`Trains: ${s.trains.length} (${idle} waiting for a load) · fleet upgrades wagons ${fl.wag ?? 0}, engines ${fl.eng ?? 0}, repairs ${fl.rep ?? 0} · ships ${s.ships?.length ?? 0}`);
+  const fl = Object.entries(s.fleetI ?? {}).filter(([, l]) => (l.wag ?? 0) + (l.eng ?? 0) + (l.rep ?? 0) > 0).map(([k, l]) => `${g.world.islands[+k]?.name ?? `island ${k}`} wagons ${l.wag ?? 0}, engines ${l.eng ?? 0}, repairs ${l.rep ?? 0}`);
+  lines.push(`Trains: ${s.trains.length} (${idle} waiting for a load) · fleet upgrades: ${fl.length ? fl.join('; ') : 'none'} · ships ${s.ships?.length ?? 0}`);
   lines.push(`Track: ${g.track.size} squares`);
   lines.push('');
   const towns = s.sites.filter(t => t.kind === 'town' && townLinked(g, t));

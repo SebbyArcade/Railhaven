@@ -1,4 +1,4 @@
-import { FOUND_PRICE } from '../economy/towns.ts';
+import { foundPrice } from '../economy/towns.ts';
 import { sizeName, stepOf } from '../economy/towns.ts';
 import { isCapital, tradeOf } from '../economy/trade.ts';
 import { GOODS } from '../buildings/industries.ts';
@@ -165,13 +165,13 @@ function blockedAt(g: Game, hx: number, hy: number, w: number, hall?: Hall): boo
   return false;
 }
 
-function drawPlot(ctx: CanvasRenderingContext2D, s: Site) {
+function drawPlot(ctx: CanvasRenderingContext2D, g: Game, s: Site) {
   const X = (s.x + 0.5) * TILE, Y = (s.y + 0.5) * TILE;
   ctx.strokeStyle = '#5a3e24'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(X, Y + 8); ctx.lineTo(X, Y - 12); ctx.stroke();
   ctx.fillStyle = '#e8603c'; ctx.beginPath(); ctx.moveTo(X, Y - 12); ctx.lineTo(X + 11, Y - 8); ctx.lineTo(X, Y - 4); ctx.fill();
   ctx.font = 'italic 10px Georgia,serif'; ctx.textAlign = 'center'; ctx.fillStyle = 'rgba(255,240,210,.85)'; ctx.fillText('settlement site', X, Y + 18);
   // what to do with it, in plain words (it is a card behind a tap)
-  ctx.font = 'bold 8px system-ui'; ctx.fillStyle = 'rgba(255,226,168,.95)'; ctx.fillText(`tap to found a town · $${FOUND_PRICE.toLocaleString('en-US')}`, X, Y + 28);
+  ctx.font = 'bold 8px system-ui'; ctx.fillStyle = 'rgba(255,226,168,.95)'; ctx.fillText(`tap to found a town · $${foundPrice(g, s).toLocaleString('en-US')}`, X, Y + 28);
 }
 
 function drawDeposit(ctx: CanvasRenderingContext2D, s: Site) {
@@ -187,7 +187,7 @@ export function drawSites(ctx: CanvasRenderingContext2D, g: Game, x0: number, y0
     if (s.x < x0 - 3 || s.x > x1 + 3 || s.y < y0 - 3 || s.y > y1 + 3) continue;
     if (!isRevealed(g, s.y * n + s.x)) continue;
     if (s.kind === 'town') drawTown(ctx, g, s, tm, zoom, halls.find(h => h.town === s));
-    else if (s.kind === 'plot') drawPlot(ctx, s);
+    else if (s.kind === 'plot') drawPlot(ctx, g, s);
     else if (!s.hidden) drawDeposit(ctx, s);
   }
 }

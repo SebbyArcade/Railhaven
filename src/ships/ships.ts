@@ -11,6 +11,8 @@ import { lightMul, salvageAt } from '../world/explore.ts';
  */
 
 export const SHIP_PRICE = 3000;
+/** The next ship: $3,000 for the first two, then $500 more for each one you own (like trains). */
+export const shipPrice = (g: Game) => SHIP_PRICE + 500 * Math.max(0, (g.s.ships?.length ?? 0) - 1);
 /** squares sailed per second, and units one ship carries */
 export const SHIP_SPEED = 0.9;
 export const SHIP_CAP = 80;
@@ -118,8 +120,9 @@ export function seaBound(g: Game, dock: number, k: Good): number {
 export function buyShip(g: Game, dock: Building): CargoShip | string {
   if (!linkedDocks(g).includes(dock)) return 'Join this dock to your railway first';
   if (!lanesFrom(g, dock.id).length) return 'No sea route from here yet: build a landing on an island this dock reaches';
-  if (g.s.money < SHIP_PRICE) return `Need $${(SHIP_PRICE - Math.floor(g.s.money)).toLocaleString('en-US')} more for a ship`;
-  g.s.money -= SHIP_PRICE;
+  const price = shipPrice(g);
+  if (g.s.money < price) return `Need $${(price - Math.floor(g.s.money)).toLocaleString('en-US')} more for a ship`;
+  g.s.money -= price;
   const s: CargoShip = { id: g.s.nextId++, at: dock.id, pos: 0, hold: [], wait: 0 };
   (g.s.ships ??= []).push(s);
   return s;

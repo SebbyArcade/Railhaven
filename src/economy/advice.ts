@@ -61,7 +61,7 @@ export function neededStep(g: Game): Step | null {
       if (INDUSTRIES[kind].makes !== good || kind === 'dock' || lockedText(g, kind)) continue;
       if (isFactory(kind) && !inputsOf(kind).every(i => bs.some(b => INDUSTRIES[b.kind].makes === i && isLinked(g, b)))) continue;
       if (MINES.has(kind) && !canMine(g, kind)) continue; // no uncovered deposit for it yet
-      const price = priceOf(g, kind);
+      const price = priceOf(g, kind, g.world.islandOf[town.y * g.world.n + town.x]);
       if (!best || price < best.price) best = { kind, price, good, town };
     }
   }

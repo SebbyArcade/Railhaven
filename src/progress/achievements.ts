@@ -56,7 +56,9 @@ export const FRESH_LVL = 2;
 const KINDS = Object.keys(INDUSTRIES) as IndustryKind[];
 const kindsBuilt = (g: Game) => new Set(blds(g).map(b => b.kind)).size;
 const mostOfOne = (g: Game) => Math.max(0, ...KINDS.map(k => blds(g).filter(b => b.kind === k).length));
-const fleetBought = (g: Game) => (Object.keys(FLEET) as FleetKey[]).reduce((a, k) => a + fleetLvl(g, k), 0);
+/** best level of an upgrade on any island */
+const topLvl = (g: Game, k: FleetKey) => Math.max(0, ...Object.keys(g.s.fleetI ?? {}).map(i => fleetLvl(g, k, +i)));
+const fleetBought = (g: Game) => (Object.keys(FLEET) as FleetKey[]).reduce((a, k) => a + topLvl(g, k), 0);
 const fleetMax = (Object.keys(FLEET) as FleetKey[]).reduce((a, k) => a + FLEET[k].lv.length - 1, 0);
 /** the farthest track square from Ashford's station, in squares along the rails */
 function reach(g: Game) {
@@ -106,8 +108,8 @@ export const MEDALS: Medal[] = [
   { id: 'maxlvl', g: 'upgrades', icon: '🏗', name: 'Big Works', how: `Raise any building to level ${MAX_LVL}`, xp: 25, prog: g => [Math.max(1, ...blds(g).map(b => b.lvl)), MAX_LVL] },
   { id: 'max10', g: 'upgrades', icon: '🏭', name: 'Fully Upgraded', how: `Have 10 buildings at level ${MAX_LVL}`, xp: 50, prog: g => [blds(g).filter(b => b.lvl >= MAX_LVL).length, 10] },
   { id: 'fleet1', g: 'upgrades', icon: '🔧', name: 'Shed Work', how: 'Buy your first Engine shed upgrade', xp: 10, prog: g => has(fleetBought(g) > 0) },
-  { id: 'wagmax', g: 'upgrades', icon: '🚃', name: 'Heavy Haulers', how: 'Bigger wagons at their top level', xp: 25, prog: g => [fleetLvl(g, 'wag'), FLEET.wag.lv.length - 1] },
-  { id: 'engmax', g: 'upgrades', icon: '⚙', name: 'Express Diesel', how: 'Stronger engines at their top level', xp: 25, prog: g => [fleetLvl(g, 'eng'), FLEET.eng.lv.length - 1] },
+  { id: 'wagmax', g: 'upgrades', icon: '🚃', name: 'Heavy Haulers', how: 'Bigger wagons at their top level', xp: 25, prog: g => [topLvl(g, 'wag'), FLEET.wag.lv.length - 1] },
+  { id: 'engmax', g: 'upgrades', icon: '⚙', name: 'Express Diesel', how: 'Stronger engines at their top level', xp: 25, prog: g => [topLvl(g, 'eng'), FLEET.eng.lv.length - 1] },
   { id: 'fleetmax', g: 'upgrades', icon: '🏆', name: 'Top of the Line', how: 'Every Engine shed upgrade at its top level', xp: 75, prog: g => [fleetBought(g), fleetMax] },
   { id: 'fishmax', g: 'upgrades', icon: '🦞', name: 'Full Nets', how: 'Give a dock every fishing upgrade', xp: 25, prog: g => [Math.max(0, ...docks(g).map(b => b.fish ?? 0)), FISHING.length] },
   { id: 'island', g: 'explore', icon: '🏝', name: 'Land Ho', how: 'Reach your first new island', xp: 25, prog: g => [newIslands(g), 1] },

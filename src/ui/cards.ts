@@ -6,7 +6,7 @@ import { buildingSquares, yardSquares, bufOf, growsTracks, stripError, tracksOf,
 import { factoryState } from '../economy/production.ts';
 import { hasProject, nextParkPrice, orderMul, PARK_PRICE, parkSpot, parksOf, payMul, projectsFor, projectsOf, rewardMul } from '../buildings/parks.ts';
 import { isCapital, islandOfSite, regions, tradeOf, tradeReward, tradeWhy } from '../economy/trade.ts';
-import { FOUND_PRICE, orderDone, orderOf, reward, sizeName, steadyGoods, stepOf, townLinked, upgradePrice } from '../economy/towns.ts';
+import { foundPrice, orderDone, orderOf, reward, sizeName, steadyGoods, stepOf, townLinked, upgradePrice } from '../economy/towns.ts';
 import { type Dest, destinationsOf, destName, type Ship, shipPlan, siteOf } from '../economy/shipping.ts';
 import { FERRY_FEE, fleetByIsland, islandOfTrain, spareTrains, trainPrice, trainRefund, trainStatus, trainToSell } from '../economy/dispatch.ts';
 import { JAM_AFTER } from '../economy/jams.ts';
@@ -14,10 +14,10 @@ import { BRIDGE_UPKEEP, bridgeSquares } from '../track/rules.ts';
 import { dockRange, isDock, islandName, islandOfB, seaDist } from '../ships/docks.ts';
 import { EXPEDITION_DOCK, expeditionError, expeditionPrice } from '../world/expedition.ts';
 import { RING_ISLANDS } from '../world/terrain.ts';
-import { lanesFrom, seaLanes, SHIP_HOLD, SHIP_PRICE, SHIP_UP, type ShipUpKey, shipCap, shipSpeed, shipUpLvl, waitingAt } from '../ships/ships.ts';
+import { lanesFrom, seaLanes, SHIP_HOLD, shipPrice, SHIP_UP, type ShipUpKey, shipCap, shipSpeed, shipUpLvl, waitingAt } from '../ships/ships.ts';
 import { catchOf, FISHING } from '../economy/upgrades.ts';
 import { islandSpec, SPEC_TEXT, specMul } from '../world/specialty.ts';
-import { FLEET, type FleetKey, fleetLvl, levelGain, levelPrice, lvlUnlockAt, MAX_LVL, maxLvlOf, MAX_RUSH, refundOf, RUSH_FEE, rushOf, sellOffer, trainCap } from '../economy/upgrades.ts';
+import { FLEET, type FleetKey, fleetLvl, levelGain, levelPrice, lvlUnlockAt, MAX_LVL, maxLvlOf, MAX_RUSH, refundOf, RUSH_FEE, rushOf, sellOffer, trainCap, capOf as trainCapOf, fleetIsls } from '../economy/upgrades.ts';
 import type { Train } from '../trains/train.ts';
 import { fmtMoney } from './hud.ts';
 import { storyHtml } from './story.ts';
@@ -25,7 +25,7 @@ import { ordersHtml, placeName } from './orders.ts';
 import { mapHtml, type MapView } from './mapviews.ts';
 import { mapCost, MAP_R, MAP_R_SEA } from '../world/maps.ts';
 
-export type Card = { kind: 'shed'; id: 0 } | { kind: 'fleet'; id: 0; page?: string } | { kind: 'plot'; id: number } | { kind: 'town'; id: number; page?: string } | { kind: 'bld'; id: number; page?: string } | { kind: 'train'; id: number } | { kind: 'story'; id: 0; page?: string } | { kind: 'game'; id: number; page?: string } | { kind: 'orders'; id: 0 } | { kind: 'map'; id: 0 } | { kind: 'ship'; id: number } | { kind: 'ships'; id: 0 } | { kind: 'find'; id: number; more?: number } | { kind: 'scout'; id: number } | { kind: 'isle'; id: number; fresh?: boolean };
+export type Card = { kind: 'shed'; id: 0; page?: string } | { kind: 'fleet'; id: 0; page?: string } | { kind: 'plot'; id: number } | { kind: 'town'; id: number; page?: string } | { kind: 'bld'; id: number; page?: string } | { kind: 'train'; id: number } | { kind: 'story'; id: 0; page?: string } | { kind: 'game'; id: number; page?: string } | { kind: 'orders'; id: 0 } | { kind: 'map'; id: 0 } | { kind: 'ship'; id: number } | { kind: 'ships'; id: 0 } | { kind: 'find'; id: number; more?: number } | { kind: 'scout'; id: number } | { kind: 'isle'; id: number; fresh?: boolean };
 
 /** the kind that makes each good */
 const makerOf = (k: Good) => (Object.keys(INDUSTRIES) as IndustryKind[]).find(m => INDUSTRIES[m].makes === k);
@@ -51,7 +51,7 @@ const bName = (b: Building) => INDUSTRIES[b.kind].name;
 
 /** Card HTML. Every number is read fresh, so the card is redrawn each second while open. */
 export function cardHtml(g: Game, c: Card, view?: MapView | null): string | null {
-  if (c.kind === 'shed') return shedCard(g);
+  if (c.kind === 'shed') return shedCard(g, c.page);
   if (c.kind === 'fleet') return fleetCard(g, c.page);
   if (c.kind === 'story') return storyHtml(g, c.page);
   if (c.kind === 'orders') return ordersHtml(g);
@@ -160,13 +160,13 @@ function townPage(g: Game, t: Site, page: string): string {
 }
 
 function plotCard(g: Game, p: Site): string {
-  const can = g.s.money >= FOUND_PRICE;
+  const fp = foundPrice(g, p), can = g.s.money >= fp;
   let h = `<div class="head"><b class="big">🚩</b><div><h2>${esc(p.name ?? 'Settlement site')}</h2><span class="chip2">Settlement site</span></div></div>`;
-  h += `<div class="row"><b class="ico">①</b><div class="grow"><b>Found the town</b> · ${fmtMoney(FOUND_PRICE)}<small>houses go up and it becomes a Hamlet with its own order</small></div></div>`;
+  h += `<div class="row"><b class="ico">①</b><div class="grow"><b>Found the town</b> · ${fmtMoney(fp)}<small>houses go up and it becomes a Hamlet with its own order</small></div></div>`;
   h += `<div class="row"><b class="ico">②</b><div class="grow"><b>Lay track into its station</b><small>🛤 Rails: from your line to the town square, like any town</small></div></div>`;
   h += `<div class="row"><b class="ico">③</b><div class="grow"><b>Fill its order</b><small>your trains bring what it asks for, and you earn its reward</small></div></div>`;
-  h += `<button class="act" data-act="found" data-id="${p.id}" ${can ? '' : 'disabled'}>🏘 Found ${esc(p.name ?? 'a town')} · ${fmtMoney(FOUND_PRICE)}</button>`;
-  if (!can) h += `<div class="row"><b class="ico">💰</b><div class="grow"><div class="line"><span>You have ${fmtMoney(g.s.money)}</span><span>need ${fmtMoney(FOUND_PRICE - Math.floor(g.s.money))} more</span></div>${bar(g.s.money / FOUND_PRICE, '#e8a33c')}<small>Deliveries pay for it. Short of money? Sell stock at a full building (💸 Sell) or a spare train (💰 on its card)</small></div></div>`;
+  h += `<button class="act" data-act="found" data-id="${p.id}" ${can ? '' : 'disabled'}>🏘 Found ${esc(p.name ?? 'a town')} · ${fmtMoney(fp)}</button>`;
+  if (!can) h += `<div class="row"><b class="ico">💰</b><div class="grow"><div class="line"><span>You have ${fmtMoney(g.s.money)}</span><span>need ${fmtMoney(fp - Math.floor(g.s.money))} more</span></div>${bar(g.s.money / fp, '#e8a33c')}<small>Deliveries pay for it. Short of money? Sell stock at a full building (💸 Sell) or a spare train (💰 on its card)</small></div></div>`;
   return h;
 }
 
@@ -189,7 +189,7 @@ function shipsCard(g: Game): string {
     h += `<div class="row"><b class="ico">⛴</b><div class="grow"><div class="line"><span>${where(l.a)} ↔ ${where(l.b)}</span><span>${l.d} squares · ${Math.round(l.d / shipSpeed(g))} s</span></div><small>${wait ? `📦 ${wait} waiting for a ship` : 'Nothing waiting'}</small></div></div>`;
   }
   const home = lanes.map(l => bld(l.a)!).find(b => islandOfB(g, b) === g.world.home) ?? bld(lanes[0]!.a)!;
-  h += `<button class="act" data-act="ship" data-id="${home.id}" ${g.s.money >= SHIP_PRICE ? '' : 'disabled'}>🚢 Buy a cargo ship · ${fmtMoney(SHIP_PRICE)}</button>`;
+  h += `<button class="act" data-act="ship" data-id="${home.id}" ${g.s.money >= shipPrice(g) ? '' : 'disabled'}>🚢 Buy a cargo ship · ${fmtMoney(shipPrice(g))}</button>`;
   if (ships.length) h += shipUpRows(g);
   return h;
 }
@@ -244,7 +244,7 @@ function dockCard(g: Game, b: Building, page?: string): string {
     else h += routes.length ? `<div class="warn">🚢 No cargo ship yet: goods for other islands wait here until you buy one</div>` : '';
     const landed = Object.entries(b.landed ?? {}).filter(([, v]) => (v ?? 0) >= 1);
     if (landed.length) h += `<div class="gift">📦 Ready here for this island's trains: ${landed.map(([k, v]) => `${GOODS[k as Good].icon} ${Math.floor(v!)}`).join(' · ')}</div>`;
-    if (routes.length) h += `<button class="act" data-act="ship" data-id="${b.id}" ${g.s.money >= SHIP_PRICE ? '' : 'disabled'}>🚢 Buy a cargo ship · ${fmtMoney(SHIP_PRICE)}</button>`;
+    if (routes.length) h += `<button class="act" data-act="ship" data-id="${b.id}" ${g.s.money >= shipPrice(g) ? '' : 'disabled'}>🚢 Buy a cargo ship · ${fmtMoney(shipPrice(g))}</button>`;
     if (ships) h += shipUpRows(g);
     return h + back;
   }
@@ -358,7 +358,7 @@ function buildingCard(g: Game, b: Building, page?: string): string {
   else if (linked && !b.closed) h += `<div class="warn">🏘 No town on the railway yet to take it</div>`;
   if (b.pin && !pinned) h += `<div class="warn">📌 It is pinned to ${esc(destName(g, b.pin as Dest))}, which its trains can't reach now: it sends automatically meanwhile</div>`;
   const tr = g.s.trains.filter(t => t.job?.src === b.id || (t.job && sameDest(t.job.to, { kind: 'bld', id: b.id })));
-  if (!b.closed) h += `<div class="note">🚂 ${tr.length ? `${tr.length} train${tr.length > 1 ? 's' : ''} on this` : g.s.trains.length ? `Trains collect when ${Math.round(trainCap(g) * 0.75)} are ready` : 'Buy a train at the engine shed (🚂 Train)'}</div>`;
+  if (!b.closed) h += `<div class="note">🚂 ${tr.length ? `${tr.length} train${tr.length > 1 ? 's' : ''} on this` : g.s.trains.length ? `Trains collect when ${Math.round(trainCap(g, islandOfB(g, b)) * 0.75)} are ready` : 'Buy a train at the engine shed (🚂 Train)'}</div>`;
   // grow it, sell what's piled up, or take it down
   if (b.lvl < maxLvlOf(g, b)) {
     const p = levelPrice(b), room = growsTracks(b.kind) && tracksOf(b) < 3 ? stripError(g, b) : '', can = g.s.money >= p && !room;
@@ -402,7 +402,7 @@ function shipUpRows(g: Game): string {
 
 /** 🚂 Your trains: one row per island with how many trains it has, Buy 1 and Sell 1; a page lists one island's trains. */
 function fleetCard(g: Game, page?: string): string {
-  const all = fleetByIsland(g), cap = trainCap(g);
+  const all = fleetByIsland(g), cap = trainCap(g), many = fleetIsls(g).length > 1;
   if (page) { // one island's trains, each a tap away
     const f = all.find(x => String(x.island) === page); if (!f) return fleetCard(g);
     let h = `<div class="head"><b class="big">🏝</b><div><h2>${esc(f.name)}</h2><span class="chip2">🚂 ${f.trains.length} train${f.trains.length === 1 ? '' : 's'}</span></div></div>`;
@@ -413,27 +413,41 @@ function fleetCard(g: Game, page?: string): string {
     if (!f.trains.length) h += `<div class="note">No trains here yet.</div>`;
     return h + `<button class="act back" data-act="open" data-kind="fleet" data-id="0">‹ All islands</button>`;
   }
-  let h = `<div class="head"><b class="big">🚂</b><div><h2>Your trains</h2><span class="chip2">🚂 ${g.s.trains.length}</span> <span class="chip2">📦 ${cap} per load</span></div></div>`;
+  let h = `<div class="head"><b class="big">🚂</b><div><h2>Your trains</h2><span class="chip2">🚂 ${g.s.trains.length}</span> ${many ? '' : `<span class="chip2">📦 ${cap} per load</span>`}</div></div>`;
   for (const f of all) {
     const idle = f.trains.filter(t => !t.job).length, held = f.trains.filter(t => (t.stopT ?? 0) >= JAM_AFTER).length, busy = f.trains.length - idle;
     const sell = trainToSell(g, f.island), v = trainRefund(g);
     h += `<div class="row isl"><b class="ico">${f.island < 0 ? '🌉' : f.island === g.world.home ? '🏠' : '🏝'}</b><div class="grow">`
       + `<div class="line"><span><b>${esc(f.name)}</b></span><span>🚂 ${f.trains.length} train${f.trains.length === 1 ? '' : 's'}</span></div>`
-      + `<div class="chips">${busy ? `<span class="chip2 ok">🚚 ${busy} working</span> ` : ''}${idle ? `<span class="chip2">💤 ${idle} waiting</span> ` : ''}${held ? `<span class="chip2 bad">🚦 ${held} held up</span>` : ''}</div>`
+      + `<div class="chips">${many && f.island >= 0 ? `<span class="chip2">📦 ${trainCap(g, f.island)} per load</span> ` : ''}${busy ? `<span class="chip2 ok">🚚 ${busy} working</span> ` : ''}${idle ? `<span class="chip2">💤 ${idle} waiting</span> ` : ''}${held ? `<span class="chip2 bad">🚦 ${held} held up</span>` : ''}</div>`
       + `<div class="btns">`
       + (f.buyAt ? `<button class="mini buy" data-act="buyon" data-isl="${f.island}" ${g.s.money >= f.price ? '' : 'disabled'}>＋ Buy 1 · ${fmtMoney(f.price)}</button>` : `<small>Trains come by boat: build a dock or landing here</small>`)
       + (sell ? `<button class="mini sell" data-act="sellon" data-isl="${f.island}">💰 Sell 1 · +${fmtMoney(v)}</button>` : '')
       + (f.shipTo ? `<button class="mini" data-act="open" data-kind="bld" data-id="${f.shipTo.id}" data-page="trains">⛴ Ship one here</button>` : '')
       + (f.trains.length ? `<button class="mini" data-act="open" data-kind="fleet" data-id="0" data-page="${f.island}">📋 List ›</button>` : '')
+      + (many && f.island >= 0 ? `<button class="mini" data-act="open" data-kind="shed" data-id="0" data-page="${f.island}">🔧 Upgrades ›</button>` : '')
       + `</div>${f.buyAt && f.buyAt !== 'shed' ? `<small>A new train comes over by boat (+${fmtMoney(FERRY_FEE)} crossing)</small>` : ''}</div></div>`;
   }
   h += `<small class="why">Trains run themselves: each takes the best waiting load where it is needed. Sell 1 sells a train with no work first; one carrying goods delivers them, then goes.</small>`;
-  h += `<button class="act alt" data-act="open" data-kind="shed" data-id="0">🔧 Fleet upgrades ›<br><small>more wagons, faster engines, for every train</small></button>`;
+  h += `<button class="act alt" data-act="open" data-kind="shed" data-id="0">🔧 Fleet upgrades ›<br><small>more wagons, faster engines${many ? ', bought for each island' : ', for every train'}</small></button>`;
   return h;
 }
 
-function shedCard(g: Game): string {
-  let h = `<div class="head"><b class="big">🏚</b><div><h2>Engine shed</h2><span class="chip2">🚂 ${g.s.trains.length} train${g.s.trains.length === 1 ? '' : 's'}</span> <span class="chip2">📦 ${trainCap(g)} per load</span></div></div>`;
+function shedCard(g: Game, page?: string): string {
+  const isls = fleetIsls(g), isl = page !== undefined && isls.includes(+page) ? +page : g.world.home;
+  let h = `<div class="head"><b class="big">🏚</b><div><h2>Engine shed</h2><span class="chip2">🚂 ${g.s.trains.length} train${g.s.trains.length === 1 ? '' : 's'}</span> <span class="chip2">📦 ${trainCap(g, isl)} per load${isls.length > 1 ? ` on ${esc(islandName(g, isl))}` : ''}</span></div></div>`;
+  if (isls.length > 1) {
+    h += `<h3>🔧 Upgrades for each island</h3><div class="btns">`;
+    for (const k of isls) h += `<button class="mini${k === isl ? ' buy' : ''}" data-act="open" data-kind="shed" data-id="0" data-page="${k}">${k === g.world.home ? '🏠' : '🏝'} ${esc(islandName(g, k))}</button> `;
+    h += `</div><div class="note">Trains on <b>${esc(islandName(g, isl))}</b> get these. Each island buys its own: trains can't take their wagons and engines across the sea.</div>`;
+  } else h += `<h3>🔧 Fleet upgrades (every train)</h3>`;
+  for (const k of Object.keys(FLEET) as FleetKey[]) {
+    const f = FLEET[k], l = fleetLvl(g, k, isl), p = f.price[l], top = p === undefined;
+    h += `<div class="row"><b class="ico">${f.icon}</b><div class="grow"><div class="line"><span>${f.name}</span><span>${top ? 'Top level' : `Level ${l} → ${l + 1}`}</span></div>${bar(l / f.price.length, '#5cc46a')}<small>Now: ${f.text(l)}${top ? '' : ` · next: ${f.text(l + 1)}`}</small>`;
+    if (!top) h += `<button class="mini" data-act="fleet" data-k="${k}" data-isl="${isl}" ${g.s.money >= p ? '' : 'disabled'}>⬆ ${fmtMoney(p)}</button>`;
+    h += `</div></div>`;
+  }
+  h += `<small class="why">Buy trains with 🚂 Train. ${isls.length > 1 ? 'Upgrades apply to every train on this island.' : 'Upgrades apply to the whole fleet at once. New islands start with plain trains and buy their own.'}</small>`;
   // where the trains are: trains never cross the sea by themselves, so a busy island can be short while another has spares
   const per = new Map<number, Train[]>();
   for (const t of g.s.trains) { const k = islandOfTrain(g, t); per.set(k, [...(per.get(k) ?? []), t]); }
@@ -451,19 +465,11 @@ function shedCard(g: Game): string {
     }
   }
   { const nb = bridgeSquares(g); if (nb) h += `<div class="note">🌉 ${nb} bridge square${nb === 1 ? "" : "s"} on your railway: ${fmtMoney(nb * BRIDGE_UPKEEP)} a minute to keep up</div>`; }
-  h += `<h3>🔧 Fleet upgrades (every train)</h3>`;
-  for (const k of Object.keys(FLEET) as FleetKey[]) {
-    const f = FLEET[k], l = fleetLvl(g, k), p = f.price[l], top = p === undefined;
-    h += `<div class="row"><b class="ico">${f.icon}</b><div class="grow"><div class="line"><span>${f.name}</span><span>${top ? 'Top level' : `Level ${l} → ${l + 1}`}</span></div>${bar(l / f.price.length, '#5cc46a')}<small>Now: ${f.text(l)}${top ? '' : ` · next: ${f.text(l + 1)}`}</small>`;
-    if (!top) h += `<button class="mini" data-act="fleet" data-k="${k}" ${g.s.money >= p ? '' : 'disabled'}>⬆ ${fmtMoney(p)}</button>`;
-    h += `</div></div>`;
-  }
-  h += `<small class="why">Buy trains with 🚂 Train. Upgrades apply to the whole fleet at once.</small>`;
   return h;
 }
 
 function trainCard(g: Game, t: Train): string {
-  let h = `<div class="head"><b class="big">🚂</b><div><h2>Train ${t.id}</h2><span class="chip2">Carries ${trainCap(g)}</span></div></div>`;
+  let h = `<div class="head"><b class="big">🚂</b><div><h2>Train ${t.id}</h2><span class="chip2">Carries ${trainCapOf(g, t)}</span></div></div>`;
   if (t.broke && g.s.t < t.broke.doneAt) { const c = Math.ceil(t.broke.crewAt - g.s.t); h += `<div class="warn">🔧 Broken down: ${c > 0 ? `the repair crew arrives in ${c} s` : `the crew is fixing it, ${Math.ceil(t.broke.doneAt - g.s.t)} s left`}. Trains behind it wait.</div>`; }
   h += `<div class="note big2">${trainStatus(g, t)}</div>`;
   if (t.lastPay) { h += `<div class="row"><b class="ico">💰</b><div class="grow">Last delivery: ${t.lastPay.n} ${GOODS[t.lastPay.good as Good]?.icon ?? ''} to ${esc(destName(g, t.lastPay.to))} paid <b>${fmtMoney(t.lastPay.pay)}</b></div></div>`; }

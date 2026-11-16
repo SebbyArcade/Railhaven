@@ -3,7 +3,7 @@ import type { Train } from '../trains/train.ts';
 import { bufOf, type Building, GOODS, type Good, INDUSTRIES, inputsOf, isFactory, isLinked, yardSquares } from '../buildings/industries.ts';
 import { hallOf } from '../buildings/stations.ts';
 import { orderOf, steadyGoods, townLinked, townRoom } from './towns.ts';
-import { trainCap } from './upgrades.ts';
+import { capOf, trainCap } from './upgrades.ts';
 import { isDock, islandOfB } from '../ships/docks.ts';
 import { tradeRoom } from './trade.ts';
 import { lanesFrom, seaBound, seaLanes } from '../ships/ships.ts';
@@ -69,7 +69,7 @@ function enRoute(g: Game, skip?: Train): Map<string, number> {
   for (const t of g.s.trains) {
     const j = t.job; if (!j || t === skip) continue;
     const k = key(j.to, j.good as Good);
-    m.set(k, (m.get(k) ?? 0) + (t.cargo?.n ?? trainCap(g)));
+    m.set(k, (m.get(k) ?? 0) + (t.cargo?.n ?? capOf(g, t)));
   }
   return m;
 }
@@ -125,7 +125,7 @@ export function shipPlan(g: Game, skip?: Train): Plan {
       if (want <= 0) break;
       if (out.has(p.s.sk) || p.s.k !== r.good || p.to.kind !== r.to.kind || p.to.id !== r.to.id) continue;
       out.set(p.s.sk, { to: p.to, why: p.f ? 'factory' : 'order', d: p.d, rush: true });
-      want -= trainCap(g);
+      want -= trainCap(g, islandOfB(g, p.s.b));
     }
   }
   // pinned buildings: the player chose where their goods go
@@ -134,13 +134,13 @@ export function shipPlan(g: Game, skip?: Train): Plan {
     const p = pairs.find(q => q.s === s && q.to.kind === pin.kind && q.to.id === pin.id); if (!p) continue;
     const why: Why = p.f ? 'factory' : room(p, 'need') > 0 ? 'order' : room(p, 'steady') > 0 ? 'steady' : 'extra';
     out.set(s.sk, { to: p.to, why, d: p.d, ...(p.f && feeds(p.f) ? { feeds: true } : {}) });
-    if (why === 'order' || why === 'factory') { const kk = key(p.to, s.k) + (p.f && !feeds(p.f) ? 'steady' : 'need'); room(p, p.f && !feeds(p.f) ? 'steady' : 'need'); left.set(kk, left.get(kk)! - trainCap(g)); }
+    if (why === 'order' || why === 'factory') { const kk = key(p.to, s.k) + (p.f && !feeds(p.f) ? 'steady' : 'need'); room(p, p.f && !feeds(p.f) ? 'steady' : 'need'); left.set(kk, left.get(kk)! - trainCap(g, islandOfB(g, s.b))); }
   }
   const take = (why: 'need' | 'steady') => {
     for (const p of pairs) {
       if (out.has(p.s.sk) || room(p, why) <= 0) continue;
       out.set(p.s.sk, { to: p.to, why: p.f ? 'factory' : why === 'steady' ? 'steady' : 'order', d: p.d, ...(p.f && why === 'need' ? { feeds: true } : {}) });
-      const kk = key(p.to, p.s.k) + why; left.set(kk, left.get(kk)! - trainCap(g));
+      const kk = key(p.to, p.s.k) + why; left.set(kk, left.get(kk)! - trainCap(g, islandOfB(g, p.s.b)));
     }
   };
   take('need');
@@ -201,7 +201,7 @@ function seaNeeds(g: Game, srcs: { b: Building; k: Good; sk: string }[], out: Ma
     }
     if (!best) continue;
     out.set(s.sk, best);
-    bound.set(bk, bound.get(bk)! + trainCap(g));
+    bound.set(bk, bound.get(bk)! + trainCap(g, islandOfB(g, s.b)));
   }
 }
 
