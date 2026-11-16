@@ -2,7 +2,7 @@ import type { Game, Site } from '../state.ts';
 import type { Building } from '../buildings/industries.ts';
 import { destIsland, MAX_RUSH, maxLvlOf, minLoad, type Rush, RUSH_MUL, rushBySea, RUSH_STEP } from '../economy/upgrades.ts';
 import { reachedIslands } from '../progress/missions.ts';
-import { capOf, GOODS, type Good, INDUSTRIES, inputsOf, type IndustryKind, isFactory, isLinked, shareAt } from '../buildings/industries.ts';
+import { aName, capOf, GOODS, type Good, INDUSTRIES, inputsOf, type IndustryKind, isFactory, isLinked, shareAt } from '../buildings/industries.ts';
 import { factoryState } from '../economy/production.ts';
 import { capitalOf, tradeOf, tradeWhy } from '../economy/trade.ts';
 import { islandName } from '../ships/docks.ts';
@@ -44,6 +44,8 @@ export function stuckList(g: Game, plan = shipPlan(g)): Stuck[] {
     if (!isLinked(g, b)) { out.push({ icon: '🔌', text: `The ${name} isn't on the railway: lay track to one end of its yard`, btn: rail, x: b.x, y: b.y, bld: b.id, name, cause: 'off', many: "aren't on the railway: lay track to one end of each yard", fix: rail }); continue; }
     if (isFactory(b.kind)) { const w = factoryState(g, b).waits; if (w.length) { const gs = w.map(k => `${GOODS[k].icon} ${GOODS[k].name.toLowerCase()}`).join(' and '); out.push({ icon: '⏳', text: `The ${name} waits for ${gs}`, btn: open('bld', b.id), x: b.x, y: b.y, bld: b.id, name, cause: 'wait/' + w.join(), many: `wait for ${gs}` }); } }
     const k = INDUSTRIES[b.kind].makes as Good;
+    // a farm whose fields are all covered by track or buildings makes nothing at all (one town waiting is enough to say so)
+    if ((b.kind === 'farm' || b.kind === 'wool') && shareAt(g, b) === 0) out.push({ icon: '🌾', text: `The ${name} makes nothing: track or buildings cover all its ${b.kind === 'farm' ? 'fields' : 'pasture'}. Remove track next to it, or build another on open grass`, btn: open('bld', b.id), x: b.x, y: b.y, bld: b.id, name, cause: 'nofields', many: `make nothing: track or buildings cover all their ${b.kind === 'farm' ? 'fields' : 'pasture'}` });
     if (b.kind !== 'dock' && b.stock >= capOf(b) && !plan.get(b.id)) {
       const d = outDiag(g, b, k), sell = `<button class="mini" data-act="sell" data-id="${b.id}">💸 Sell ›</button>`;
       out.push({ icon: '📦', text: `The ${name} is full: ${d.text}`, btn: d.btn || sell, x: b.x, y: b.y, bld: b.id, name, cause: 'full/' + k + d.text, many: `are full: ${d.text}`, fix: d.btn || open('bld', b.id) });
@@ -80,7 +82,7 @@ export function stuckList(g: Game, plan = shipPlan(g)): Stuck[] {
   }
   const idle = g.s.trains.filter(t => !t.job);
   if (idle.length) { const p = bodyPoint(g.net, idle[0]!, 0); out.push({ icon: '💤', text: `${idle.length} train${idle.length > 1 ? 's wait' : ' waits'} for a load`, btn: open('train', idle[0]!.id), x: p.x / TILE - 0.5, y: p.y / TILE - 0.5 }); }
-  const rank = ['⬆', '🚦', '🐢', '🔌', '📦', '💤', '⏳']; // the most useful first: a starved factory usually shows up in a 🐢 line too
+  const rank = ['⬆', '🚦', '🐢', '🌾', '🔌', '📦', '💤', '⏳']; // the most useful first: a starved factory usually shows up in a 🐢 line too
   return out.sort((a, b) => rank.indexOf(a.icon) - rank.indexOf(b.icon));
 }
 
@@ -160,7 +162,7 @@ export function outDiag(g: Game, b: Building, k: Good): { text: string; btn: str
     return { text: `${far.map(t => esc(t.name ?? 'a town')).slice(0, 2).join(' and ')} on ${esc(isl)} want ${G}, but no sea route goes there: ${myDock ? `build a ⚓ landing on ${esc(isl)} within your dock's reach` : 'build a ⚓ dock here and a landing there'}`, btn: dock };
   }
   const use = (Object.keys(INDUSTRIES) as IndustryKind[]).find(f => isFactory(f) && inputsOf(f).includes(k));
-  return { text: `no place on the railway needs ${G} now${use ? `: a ${INDUSTRIES[use].name} would use it, or sell it` : ': sell it'}`, btn: '' };
+  return { text: `no place on the railway needs ${G} now${use ? `: ${aName(INDUSTRIES[use].name)} would use it, or sell it` : ': sell it'}`, btn: '' };
 }
 
 /** Buildings whose goods wait for a free train: plenty ready, somewhere to send them, no train coming, and every train on their island busy. */

@@ -1,5 +1,5 @@
 import type { Game, Site } from '../state.ts';
-import { type Building, GOODS, type Good, INDUSTRIES, type IndustryKind, inputsOf, isFactory, isLinked, lockedText, MINES, nearestSpot, priceOf } from '../buildings/industries.ts';
+import { aName, type Building, GOODS, type Good, INDUSTRIES, type IndustryKind, inputsOf, isFactory, isLinked, lockedText, MINES, nearestSpot, priceOf } from '../buildings/industries.ts';
 import { orderOf, townLinked } from './towns.ts';
 import { sellOffer } from './upgrades.ts';
 import { trainRefund } from './dispatch.ts';
@@ -94,7 +94,7 @@ export function checkGrant(g: Game): number {
   const m = minutesTo(g, step.price, 180); if (m === null || m <= FAR_MIN) return 0;
   const add = Math.ceil((step.price - g.s.money) / 100) * 100;
   g.s.money += add; g.s.grantAt = g.s.t; g.s.grantFor = step.kind;
-  (g.news ??= []).push(`🆘 The railway board gives you $${add.toLocaleString('en-US')} for a ${INDUSTRIES[step.kind].name}, so ${step.town.name} can get ${GOODS[step.good].name.toLowerCase()}. It's a gift, not a loan`);
+  (g.news ??= []).push(`🆘 The railway board gives you $${add.toLocaleString('en-US')} for ${aName(INDUSTRIES[step.kind].name)}, so ${step.town.name} can get ${GOODS[step.good].name.toLowerCase()}. It's a gift, not a loan`);
   return add;
 }
 
@@ -133,7 +133,7 @@ function pickTip(g: Game, step: Step | null): Tip | null {
   const why = cause(g);
   if (step && g.s.money >= step.price) {
     const w = GOODS[step.good];
-    return { text: `${why}🏗 Build a ${INDUSTRIES[step.kind].icon} ${INDUSTRIES[step.kind].name} ($${step.price.toLocaleString('en-US')}): ${step.town.name} wants ${w.icon} ${w.name.toLowerCase()}`, go: { kind: 'build', what: step.kind } };
+    return { text: `${why}🏗 Build ${/^[AEIOU]/.test(INDUSTRIES[step.kind].name) ? 'an' : 'a'} ${INDUSTRIES[step.kind].icon} ${INDUSTRIES[step.kind].name} ($${step.price.toLocaleString('en-US')}): ${step.town.name} wants ${w.icon} ${w.name.toLowerCase()}`, go: { kind: 'build', what: step.kind } };
   }
   if (step && g.s.money + sellable(g) >= step.price) {
     const all = (g.s.buildings ?? []).filter(x => sellOffer(x).pay > 0).sort((p, q) => sellOffer(q).pay - sellOffer(p).pay) as Building[];
@@ -141,12 +141,12 @@ function pickTip(g: Game, step: Step | null): Tip | null {
     const pick: Building[] = []; let got = g.s.money;
     for (const b of all) { if (got >= step.price) break; pick.push(b); got += sellOffer(b).pay; }
     const b = pick[0]!, o = sellOffer(b), k = INDUSTRIES[b.kind].makes as Good;
-    if (pick.length === 1) return { text: `${why}💸 Sell ${o.n} ${GOODS[k].icon} at the ${INDUSTRIES[b.kind].name} for $${o.pay.toLocaleString('en-US')}: then a ${INDUSTRIES[step.kind].name} is in reach`, go: { kind: 'bld', id: b.id } };
+    if (pick.length === 1) return { text: `${why}💸 Sell ${o.n} ${GOODS[k].icon} at the ${INDUSTRIES[b.kind].name} for $${o.pay.toLocaleString('en-US')}: then ${aName(INDUSTRIES[step.kind].name)} is in reach`, go: { kind: 'bld', id: b.id } };
     const names = pick.map(x => `${INDUSTRIES[x.kind].icon} ${INDUSTRIES[x.kind].name}`), sum = pick.reduce((a, x) => a + sellOffer(x).pay, 0);
-    return { text: `${why}💸 Sell the stock at your ${names.slice(0, -1).join(', ')} and ${names.at(-1)} ($${sum.toLocaleString('en-US')} together): then a ${INDUSTRIES[step.kind].name} is in reach. Start with the ${INDUSTRIES[b.kind].name} (+$${o.pay.toLocaleString('en-US')})`, go: { kind: 'bld', id: b.id } };
+    return { text: `${why}💸 Sell the stock at your ${names.slice(0, -1).join(', ')} and ${names.at(-1)} ($${sum.toLocaleString('en-US')} together): then ${aName(INDUSTRIES[step.kind].name)} is in reach. Start with the ${INDUSTRIES[b.kind].name} (+$${o.pay.toLocaleString('en-US')})`, go: { kind: 'bld', id: b.id } };
   }
   const t = workless(g);
   if (t && g.s.trains.length > 1) return { text: `${why}🚂 Train ${t.id} has had no paying work for a while: sell it for $${trainRefund(g).toLocaleString('en-US')}`, go: { kind: 'train', id: t.id } };
-  if (step) return { text: `${why}🪙 Save up for a ${INDUSTRIES[step.kind].icon} ${INDUSTRIES[step.kind].name} ($${step.price.toLocaleString('en-US')}): ${step.town.name} wants ${GOODS[step.good].icon} ${GOODS[step.good].name.toLowerCase()}`, go: { kind: 'orders' } };
+  if (step) return { text: `${why}🪙 Save up for ${/^[AEIOU]/.test(INDUSTRIES[step.kind].name) ? 'an' : 'a'} ${INDUSTRIES[step.kind].icon} ${INDUSTRIES[step.kind].name} ($${step.price.toLocaleString('en-US')}): ${step.town.name} wants ${GOODS[step.good].icon} ${GOODS[step.good].name.toLowerCase()}`, go: { kind: 'orders' } };
   return why ? { text: `${why}📋 See what your towns want next`, go: { kind: 'orders' } } : null;
 }

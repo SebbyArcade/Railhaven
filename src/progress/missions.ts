@@ -1,6 +1,6 @@
 import type { Game, Site } from '../state.ts';
 import { hash } from '../core/rng.ts';
-import { GOODS, type Good, INDUSTRIES, type IndustryKind, inputsOf, isFactory, isLinked, lockedText, nearestSpot } from '../buildings/industries.ts';
+import { aName, GOODS, type Good, INDUSTRIES, type IndustryKind, inputsOf, isFactory, isLinked, lockedText, nearestSpot } from '../buildings/industries.ts';
 import { orderOf, sizeName, stepOf, townLinked } from '../economy/towns.ts';
 import { islandName, islandOfB, linkedDocks } from '../ships/docks.ts';
 import { islandSpec, SPEC_TEXT } from '../world/specialty.ts';
@@ -147,7 +147,7 @@ export function candidates(g: Game): Cand[] {
   }
   // buildings just unlocked and never built
   for (const fk of Object.keys(INDUSTRIES) as IndustryKind[]) if (isFactory(fk) && !lockedText(g, fk) && !has(g, fk)) {
-    const st = stepFor(g, fk, 2, `Your railway can build a ${INDUSTRIES[fk].name} now: it turns ${inputsOf(fk).map(lc).join(' and ')} into ${lc(INDUSTRIES[fk].makes)}.`);
+    const st = stepFor(g, fk, 2, `Your railway can build ${aName(INDUSTRIES[fk].name)} now: it turns ${inputsOf(fk).map(lc).join(' and ')} into ${lc(INDUSTRIES[fk].makes)}.`);
     if (st) C.push(st);
   }
   if (!lockedText(g, 'dock') && !has(g, 'dock') && islandWith(g) !== null) C.push({ id: 'build:dock', ty: 'build', k: 'dock', pr: 2, why: 'The sea is open: a dock lets you reach other islands.' });
@@ -201,7 +201,7 @@ export function make(g: Game, c: Cand, n: number, side: boolean): Mission {
   if (c.ty === 'build') {
     const k = c.k!, name = INDUSTRIES[k].name;
     m.base = (g.s.buildings ?? []).filter(b => b.kind === k).length;
-    m.title = `Build a ${INDUSTRIES[k].icon} ${name}`;
+    m.title = `Build ${/^[AEIOU]/.test(name) ? 'an' : 'a'} ${INDUSTRIES[k].icon} ${name}`;
     m.how = k === 'dock' ? '🏗 Build → ⚓ Dock: its pier over the water, its yard beside your track'
       : isFactory(k) ? `🏗 Build → ${name}: beside your track, near where its ${inputsOf(k).map(lc).join(' and ')} comes from`
       : `🏗 Build → ${name}, ${WHERE[k] ?? 'beside your track'}`;

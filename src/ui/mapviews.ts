@@ -1,5 +1,5 @@
 import type { Game } from '../state.ts';
-import { capOf, GOODS, type Good, INDUSTRIES, inputsOf, isFactory, isLinked, outputOf } from '../buildings/industries.ts';
+import { aName, capOf, GOODS, type Good, INDUSTRIES, inputsOf, isFactory, isLinked, outputOf } from '../buildings/industries.ts';
 import { factoryState } from '../economy/production.ts';
 import { orderDone, orderOf, sizeName, stepOf, townLinked } from '../economy/towns.ts';
 import { isRevealed } from '../world/fog.ts';
@@ -62,7 +62,7 @@ export function viewMarks(g: Game, v: MapView): Mark[] {
       if (d.kind !== 'dep' || d.hidden || !seen(g, d.x, d.y) || used.has(`${d.x},${d.y}`)) continue;
       const kind = (d.res ?? 'stone') as keyof typeof INDUSTRIES, I = INDUSTRIES[kind];
       if (!I) continue;
-      out.push({ x: d.x, y: d.y, icon: GOODS[I.makes].icon, text: `${GOODS[I.makes].name}${d.rich ? ' ★ rich' : ''}: build a ${I.name} here`, col: C.dep });
+      out.push({ x: d.x, y: d.y, icon: GOODS[I.makes].icon, text: `${GOODS[I.makes].name}${d.rich ? ' ★ rich' : ''}: build ${aName(I.name)} here`, col: C.dep });
     }
     return out;
   }

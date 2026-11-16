@@ -1,9 +1,9 @@
 import type { Game, Site } from '../state.ts';
 import type { Train } from '../trains/train.ts';
-import { bufOf, type Building, GOODS, type Good, INDUSTRIES, inputsOf, isFactory, isLinked, yardSquares } from '../buildings/industries.ts';
+import { bufOf, type Building, GOODS, type Good, INDUSTRIES, inputsOf, isFactory, isLinked, outputOf, yardSquares } from '../buildings/industries.ts';
 import { hallOf } from '../buildings/stations.ts';
 import { orderOf, steadyGoods, townLinked, townRoom } from './towns.ts';
-import { capOf, trainCap } from './upgrades.ts';
+import { capOf, minLoad, trainCap } from './upgrades.ts';
 import { isDock, islandOfB } from '../ships/docks.ts';
 import { tradeRoom } from './trade.ts';
 import { lanesFrom, seaBound, seaLanes } from '../ships/ships.ts';
@@ -143,9 +143,12 @@ export function shipPlan(g: Game, skip?: Train): Plan {
     out.set(s.sk, { to: p.to, why, d: p.d, ...(p.f && feeds(p.f) ? { feeds: true } : {}) });
     if (why === 'order' || why === 'factory') { const kk = key(p.to, s.k) + (p.f && !feeds(p.f) ? 'steady' : 'need'); room(p, p.f && !feeds(p.f) ? 'steady' : 'need'); left.set(kk, left.get(kk)! - trainCap(g, islandOfB(g, s.b))); }
   }
+  // a maker that makes nothing (its fields all covered) and holds less than a train load can't fill an order: it
+  // mustn't take the order's room from another maker that can (seed-4 playtest: Ashford's first order waited for ever)
+  const dead = (b: Building) => !isDock(b) && outputOf(g, b) <= 0 && b.stock < minLoad(g, islandOfB(g, b));
   const take = (why: 'need' | 'steady') => {
     for (const p of pairs) {
-      if (out.has(p.s.sk) || room(p, why) <= 0) continue;
+      if (out.has(p.s.sk) || dead(p.s.b) || room(p, why) <= 0) continue;
       out.set(p.s.sk, { to: p.to, why: p.f ? 'factory' : why === 'steady' ? 'steady' : 'order', d: p.d, ...(p.f && why === 'need' ? { feeds: true } : {}) });
       const kk = key(p.to, p.s.k) + why; left.set(kk, left.get(kk)! - trainCap(g, islandOfB(g, p.s.b)));
     }
