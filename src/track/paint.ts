@@ -3,7 +3,7 @@ import type { Game } from '../state.ts';
 import { bridgeJoinsIslands, bridgeSpans, squareCost, STRAIT_COST } from './rules.ts';
 import { layPath } from './edit.ts';
 import { stationLinkError } from '../buildings/stations.ts';
-import { joinYardEnds, parkName, yardSquares, yardLinkError } from '../buildings/industries.ts';
+import { INDUSTRIES, joinYardEnds, linkedSquares, parkName, yardSquares, yardLinkError } from '../buildings/industries.ts';
 import type { TrackMap, TrackSquare } from './types.ts';
 import { reveal } from '../world/fog.ts';
 
@@ -29,8 +29,64 @@ export function isAnchor(g: Game, i: number): boolean {
   return i === a.y * g.world.n + a.x;
 }
 
+/**
+ * A building not yet on the railway can start a line too: from a square of its loading track, or from one of the two
+ * squares just past its ends (the line then starts at that end). Such a line is built only once it reaches the network.
+ * Returns the line's first squares, or null.
+ */
+export function yardStart(g: Game, i: number): number[] | null {
+  const n = g.world.n;
+  for (const b of g.s.buildings ?? []) {
+    const sq = yardSquares(n, b);
+    if (g.linked?.has(sq[0]!) ?? true) continue; // already on the railway: its track is an anchor
+    if (sq.includes(i)) return [i];
+    const st = b.horizontal ? 1 : n;
+    if (i === sq[0]! - st && !g.track.has(i)) return [sq[0]!, i];
+    if (i === sq.at(-1)! + st && !g.track.has(i)) return [sq.at(-1)!, i];
+  }
+  return null;
+}
+
+/** The building whose loading track a line starts from, when it isn't on the railway yet. */
+function looseStart(g: Game, p: PaintPlan) {
+  const i = p.path[0]!; if (isAnchor(g, i)) return null;
+  return (g.s.buildings ?? []).find(b => yardSquares(g.world.n, b).includes(i)) ?? null;
+}
+
 export function startPlan(g: Game, i: number): PaintPlan | null {
-  return isAnchor(g, i) ? { path: [i] } : null;
+  if (isAnchor(g, i)) return { path: [i] };
+  const y = yardStart(g, i);
+  return y ? { path: y } : null;
+}
+
+/**
+ * Whether a line that starts at a loose building reaches the railway once laid: walks the track as it would be
+ * (yard ends joined, flat crossings only straight over) from the line's start until it meets a square on the railway.
+ */
+export function reachesNetwork(g: Game, path: number[]): boolean {
+  const n = g.world.n, linked = g.linked ?? linkedSquares(g), t = withPath(g, path);
+  const on = new Set(path), cross = new Set(crossedSquares(g, path));
+  for (const b of g.s.buildings ?? []) { // a yard whose end the line touches joins it, as buildPlan does
+    const sq = yardSquares(n, b), st = b.horizontal ? 1 : n;
+    for (const [end, next, d] of [[sq[0]!, sq[0]! - st, b.horizontal ? 2 : 3], [sq.at(-1)!, sq.at(-1)! + st, b.horizontal ? 0 : 1]] as const) {
+      if (!on.has(next) || !t.has(end) || !t.has(next)) continue;
+      if (stationLinkError(t, n, g.s.sites, end, next, g.world.terr) || yardLinkError(g, end, next)) continue;
+      t.set(end, { ...t.get(end)!, links: t.get(end)!.links | (1 << d) }); t.set(next, { ...t.get(next)!, links: t.get(next)!.links | (1 << ((d + 2) % 4)) });
+    }
+  }
+  const a = g.s.sites[0]!, ash = a.y * n + a.x; // Ashford is where the railway starts, even before any track is down
+  const step = [1, n, -1, -n], seen = new Set<number>(), q: [number, number][] = [[path[0]!, -1]];
+  for (let h = 0; h < q.length; h++) {
+    const [i, from] = q[h]!;
+    if ((linked.has(i) || i === ash) && !cross.has(i)) return true;
+    const sq = t.get(i); if (!sq) continue;
+    for (let d = 0; d < 4; d++) {
+      if (!(sq.links & (1 << d)) || (cross.has(i) && from >= 0 && d !== from)) continue; // over a crossing: straight on only
+      const j = i + step[d]!, o = t.get(j); if (!o || !(o.links & (1 << ((d + 2) % 4)))) continue;
+      const key = j * 4 + d; if (seen.has(key)) continue; seen.add(key); q.push([j, d]);
+    }
+  }
+  return false;
 }
 
 /** Extend the stroke to square i (filling a diagonal jump; going back over the last square undoes it). */
@@ -85,6 +141,8 @@ export function planError(g: Game, p: PaintPlan): string {
     const e = bridgeJoinsIslands(g, water, j => set.has(j), land.length ? g.world.islandOf[land.at(-1)!] : undefined);
     if (e) return e;
   }
+  const loose = looseStart(g, p);
+  if (loose && !reachesNetwork(g, p.path)) return `🔌 Not joined yet: run the line from the ${INDUSTRIES[loose.kind].name} on to your track to build it`;
   if (cost > g.s.money) return `Need $${Math.ceil(cost - g.s.money).toLocaleString('en-US')} more`;
   return '';
 }

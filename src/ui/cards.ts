@@ -316,7 +316,7 @@ function dockCard(g: Game, b: Building, page?: string): string {
     return h + back;
   }
   // front: one status line, then the tiles
-  if (!linked) h += home ? `<div class="warn">🔌 Not on the railway yet: lay track from your line to one end of its yard</div>` : `<div class="warn">🌊 No dock of yours reaches this landing</div>`;
+  if (!linked) h += home ? `<div class="warn">🔌 Not on the railway yet: join one end of its yard to your track (🛤 Rails: draw from either side)</div>` : `<div class="warn">🌊 No dock of yours reaches this landing</div>`;
   else if (waiting && !ships) h += `<div class="warn">🚢 ${waiting} goods wait for a ship: buy one under Sea routes</div>`;
   else h += `<div class="gift">🌊 Charts the sea ${dockRange(b)} squares out: shores in reach come out of the fog</div>`;
   const sp = islandSpec(g, islandOfB(g, b)); if (sp) h += `<div class="note">★ ${SPEC_TEXT[sp]}: ${sp === 'fish' ? 'fishing boats here catch' : `${INDUSTRIES[sp].name}s here make`} 50% more</div>`;
@@ -341,7 +341,7 @@ function buildingCard(g: Game, b: Building, page?: string): string {
   const sm = fac ? 1 : specMul(g, islandOfB(g, b), b.kind);
   let h = `<div class="head"><b class="big">${d.icon}</b><div><h2>${d.name}</h2><span class="chip2">Level ${b.lvl}</span> <span class="chip2">${G.icon} ${Math.round(outputOf(g, b) * 60)}/min</span>${sm > 1 ? ' <span class="chip2">★ island specialty +50%</span>' : ''}</div></div>`;
   if (b.fire && g.s.t < b.fire.doneAt) { const c = Math.ceil(b.fire.crewAt - g.s.t); h += `<div class="warn">🔥 On fire: it makes nothing for now. ${c > 0 ? `The fire crew${b.fire.from ? ` from ${b.fire.from}` : ''} is on its way${b.fire.run ? ' along the rails' : ''}${b.fire.run?.off !== undefined ? ' (waiting beside the rails for a train to pass)' : b.fire.run?.stop ? ' (stopped behind a train)' : ''}, here in ${c} s` : `The fire crew is putting it out, ${Math.ceil(b.fire.doneAt - g.s.t)} s left`}. Nothing is lost.</div>`; }
-  if (!linked) h += `<div class="warn">🔌 Not on the railway yet: lay track from your line to one end of its yard</div>`;
+  if (!linked) h += `<div class="warn">🔌 Not on the railway yet: join one end of its yard to your track (🛤 Rails: draw from either side)</div>`;
   if (b.closed) h += `<div class="warn">⛔ Closed: it makes nothing${fac ? ', takes nothing in' : ''} and the barriers keep trains out. Its ${G.icon} stock waits here.</div><button class="act" data-act="shut" data-id="${b.id}">✅ Open it again</button>`;
   if (fac) {
     const st = factoryState(g, b);
