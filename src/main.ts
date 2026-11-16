@@ -37,7 +37,7 @@ import { buyFleet, FLEET, type FleetKey, fleetLvl, refundOf, removeBuilding, rus
 import { foundTown, sizeName, tickTowns, upgradeTown } from './economy/towns.ts';
 import { buyTrainAt, buyTrainFor, fleetByIsland, sellTrain, shipTrainTo, tickTrains, trainRefund, trainToSell } from './economy/dispatch.ts';
 import { moneyTip, type Tip } from './economy/advice.ts';
-import { buyShip, buyShipUp, SHIP_UP, type ShipUpKey, shipPlace, shipUpLvl } from './ships/ships.ts';
+import { buyShip, buyShipUp, SHIP_UP, type ShipUpKey, seaLanes, shipPlace, shipUpLvl } from './ships/ships.ts';
 import { CLAIM_TEXT, POI, poisOf } from './world/explore.ts';
 import { buyFishing, FISHING } from './economy/upgrades.ts';
 import { checkStuck } from './economy/nofail.ts';
@@ -556,6 +556,9 @@ function updateUi() {
   for (const b of document.querySelectorAll<HTMLButtonElement>('#bar [data-mode]')) b.classList.toggle('on', b.dataset.mode === tools.mode || (b.dataset.mode === 'train' && tools.card?.kind === 'fleet'));
   $('buildBtn').classList.toggle('on', tools.mode === 'build' || menuOpen);
   $('mapBtn').classList.toggle('on', tools.card?.kind === 'map' || !!tools.view);
+  $('shipsBtn').classList.toggle('on', tools.card?.kind === 'ships');
+  const docks = (game.s.buildings ?? []).some(b => b.kind === 'dock') || !!game.s.ships?.length;
+  if ($('shipsBtn').style.display !== (docks ? '' : 'none')) $('shipsBtn').style.display = docks ? '' : 'none';
   menu.style.display = menuOpen ? 'grid' : 'none';
   if (menuOpen && Math.floor(performance.now() / 1000) !== lastMenu) { lastMenu = Math.floor(performance.now() / 1000); renderMenu(); } // prices refresh live
   tools.updateGlow(Math.floor(game.s.camera.x / 32), Math.floor(game.s.camera.y / 32));
@@ -620,6 +623,16 @@ function setView(v: MapView | null) {
   if (d) viewTag.querySelector('span')!.innerHTML = `<b>${d.b}</b><br><small>${d.d}</small>`;
 }
 viewTag.onclick = e => { if ((e.target as HTMLElement).closest('button')) setView(null); };
+// 🚢 Ships: shows once you have a dock; tapping it again closes it
+$('shipsBtn').onclick = () => {
+  if (tools.card?.kind === 'ships') { closeCard(); return; }
+  menuOpen = false; tools.mode = 'pan'; tools.cancel(); openCard({ kind: 'ships', id: 0 });
+  // frame every dock on a sea route in the part of the screen the card leaves free
+  const ids = new Set(seaLanes(game).flatMap(l => [l.a, l.b])), ds = (game.s.buildings ?? []).filter(b => ids.has(b.id)); if (!ds.length) return;
+  const xs = ds.map(b => b.x), ys = ds.map(b => b.y), wide = view.w >= 700, fw = wide ? view.w - 380 : view.w, fh = wide ? view.h : view.h * 0.45, c = game.s.camera;
+  c.z = Math.max(0.15, Math.min(1.4, 0.8 * fw / ((Math.max(...xs) - Math.min(...xs) + 6) * 32), 0.8 * fh / ((Math.max(...ys) - Math.min(...ys) + 6) * 32)));
+  c.x = ((Math.min(...xs) + Math.max(...xs)) / 2 + 2) * 32 + (wide ? 190 / c.z : 0); c.y = ((Math.min(...ys) + Math.max(...ys)) / 2 + 1) * 32 + (wide ? 0 : (view.h / 2 - fh / 2 - 60) / c.z);
+};
 $('mapBtn').onclick = () => { if (tools.card?.kind === 'map') { closeCard(); return; } menuOpen = false; tools.mode = 'pan'; tools.cancel(); openCard({ kind: 'map', id: 0 }); };
 cardEl.addEventListener('input', e => {
   const q = (e.target as HTMLInputElement); if (q.id !== 'mapQ') return;

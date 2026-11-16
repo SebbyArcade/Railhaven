@@ -13,7 +13,7 @@ import { BRIDGE_UPKEEP, bridgeSquares } from '../track/rules.ts';
 import { dockRange, isDock, islandName, islandOfB, seaDist } from '../ships/docks.ts';
 import { EXPEDITION_DOCK, expeditionError, expeditionPrice } from '../world/expedition.ts';
 import { RING_ISLANDS } from '../world/terrain.ts';
-import { lanesFrom, SHIP_HOLD, SHIP_PRICE, SHIP_UP, type ShipUpKey, shipCap, shipSpeed, shipUpLvl, waitingAt } from '../ships/ships.ts';
+import { lanesFrom, seaLanes, SHIP_HOLD, SHIP_PRICE, SHIP_UP, type ShipUpKey, shipCap, shipSpeed, shipUpLvl, waitingAt } from '../ships/ships.ts';
 import { catchOf, FISHING } from '../economy/upgrades.ts';
 import { islandSpec, SPEC_TEXT, specMul } from '../world/specialty.ts';
 import { FLEET, type FleetKey, fleetLvl, levelGain, levelPrice, lvlUnlockAt, MAX_LVL, maxLvlOf, MAX_RUSH, refundOf, RUSH_FEE, rushOf, sellOffer, trainCap } from '../economy/upgrades.ts';
@@ -24,7 +24,7 @@ import { ordersHtml, placeName } from './orders.ts';
 import { mapHtml, type MapView } from './mapviews.ts';
 import { mapCost, MAP_R, MAP_R_SEA } from '../world/maps.ts';
 
-export type Card = { kind: 'shed'; id: 0 } | { kind: 'fleet'; id: 0; page?: string } | { kind: 'plot'; id: number } | { kind: 'town'; id: number; page?: string } | { kind: 'bld'; id: number; page?: string } | { kind: 'train'; id: number } | { kind: 'story'; id: 0; page?: string } | { kind: 'game'; id: number; page?: string } | { kind: 'orders'; id: 0 } | { kind: 'map'; id: 0 } | { kind: 'ship'; id: number } | { kind: 'find'; id: number; more?: number };
+export type Card = { kind: 'shed'; id: 0 } | { kind: 'fleet'; id: 0; page?: string } | { kind: 'plot'; id: number } | { kind: 'town'; id: number; page?: string } | { kind: 'bld'; id: number; page?: string } | { kind: 'train'; id: number } | { kind: 'story'; id: 0; page?: string } | { kind: 'game'; id: number; page?: string } | { kind: 'orders'; id: 0 } | { kind: 'map'; id: 0 } | { kind: 'ship'; id: number } | { kind: 'ships'; id: 0 } | { kind: 'find'; id: number; more?: number };
 
 /** the kind that makes each good */
 const makerOf = (k: Good) => (Object.keys(INDUSTRIES) as IndustryKind[]).find(m => INDUSTRIES[m].makes === k);
@@ -56,6 +56,7 @@ export function cardHtml(g: Game, c: Card, view?: MapView | null): string | null
   if (c.kind === 'orders') return ordersHtml(g);
   if (c.kind === 'map') return mapHtml(g, view ?? null);
   if (c.kind === 'ship') return shipCard(g, c.id);
+  if (c.kind === 'ships') return shipsCard(g);
   if (c.kind === 'plot') { const p = siteOf(g, c.id); return p?.kind === 'plot' ? plotCard(g, p) : null; }
   if (c.kind === 'find') return findCard(g, c.id, c.more ?? 0);
   if (c.kind === 'town') { const t = siteOf(g, c.id); return t?.kind === 'town' ? townCard(g, t, c.page) : null; }
@@ -163,6 +164,30 @@ function plotCard(g: Game, p: Site): string {
   h += `<div class="row"><b class="ico">③</b><div class="grow"><b>Fill its order</b><small>your trains bring what it asks for, and you earn its reward</small></div></div>`;
   h += `<button class="act" data-act="found" data-id="${p.id}" ${can ? '' : 'disabled'}>🏘 Found ${esc(p.name ?? 'a town')} · ${fmtMoney(FOUND_PRICE)}</button>`;
   if (!can) h += `<div class="row"><b class="ico">💰</b><div class="grow"><div class="line"><span>You have ${fmtMoney(g.s.money)}</span><span>need ${fmtMoney(FOUND_PRICE - Math.floor(g.s.money))} more</span></div>${bar(g.s.money / FOUND_PRICE, '#e8a33c')}<small>Deliveries pay for it. Short of money? Sell stock at a full building (💸 Sell) or a spare train (💰 on its card)</small></div></div>`;
+  return h;
+}
+
+/** 🚢 Ships (toolbar): every cargo ship and what it does, the sea routes (drawn on the map while this is open), buy and upgrade. */
+function shipsCard(g: Game): string {
+  const ships = g.s.ships ?? [], lanes = seaLanes(g), bld = (i: number) => g.s.buildings?.find(b => b.id === i);
+  const where = (i: number) => { const b = bld(i); if (!b) return 'a dock'; const k = islandOfB(g, b); return k === g.world.home ? `${esc(placeName(g, b).replace(/^Dock near /, ''))} dock` : `${esc(islandName(g, k))} landing`; };
+  let h = `<div class="head"><b class="big">🚢</b><div><h2>Ships</h2><span class="chip2">🚢 ${ships.length} ship${ships.length === 1 ? '' : 's'}</span> <span class="chip2">⛴ ${lanes.length} route${lanes.length === 1 ? '' : 's'}</span></div></div>`;
+  if (!lanes.length) return h + `<div class="note">⛴ A sea route joins two docks on different islands. Build → ⚓ Dock on your coast and another on an island's shore within reach, both on your railway.</div>`;
+  h += `<div class="note">🗺 Your sea routes are drawn on the map in blue while this is open</div>`;
+  h += `<h3>🚢 Your ships</h3>`;
+  for (const [i, s] of ships.entries()) {
+    const load = s.hold.reduce((a, q) => a + q.n, 0), goods = [...new Set(s.hold.map(q => GOODS[q.good].icon))].join('');
+    h += `<div class="row"><b class="ico">🚢</b><div class="grow"><div class="line"><span>Ship ${i + 1}</span><span>📦 ${load}${goods ? ' ' + goods : ''}</span></div><small>${s.to !== undefined ? `⛴ Sailing to ${where(s.to)}` : `⚓ At ${where(s.at)}`}</small></div><button class="mini" data-act="open" data-kind="ship" data-id="${s.id}">Open ›</button></div>`;
+  }
+  if (!ships.length) h += `<div class="warn">🚢 No cargo ship yet: goods for other islands wait at the docks until you buy one</div>`;
+  h += `<h3>⛴ Sea routes</h3>`;
+  for (const l of lanes) {
+    const wait = (waitingAt(bld(l.a)!).get(l.b) ?? 0) + (waitingAt(bld(l.b)!).get(l.a) ?? 0);
+    h += `<div class="row"><b class="ico">⛴</b><div class="grow"><div class="line"><span>${where(l.a)} ↔ ${where(l.b)}</span><span>${l.d} squares · ${Math.round(l.d / shipSpeed(g))} s</span></div><small>${wait ? `📦 ${wait} waiting for a ship` : 'Nothing waiting'}</small></div></div>`;
+  }
+  const home = lanes.map(l => bld(l.a)!).find(b => islandOfB(g, b) === g.world.home) ?? bld(lanes[0]!.a)!;
+  h += `<button class="act" data-act="ship" data-id="${home.id}" ${g.s.money >= SHIP_PRICE ? '' : 'disabled'}>🚢 Buy a cargo ship · ${fmtMoney(SHIP_PRICE)}</button>`;
+  if (ships.length) h += shipUpRows(g);
   return h;
 }
 

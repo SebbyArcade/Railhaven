@@ -1,7 +1,7 @@
 import type { Game } from '../state.ts';
 import { type Building, buildingSquares, GOODS, type Good } from '../buildings/industries.ts';
 import { TILE } from '../world/terrain.ts';
-import { type CargoShip, shipPlace } from '../ships/ships.ts';
+import { type CargoShip, seaLanes, seaPath, shipPlace } from '../ships/ships.ts';
 import { puff } from './art.ts';
 
 /** crate colours by good */
@@ -14,6 +14,30 @@ export function drawShips(ctx: CanvasRenderingContext2D, g: Game, tm: number, vi
     const p = shipPlace(g, s); if (!vis(p.x, p.y)) continue;
     drawShip(ctx, (p.x + 0.5) * TILE, (p.y + 0.5) * TILE, p.a, s, tm);
   }
+}
+
+/**
+ * Sea routes as dashed blue lines over the water (while the Ships card is open), or one ship's way ahead (while its
+ * card is open). `only`: draw just this ship's path.
+ */
+export function drawSeaRoutes(ctx: CanvasRenderingContext2D, g: Game, tm: number, z: number, only?: CargoShip) {
+  const n = g.world.n, k = 1 / Math.max(0.5, z), bld = (i: number) => g.s.buildings?.find(b => b.id === i);
+  const line = (path: number[], from = 0) => {
+    if (path.length < 2) return;
+    ctx.beginPath();
+    for (let j = Math.floor(from); j < path.length; j++) { const i = path[j]!, x = (i % n + 0.5) * TILE, y = (((i / n) | 0) + 0.5) * TILE; if (j === Math.floor(from)) ctx.moveTo(x, y); else ctx.lineTo(x, y); }
+    ctx.stroke();
+  };
+  ctx.save(); ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  ctx.setLineDash([9 * k, 6 * k]); ctx.lineDashOffset = -tm * 14 * k;
+  if (only) {
+    if (only.to !== undefined && only.path) { ctx.strokeStyle = 'rgba(255,240,160,.95)'; ctx.lineWidth = 3.5 * k; line(only.path, only.pos); }
+  } else for (const l of seaLanes(g)) {
+    const a = bld(l.a), b = bld(l.b); if (!a || !b) continue;
+    ctx.strokeStyle = 'rgba(20,50,80,.45)'; ctx.lineWidth = 5 * k; ctx.setLineDash([]); line(seaPath(g, a, b));
+    ctx.strokeStyle = 'rgba(150,215,255,.95)'; ctx.lineWidth = 2.5 * k; ctx.setLineDash([9 * k, 6 * k]); line(seaPath(g, a, b));
+  }
+  ctx.restore();
 }
 
 /** Little fishing boats working the water off a dock: one per fishing level, drifting in slow loops, nets out. */
