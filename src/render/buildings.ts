@@ -73,6 +73,14 @@ export function drawBuilding(ctx: CanvasRenderingContext2D, g: Game, b: Building
   if (b.kind !== 'dock' && H(1) < 0.5) ctx.scale(-1, 1);
   ART[b.kind](ctx, tm, H, b.lvl);
   ctx.restore();
+  if (b.id < 0) drawBuildingTags(ctx, g, b, tm, zoom); // the placement preview carries its name; real buildings get theirs over the trains
+  void n;
+}
+
+/** A building's name and stock, its warning signs: drawn after the trains so a train in the yard never hides them. */
+export function drawBuildingTags(ctx: CanvasRenderingContext2D, g: Game, b: Building, tm: number, zoom: number) {
+  const T = TILE;
+  const cx = b.horizontal ? (b.x + 2) * T : (b.x + b.side + 0.5) * T, cy = b.horizontal ? (b.y + b.side + 0.5) * T : (b.y + 2) * T;
   // how much is waiting: a small soft tag at the building's end when zoomed out (none when zoomed far out);
   // close up the count joins the name label below instead
   const shows = b.kind !== 'dock' && b.id >= 0;
@@ -97,7 +105,6 @@ export function drawBuilding(ctx: CanvasRenderingContext2D, g: Game, b: Building
     ctx.fillStyle = `rgba(220,60,40,${p})`; ctx.beginPath(); ctx.arc(ys[0]!, ys[1]!, 6, 0, 7); ctx.fill();
     ctx.fillStyle = '#fff'; ctx.font = '700 9px system-ui'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('!', ys[0]!, ys[1]! + 0.5);
   }
-  void n;
 }
 
 /** How far down each building's barrier arms are (0 up, 1 down), eased frame by frame. Drawing only. */
