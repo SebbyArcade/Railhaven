@@ -22,7 +22,8 @@ describe('trains stop clear of the switch at a hall or yard end', () => {
       last = ph ?? '';
       for (const p of t.trail) if (ph === 'loading' || ph === 'unloading') expect(g.net.pieces[p.piece]!.kind, `${ph} at ${stops.at(-1)}`).not.toBe('fan');
     }
-    expect(stops).toContain('109,104'); // the Wheat Farm (its switch is on 109,105)
+    // the Wheat Farm (its switch is on 109,105): the far end it pulls up at from either side (it may come in from the north)
+    expect(stops.some(q => q === '109,104' || q === '109,102')).toBe(true);
     expect(stops).toContain('119,92'); // Ravensholm (its switch is on 119,91)
   });
 });
