@@ -455,7 +455,7 @@ function findCard(g: Game, id: number, more: number): string | null {
   const P = POI[p.kind], R = RARITY[POI_RARITY[p.kind]], isl = g.world.islandOf[p.y * g.world.n + p.x];
   let h = `<div class="find"><span class="rar" style="border-color:${R.col};color:${R.col}">${R.icon} ${R.name.toUpperCase()}</span><small>Spotted in the fog</small>`;
   h += `<b class="fbig">${P.icon}</b><h2>${esc(P.name)}</h2>${isl !== undefined && isl >= 0 ? `<small>on ${esc(islandName(g, isl))}</small>` : ''}</div>`;
-  h += `<div class="gift">🎁 ${p.kind === 'wreck' ? 'A ship or scout boat passing by salvages it' : `When your track reaches it: ${P.perk}`}</div>`;
+  h += `<div class="gift">🎁 ${p.kind === 'wreck' ? 'A ship or scout boat passing by salvages it' : `Lay track into the dashed square around it (2 squares out, corners count too) to take it over: ${P.perk}`}</div>`;
   if (more) h += `<div class="note">✨ ${more} more landmark${more > 1 ? 's' : ''} spotted too: look for them on the map</div>`;
   h += `<button class="act" data-act="lookpoi" data-id="${p.id}">📍 Show me on the map</button>`;
   return h;

@@ -51,6 +51,8 @@ export class Tools {
   /** the map view shown (👁 Map), or none */
   view: import('./mapviews.ts').MapView | null = null;
   flash: { square: number; until: number } | null = null;
+  /** a landmark just tapped: its gift's reach is drawn for a few seconds */
+  poiSel: { id: number; until: number } | null = null;
   /** lesson ring: the square to tap next */
   ring: number | null = null;
   /** the last stroke built, while it can still be undone */

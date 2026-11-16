@@ -2,7 +2,7 @@ import type { Game } from '../state.ts';
 import { TILE } from '../world/terrain.ts';
 import { isRevealed } from '../world/fog.ts';
 import type { Tools } from '../ui/tools.ts';
-import { poisOf, POI, type Poi, scoutPlace, scoutStarts } from '../world/explore.ts';
+import { CLAIM_R, poisOf, POI, POI_REACH, type Poi, scoutPlace, scoutStarts } from '../world/explore.ts';
 import { drawLandmark } from './landmarks.ts';
 import { rumours } from '../world/maps.ts';
 
@@ -10,6 +10,46 @@ import { rumours } from '../world/maps.ts';
 export function drawExplore(ctx: CanvasRenderingContext2D, g: Game, _t: Tools | undefined, tm: number, vis: (x: number, y: number) => boolean, z: number) {
   const n = g.world.n;
   for (const p of poisOf(g)) if (p.seen && !(p.kind === 'wreck' && p.got) && vis(p.x, p.y) && isRevealed(g, p.y * n + p.x)) drawPoi(ctx, p, tm, z);
+}
+
+/** Over the fog (so the fog never hides them): each landmark's take-over square, and the reach of the one just tapped. */
+export function drawPoiZones(ctx: CanvasRenderingContext2D, g: Game, t: Tools | undefined, tm: number, vis: (x: number, y: number) => boolean, z: number) {
+  const sel = t?.poiSel && performance.now() < t.poiSel.until ? t.poiSel.id : -1;
+  for (const p of poisOf(g)) if (p.seen && !(p.kind === 'wreck' && p.got) && vis(p.x, p.y)) {
+    if (!p.got && p.kind !== 'wreck' && z >= 0.7) drawClaimZone(ctx, p, tm, z);
+    if (p.id === sel) drawReach(ctx, p, z);
+  }
+}
+
+/** Not yet yours: the dashed square that track must enter to take it over (CLAIM_R squares out, corners included). */
+function drawClaimZone(ctx: CanvasRenderingContext2D, p: Poi, tm: number, z: number) {
+  const x0 = (p.x - CLAIM_R) * TILE, y0 = (p.y - CLAIM_R) * TILE, w = (2 * CLAIM_R + 1) * TILE, k = 1 / Math.max(0.7, z);
+  ctx.fillStyle = 'rgba(255,214,110,.10)'; ctx.fillRect(x0, y0, w, w);
+  ctx.strokeStyle = `rgba(255,214,110,${0.7 + 0.25 * Math.sin(tm * 3)})`; ctx.lineWidth = 2 * k; ctx.setLineDash([6 * k, 4 * k]);
+  ctx.strokeRect(x0, y0, w, w); ctx.setLineDash([]);
+  if (z < 1) return;
+  const text = '🛤 Track in here takes it over';
+  ctx.save(); ctx.translate(x0 + w / 2, y0 + w); ctx.scale(k, k);
+  ctx.font = '700 11px system-ui'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  const tw = ctx.measureText(text).width + 12;
+  ctx.fillStyle = 'rgba(40,30,18,.85)'; ctx.beginPath(); ctx.roundRect(-tw / 2, 4, tw, 17, 8); ctx.fill();
+  ctx.fillStyle = '#ffd27a'; ctx.fillText(text, 0, 12.5);
+  ctx.restore();
+}
+
+/** Just tapped: how far its gift reaches, as a green circle with a note. */
+function drawReach(ctx: CanvasRenderingContext2D, p: Poi, z: number) {
+  const r = POI_REACH[p.kind]; if (!r) return;
+  const X = (p.x + 0.5) * TILE, Y = (p.y + 0.5) * TILE, R = (r + 0.5) * TILE, k = 1 / Math.max(0.4, z);
+  ctx.fillStyle = 'rgba(120,210,110,.12)'; ctx.beginPath(); ctx.arc(X, Y, R, 0, 7); ctx.fill();
+  ctx.strokeStyle = 'rgba(140,230,120,.9)'; ctx.lineWidth = 2 * k; ctx.setLineDash([8 * k, 5 * k]); ctx.stroke(); ctx.setLineDash([]);
+  const text = `${POI[p.kind].icon} ${POI[p.kind].perk}`;
+  ctx.save(); ctx.translate(X, Y + R); ctx.scale(k, k); // the note sits at the bottom of the circle
+  ctx.font = '700 11px system-ui'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  const tw = ctx.measureText(text).width + 12;
+  ctx.fillStyle = 'rgba(24,52,22,.9)'; ctx.beginPath(); ctx.roundRect(-tw / 2, -9, tw, 18, 8); ctx.fill();
+  ctx.fillStyle = '#d8ffc8'; ctx.fillText(text, 0, 0.5);
+  ctx.restore();
 }
 
 /** Scouts on their way and the route being drawn: over the fog, since that is where they go. */
