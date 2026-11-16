@@ -117,6 +117,8 @@ export interface Building {
   paid?: number;
   /** docks: how far out the sea is already charted */
   chart?: number;
+  /** docks: the whole reach is charted (docks built before charted only 75% of it) */
+  chartAll?: boolean;
   /** docks: goods a ship brought, waiting for this island's trains */
   landed?: Partial<Record<Good, number>>;
   /** docks: fishing level (0 = no boats; 1 boats, 2 bigger fleet, 3 shellfish traps too) */

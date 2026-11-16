@@ -100,18 +100,24 @@ export function landingSeeds(g: Game, linked: Set<number>): number[] {
   return out;
 }
 
-/** A dock charts this share of the sea it can reach (the far part stays for ships and scouts to find). */
-export const CHART_SHARE = 0.75;
+/**
+ * A dock on the railway charts all the sea it can reach: water there, and the shore two squares in, come out of the
+ * fog, so every island it can land on shows (Sébastien, 2026-11-16: landings looked in reach but sat in the fog).
+ * The islands' inland stays for scouts, track and landings to find.
+ */
+export const CHART_SHORE = 2;
 
-/** A dock on the railway charts the nearer part of the sea it reaches: coasts and water there come out of the fog. */
+/** Chart a dock's sea reach. Docks charted before the whole reach was charted (no chartAll) chart the rest once. */
 export function chartSea(g: Game, b: Building): number {
-  const R = dockRange(b); if ((b.chart ?? 0) >= R) return 0;
-  const d = seaDist(g, b), n = g.world.n, t = g.world.terr; let k = 0;
+  const R = dockRange(b); if ((b.chart ?? 0) >= R && b.chartAll) return 0;
+  const d = seaDist(g, b), n = g.world.n; let k = 0;
   for (let i = 0; i < n * n; i++) {
-    const v = d[i]!; if (v < 0 || v > R * CHART_SHARE) continue;
-    k += reveal(g, i % n, (i / n) | 0, t[i] ? 0 : 1); // water and the shore beside it
+    const v = d[i]!; if (v < 0 || v > R) continue;
+    // water by the shore: the shore two squares in; open water: just itself and its neighbours
+    const x = i % n, y = (i / n) | 0, coast = [i + 1, i - 1, i + n, i - n].some(j => g.world.terr[j]);
+    k += reveal(g, x, y, coast ? CHART_SHORE : 1);
   }
   for (const i of yardSquares(n, b)) k += reveal(g, i % n, (i / n) | 0, 4);
-  b.chart = R;
+  b.chart = R; b.chartAll = true;
   return k;
 }

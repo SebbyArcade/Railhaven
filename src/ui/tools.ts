@@ -1,7 +1,7 @@
 import { restoreShed, type Shed } from '../buildings/shed.ts';
 import { shipPlace } from '../ships/ships.ts';
 import type { Game } from '../state.ts';
-import { MAX_SCOUTS, scoutCost, scoutStarts, scoutStepError, sendScout } from '../world/explore.ts';
+import { boatRoute, MAX_SCOUTS, SCOUT_CAP, scoutCost, scoutStarts, scoutStepError, sendScout } from '../world/explore.ts';
 import { trackChanged } from '../game.ts';
 import { type BuiltStroke, buildPlan, extendPlan, isAnchor, type PaintPlan, planCost, planError, startPlan, undoStroke, yardStart } from '../track/paint.ts';
 import { removeSquare } from '../track/edit.ts';
@@ -20,6 +20,7 @@ import { hallOf } from '../buildings/stations.ts';
 const TWIN_NOTE = '🚉 Stations and buildings already have two tracks: those squares are skipped';
 import { placeName } from './orders.ts';
 import { buyMap, findsText, mapAt, mapCost, mapFinds, mappedShare, rumours, talkOf } from '../world/maps.ts';
+import { isRevealed } from '../world/fog.ts';
 
 type Placement = ReturnType<typeof placementsAt>[number];
 
@@ -32,7 +33,7 @@ export const MODE_HINT: Record<Mode, string> = {
   remove: '✂ Tap a track square to remove it.',
   train: '🚂 Trains roll out of the engine shed and run themselves: each takes the best waiting load where it is needed.',
   build: '🏗 Drag the picture where you want it. Blue row = loading track: your rails join it in line, at either end (gold arrows). Tap a ⟳ corner to turn it, double-tap it to build. ↶ Undo takes it back.',
-  scout: '🔭 Tap a glowing town (scouts on foot) or dock (a boat), then drag or tap to draw the route into the fog. A 🗺 map (on a town card) shows where to look.',
+  scout: '🔭 Tap a glowing town (scouts on foot: drag or tap their route) or dock (a boat: tap where it should sail, it finds its way over the water). A 🗺 map (on a town card) shows where to look.',
   map: '🗺 Tap open land, sea or fog to move the circle (a town or building opens its card). A map marks hidden towns and landmarks in it with ?. Green circles are already mapped. If it finds nothing, you get half back.',
 };
 
@@ -248,6 +249,17 @@ export class Tools {
   /** Run the scout route on to square i: straight steps, across then down (stops at the first square it can't take, and says why). */
   private scoutTo(i: number) {
     const g = this.g(), n = g.world.n, sc = this.scout!;
+    if (sc.path.includes(i)) { sc.path = sc.path.slice(0, sc.path.indexOf(i) + 1); return; } // back along the route: shorten it
+    if (sc.boat) { // ⛵ a boat finds its own way over the water to the square tapped
+      if (isRevealed(g, i) && g.world.terr[i]) { this.refuse(i, 'Boats stay on the water: tap the sea, or a town for scouts on foot'); return; }
+      const left = SCOUT_CAP.sea - (sc.path.length - 1);
+      if (left <= 0) { this.refuse(i, `A boat goes at most ${SCOUT_CAP.sea} squares in one trip`); return; }
+      const way = boatRoute(g, sc.path.at(-1)!, i, left, new Set(sc.path));
+      if (!way) { this.refuse(i, 'No way over the water to there that the boat knows of'); return; }
+      sc.path.push(...way);
+      if (way.at(-1) !== i) toast(`⛵ A boat goes at most ${SCOUT_CAP.sea} squares in one trip: the route stops there`);
+      return;
+    }
     let cur = sc.path.at(-1)!;
     const tx = i % n, ty = (i / n) | 0;
     while (cur !== i) {
@@ -324,7 +336,7 @@ export class Tools {
     if (this.mode === 'scout') {
       if (this.scout && this.scout.path.length && !this.scoutStartAt(i)) { this.scoutTo(i); return true; }
       const st = this.scoutStartAt(i);
-      if (st) { this.scout = { path: [st.sq], boat: st.boat, name: st.name }; toast(st.boat ? '⛵ Now draw where the boat should sail' : `🚶 Now draw where the scout should walk from ${st.name}`); return true; }
+      if (st) { this.scout = { path: [st.sq], boat: st.boat, name: st.name }; toast(st.boat ? `⛵ Now tap the sea where the boat should sail: ${fmtMoney(scoutCost(1, true))} a square` : `🚶 Now draw where the scout should walk from ${st.name}`); return true; }
       toast(scoutStarts(g).length ? 'Scouts leave from a glowing town or dock on your railway' : 'Join a town to your railway first: scouts leave from there'); return true;
     }
     if (this.mode === 'remove') { this.removeAt = g.track.has(i) ? i : null; this.removeCut = this.removeAt === null ? '' : cutText(g, i); if (!g.track.has(i)) toast('No track here'); return true; }
@@ -423,8 +435,8 @@ export class Tools {
     }
     if (this.mode === 'scout' && this.scout) {
       const k = this.scout.path.length - 1, c = scoutCost(k, this.scout.boat), out = (g.s.scouts ?? []).length;
-      if (!k) return { text: `${this.scout.boat ? '⛵ Boat' : '🚶 Scout'} from ${this.scout.name}: draw the route`, ok: '✓ Send', can: false };
-      return { text: `${this.scout.boat ? '⛵' : '🚶'} ${k} squares · ${fmtMoney(c)} · next square +${fmtMoney(scoutCost(k + 1, this.scout.boat) - c)}${out ? ` · ${out}/${MAX_SCOUTS} out` : ''}`, ok: '✓ Send', can: c <= g.s.money && out < MAX_SCOUTS };
+      if (!k) return { text: this.scout.boat ? `⛵ Boat from ${this.scout.name}: tap the sea where it should sail · ${fmtMoney(scoutCost(1, true))} a square` : `🚶 Scout from ${this.scout.name}: draw the route`, ok: '✓ Send', can: false };
+      return { text: this.scout.boat ? `⛵ ${k} squares · ${fmtMoney(c)} · ${fmtMoney(scoutCost(1, true))} a square, up to ${SCOUT_CAP.sea}${out ? ` · ${out}/${MAX_SCOUTS} out` : ''}` : `🚶 ${k} squares · ${fmtMoney(c)} · next square +${fmtMoney(scoutCost(k + 1, false) - c)}${out ? ` · ${out}/${MAX_SCOUTS} out` : ''}`, ok: '✓ Send', can: c <= g.s.money && out < MAX_SCOUTS };
     }
     if (this.mode === 'map' && this.mapPv) {
       const m = this.mapPv, c = mapCost(g), have = new Set(rumours(g).map(f => f.y * g.world.n + f.x));
