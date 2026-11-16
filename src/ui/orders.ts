@@ -49,7 +49,10 @@ export function stuckList(g: Game, plan = shipPlan(g)): Stuck[] {
     x.makers = x.near;
     const b = x.makers.find(m => isFactory(m.kind) && factoryState(g, m).waits.length) ?? [...x.makers].sort((p, q) => p.lvl - q.lvl)[0]!;
     const name = placeName(g, b), w = isFactory(b.kind) ? factoryState(g, b).waits : [];
+    // a maker standing full makes enough: what's missing is a train to carry it
+    const full = !w.length && x.makers.some(m => !m.closed && m.stock >= capOf(m) * 0.9) && !g.s.trains.some(t => !t.job);
     const fix = b.closed ? `the ${name} is closed: open it again` : w.length ? `the ${name} is short of ${w.map(k => `${GOODS[k].icon} ${GOODS[k].name.toLowerCase()}`).join(' and ')}: bring more in`
+      : full ? `the ${placeName(g, x.makers.find(m => m.stock >= capOf(m) * 0.9)!)} is full, but every train is busy: buy another train (🚂 Train)`
       : b.lvl < maxLvlOf(g, b) ? `the ${name} can't keep up: upgrade it or build another` : `the ${name} can't keep up: build another`;
     out.push({ icon: '🐢', text: `${x.towns.length} towns wait for ${GOODS[x.good].icon} ${GOODS[x.good].name.toLowerCase()}: ${fix}`, btn: open('bld', b.id), x: b.x, y: b.y, ...(b.closed ? {} : { bld: b.id }) });
   }
