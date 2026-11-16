@@ -13,8 +13,8 @@ export const WRONG_LANE = 50000;
 export const UNSTICK_AFTER = 4, REFUGE_WAIT = 4;
 export const V_MAX = 70, ACCEL = 40, DECEL = 60, REVERSE_PAUSE = 0.45;
 /** the engine running round its train: speed (px/s), seconds to uncouple or couple, and the longest way round (px) */
-/** extra route cost per px run with the engine at the back */
-export const PUSH_COST = 3;
+/** extra route cost per px run with the engine at the back: low enough that a train pushes its wagons a short way rather than running past a junction to turn round */
+export const PUSH_COST = 0.6;
 export const RR_SPEED = 32, RR_COUPLE = 0.8, RR_MAX = 12 * 32;
 
 export interface Train {
