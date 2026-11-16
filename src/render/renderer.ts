@@ -9,7 +9,7 @@ import { drawFog } from './fog.ts';
 import { drawSites } from './sites.ts';
 import { drawHall } from './stations.ts';
 import { drawBreak, drawShed } from './shed.ts';
-import { drawBuilding } from './buildings.ts';
+import { drawBuilding, drawBuildingTags } from './buildings.ts';
 import { drawFields } from './fields.ts';
 import { shedSquare } from '../buildings/shed.ts';
 import { hallsOf } from '../buildings/stations.ts';
@@ -86,6 +86,7 @@ export class Renderer {
     drawShed(ctx, g, tm); // after trains: a train on the siding runs in under its roof
     this.drawTunnels(ctx, x0, y0, x1, y1); // after trains: they run into the hillside
     drawMishaps(ctx, g, tm, vis);
+    for (const b of g.s.buildings ?? []) if (vis(b.y * n + b.x) && isRevealed(g, b.y * n + b.x)) drawBuildingTags(ctx, g, b, tm, cam.z); // names and stock over the trains
     drawShips(ctx, g, tm, (x, y) => x >= x0 - 2 && x <= x1 + 2 && y >= y0 - 2 && y <= y1 + 2 && !!isRevealed(g, Math.round(y) * n + Math.round(x)));
     drawExplore(ctx, g, this.tools, tm, (x, y) => x >= x0 - 2 && x <= x1 + 2 && y >= y0 - 2 && y <= y1 + 2, cam.z);
     if (tm - this.planAt > 1) { this.planAt = tm; this.plan = shipPlan(g); this.alerts = new Set(stuckList(g, this.plan).filter(x => x.bld !== undefined).map(x => x.bld!)); } // the plan changes slowly: once a second is plenty
