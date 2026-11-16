@@ -24,7 +24,7 @@ await page.waitForTimeout(1000);
 await page.evaluate(() => { window.railhaven.openCard(null); window.railhaven.game.s.camera.z = 0.3; }); // zoomed out: only the cues
 await page.mouse.click(200, 400);
 await page.waitForTimeout(800);
-const kinds = ['build', 'rails', 'unrails', 'upgrade', 'remove', 'train', 'ship', 'order', 'grow', 'level', 'break', 'fire'];
+const kinds = ['build', 'built', 'rails', 'unrails', 'upgrade', 'remove', 'train', 'ship', 'order', 'grow', 'level', 'break', 'fire'];
 for (const k of kinds) {
   await page.evaluate(() => { window.__rec.length = 0; });
   await page.evaluate(k => window.railhaven.sound.cue([{ kind: k, vol: 1, pan: 0.3 }]), k);

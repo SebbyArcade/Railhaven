@@ -13,6 +13,7 @@ describe('sound follows the screen', () => {
     const s = nearestSpot(g, 'wood', a.x, a.y)!, b = build(g, bestPlacement(g, 'wood', s.x, s.y).place!);
     if (typeof b === 'string') throw new Error(b);
     trackChanged(g);
+    delete b.built; // the builders are done (their own sounds: construction.test.ts)
     const c = g.s.camera; c.x = (b.x + 2) * TILE; c.y = (b.y + 1) * TILE; c.z = 1.8;
     const sc = hearScene(g, view);
     const camp = sc.sources.find(h => h.id === `b${b.id}`);

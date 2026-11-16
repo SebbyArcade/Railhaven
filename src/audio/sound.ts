@@ -251,6 +251,67 @@ export class Sound {
     o.connect(f); f.connect(g); g.connect(this.out(pan)); o.start(t); o.stop(t + 1.6);
   }
 
+  /** A hammer blow on timber: a knock with a woody body (no hard edge: it fades in over a few ms like every effect). */
+  private hammer(t: number, vol: number, pan: number) {
+    this.ping(t, rnd(780, 980), 0.07, 0.09 * vol, pan, 'triangle', 0.92);
+    this.burst(t, 0.06, 0.2 * vol, pan, 'bandpass', 1100, 1.1); // the thud into the wood
+  }
+  /** One stroke of a hand saw: a rasp that swells and fades, push a little higher than pull. */
+  private rasp(t: number, dur: number, vol: number, pan: number, freq: number) {
+    if (this.voices >= MAX_VOICES) return;
+    const ac = this.ac!, s = ac.createBufferSource(), f = ac.createBiquadFilter(), g = this.env(); this.voice(s);
+    s.buffer = this.noise; s.loop = true; s.playbackRate.value = rnd(0.9, 1.1); f.type = 'bandpass'; f.frequency.value = freq; f.Q.value = 2.2;
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vol, t + dur * 0.45); g.gain.linearRampToValueAtTime(0, t + dur);
+    s.connect(f); f.connect(g); g.connect(this.out(pan)); s.start(t, rnd(0, 1.5)); s.stop(t + dur + 0.05);
+  }
+  /** A small chainsaw cutting a beam: it idles, revs up into the wood, bites, and drops back. */
+  private chainsaw(t: number, dur: number, vol: number, pan: number) {
+    if (this.voices + 3 > MAX_VOICES) return;
+    const ac = this.ac!, g = this.env(), bp = ac.createBiquadFilter(), lp = ac.createBiquadFilter(), lfo = ac.createOscillator(), lg = ac.createGain();
+    bp.type = 'bandpass'; bp.frequency.value = 1300; bp.Q.value = 0.9; lp.type = 'lowpass'; lp.frequency.value = 3200;
+    // the two-stroke putter: the motor's level wobbles quickly
+    lfo.frequency.setValueAtTime(22, t); lfo.frequency.linearRampToValueAtTime(38, t + 0.35); lfo.frequency.setValueAtTime(38, t + dur - 0.3); lfo.frequency.linearRampToValueAtTime(24, t + dur);
+    const am = ac.createGain(); am.gain.value = 0.7; lg.gain.value = 0.3; lfo.connect(lg); lg.connect(am.gain); // inside the envelope, so it is silent once that fades
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.7 * vol, t + 0.12); g.gain.linearRampToValueAtTime(vol, t + 0.4);
+    g.gain.setValueAtTime(vol, t + dur - 0.3); g.gain.linearRampToValueAtTime(0, t + dur);
+    for (const [base, det] of [[96, 0], [97.5, 1]] as const) {
+      const o = ac.createOscillator(); o.type = 'sawtooth'; this.voice(o, true);
+      o.frequency.setValueAtTime(base * 0.8, t); o.frequency.exponentialRampToValueAtTime(base * 1.6 + det, t + 0.35); // rev up
+      o.frequency.setValueAtTime(base * 1.6, t + 0.5); o.frequency.linearRampToValueAtTime(base * 1.35, t + dur * 0.7); // bogs down in the wood
+      o.frequency.linearRampToValueAtTime(base * 0.85, t + dur);
+      o.connect(bp); o.start(t); o.stop(t + dur + 0.05);
+    }
+    // sawdust hiss while it cuts
+    const s = ac.createBufferSource(), hf = ac.createBiquadFilter(), hg = this.env(); this.voice(s, true);
+    s.buffer = this.noise; s.loop = true; hf.type = 'highpass'; hf.frequency.value = 3500;
+    hg.gain.setValueAtTime(0, t + 0.3); hg.gain.linearRampToValueAtTime(0.35 * vol, t + 0.5); hg.gain.setValueAtTime(0.35 * vol, t + dur - 0.35); hg.gain.linearRampToValueAtTime(0, t + dur - 0.1);
+    s.connect(hf); hf.connect(hg); hg.connect(this.out(pan)); s.start(t, rnd(0, 1.5)); s.stop(t + dur + 0.05);
+    lfo.start(t); lfo.stop(t + dur + 0.05);
+    bp.connect(lp); lp.connect(am); am.connect(g); g.connect(this.out(pan));
+  }
+  /** Builders at work: hammering in bursts, a hand saw, now and then the chainsaw or the crane's ratchet and a clank.
+   *  `p` is how far the building is (0-1): the last moment brings the final blows. Returns the time to the next sound. */
+  private builders(now: number, v: number, pan: number, p: number) {
+    const r = Math.random(), side = () => pan + rnd(-0.15, 0.15);
+    if (p > 0.86) { for (let i = 0; i < 2; i++) this.hammer(now + i * 0.22, v, side()); return 2; } // the last nails
+    if (r < 0.42) { // a run of hammer blows, a second hammer joining in
+      const k = Math.floor(rnd(3, 6)), gap = rnd(0.17, 0.24), s1 = side();
+      for (let i = 0; i < k; i++) this.hammer(now + i * gap, v * rnd(0.8, 1), s1);
+      if (Math.random() < 0.5) { const s2 = side(); for (let i = 0; i < 3; i++) this.hammer(now + 0.1 + i * gap * 1.3, v * 0.6, s2); }
+      return k * gap + rnd(0.15, 0.4);
+    }
+    if (r < 0.64) { // a hand saw: four or five strokes
+      const k = Math.floor(rnd(4, 6)), s1 = side(), f = rnd(2600, 3400);
+      for (let i = 0; i < k; i++) this.rasp(now + i * 0.26, 0.24, 0.11 * v, s1, i % 2 ? f * 0.85 : f);
+      return k * 0.26 + rnd(0.1, 0.3);
+    }
+    if (r < 0.86) { const d = rnd(1.1, 1.7); this.chainsaw(now, d, 0.07 * v, side()); return d + rnd(0.1, 0.4); }
+    // the crane: its ratchet winding a load up, then the load set down with a clank
+    for (let i = 0; i < 6; i++) this.burst(now + i * 0.07, 0.03, 0.09 * v, pan, 'bandpass', 2000 + i * 80, 3);
+    this.ping(now + 0.6, rnd(420, 520), 0.35, 0.07 * v, pan, 'triangle', 0.97); this.burst(now + 0.6, 0.12, 0.12 * v, pan, 'lowpass', 900);
+    return rnd(1, 1.4);
+  }
+
   /** One-off sounds for things that just happened (see cues.ts). */
   cue(list: Cue[]) {
     const ac = this.ac; if (!ac || ac.state !== 'running' || !this.settings.sfx || this.settings.muted || !list.length) return;
@@ -265,6 +326,8 @@ export class Sound {
         case 'upgrade': // a ratchet winding up, then a bright ding
           for (let i = 0; i < 5; i++) this.burst(t + i * 0.06, 0.03, 0.12 * v, p, 'bandpass', 2400 + i * 200, 3);
           this.ping(t + 0.35, 1568, 0.9, 0.08 * v, p); this.ping(t + 0.35, 2349, 0.6, 0.03 * v, p); break;
+        case 'built': // the builders finish: a last blow and a bright two-note ding
+          this.hammer(t, v, p); this.ping(t + 0.25, 1319, 0.8, 0.07 * v, p); this.ping(t + 0.37, 1976, 0.9, 0.06 * v, p); break;
         case 'remove': this.burst(t, 0.7, 0.22, 0, 'lowpass', 700); this.burst(t + 0.05, 0.3, 0.1, 0, 'bandpass', 1800); break;
         case 'rails': // a rail dropped onto sleepers, and a spike driven home
           this.ping(t, 1250, 0.35, 0.07 * v, p, 'triangle'); this.ping(t, 1870, 0.25, 0.03 * v, p); this.burst(t, 0.06, 0.16 * v, p, 'bandpass', 1300, 1.2);
@@ -322,6 +385,7 @@ export class Sound {
       case 'town': for (let i = 0; i < 3; i++) this.ping(now + i * 0.9, 660, 2.5, 0.05 * v, p, 'sine'); gap = rnd(40, 80); break;
       case 'wood': this.burst(now, 0.08, 0.35 * v, p, 'bandpass', 700, 2); this.ping(now, 220, 0.1, 0.1 * v, p); gap = Math.random() < 0.25 ? rnd(2.5, 4) : rnd(0.8, 1.2); break;
       case 'sawmill': this.saw(now, v, p); gap = rnd(3.5, 6); break;
+      case 'build': gap = this.builders(now, v, p, h.rate ?? 0); break;
       case 'stone': case 'coal': case 'iron':
         this.ping(now, rnd(2200, 2900), 0.09, 0.07 * v, p, 'triangle'); this.burst(now, 0.06, 0.12 * v, p, 'highpass', 2500);
         if (Math.random() < 0.12) this.burst(now + 0.1, 0.6, 0.15 * v, p, 'lowpass', 800); // rocks tumbling into a cart

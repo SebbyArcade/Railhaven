@@ -117,13 +117,15 @@ function person0(ctx: Ctx, u: number, v: number, coat: string, hat: string) {
   ctx.fillStyle = hat; ctx.beginPath(); ctx.arc(u, v - 1.55, 0.7, Math.PI, 0); ctx.fill();
 }
 
-export type Tool = 'hammer' | 'spanner' | 'bar' | 'hose' | 'pump' | 'none';
+export type Tool = 'hammer' | 'spanner' | 'bar' | 'hose' | 'pump' | 'chainsaw' | 'plank' | 'none';
 export interface WorkerLook { coat: string; trim: string; legs: string; hat: string; brim?: string; tool: Tool }
 /** Rail repair gang: orange hi-vis jacket with silver bands, navy work trousers, yellow hard hat. */
 export const GANG: WorkerLook = { coat: '#f08a1c', trim: '#e8eef2', legs: '#2c3550', hat: '#f4c628', tool: 'hammer' };
 /** Fitter in blue overalls with an orange hi-vis vest and a white hard hat. */
 export const FITTER: WorkerLook = { coat: '#2f5c9a', trim: '#f08a1c', legs: '#2f5c9a', hat: '#f2f2ee', tool: 'spanner' };
 /** Firefighter: dark turnout coat with yellow bands, yellow helmet with a long back brim. */
+/** Builder: tan work shirt, orange hi-vis vest, brown trousers, yellow hard hat. */
+export const BUILDER: WorkerLook = { coat: '#c89a5a', trim: '#f08a1c', legs: '#5a4430', hat: '#f4c628', tool: 'hammer' };
 export const FIREFIGHTER: WorkerLook = { coat: '#2a2f3a', trim: '#e8d040', legs: '#2a2f3a', hat: '#f0c030', brim: '#d8a820', tool: 'hose' };
 
 /**
@@ -145,7 +147,7 @@ function worker0(ctx: Ctx, L: WorkerLook, a: number) {
   // jacket with reflective bands
   ctx.fillStyle = L.coat; ctx.beginPath(); ctx.roundRect(-1.5, -6.6, 3, 3.6, 0.6); ctx.fill();
   ctx.fillStyle = L.trim; ctx.fillRect(-1.5, -4.4, 3, 0.45); ctx.fillRect(-1.5, -5.6, 3, 0.35);
-  if (L === FITTER) { ctx.fillStyle = L.trim; ctx.fillRect(-1.5, -6.6, 0.7, 2.2); ctx.fillRect(0.8, -6.6, 0.7, 2.2); } // hi-vis vest over overalls
+  if (L === FITTER || L.coat === BUILDER.coat) { ctx.fillStyle = L.trim; ctx.fillRect(-1.5, -6.6, 0.7, 2.2); ctx.fillRect(0.8, -6.6, 0.7, 2.2); } // hi-vis vest over overalls
   // head
   ctx.fillStyle = '#e8bf98'; ctx.beginPath(); ctx.arc(0.15, -7.55, 0.95, 0, 7); ctx.fill();
   ctx.fillStyle = '#2a1e16'; ctx.fillRect(0.75, -7.7, 0.25, 0.25); // eye
@@ -155,7 +157,7 @@ function worker0(ctx: Ctx, L: WorkerLook, a: number) {
   if (L.brim) ctx.fillRect(-1.9, -8.15, 0.8, 0.9);
   ctx.fillStyle = 'rgba(255,255,255,.45)'; ctx.fillRect(-0.4, -8.95, 0.7, 0.3); // shine
   // the working arm and its tool
-  const ang = L.tool === 'hammer' || L.tool === 'bar' ? -1.9 + (a + 1) * 1.05 : L.tool === 'spanner' ? 0.2 + a * 0.35 : L.tool === 'pump' ? -0.3 + a * 0.5 : 0.15;
+  const ang = L.tool === 'hammer' || L.tool === 'bar' ? -1.9 + (a + 1) * 1.05 : L.tool === 'spanner' ? 0.2 + a * 0.35 : L.tool === 'pump' ? -0.3 + a * 0.5 : L.tool === 'chainsaw' ? 0.35 + a * 0.08 : L.tool === 'plank' ? -0.9 : 0.15;
   const sx = 0.6, sy = -5.9, hx = sx + Math.cos(ang) * 2.2, hy = sy + Math.sin(ang) * 2.2 + 1.2;
   ctx.strokeStyle = L.coat; ctx.lineWidth = 0.95; ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(hx, hy); ctx.stroke();
   ctx.fillStyle = L.tool === 'hose' ? '#1a1a1a' : '#e8bf98'; ctx.beginPath(); ctx.arc(hx, hy, 0.45, 0, 7); ctx.fill(); // hand / glove
@@ -170,6 +172,13 @@ function worker0(ctx: Ctx, L: WorkerLook, a: number) {
     const ex = hx + tx * 2.2, ey = hy + ty * 2.2;
     ctx.strokeStyle = '#9aa0a8'; ctx.lineWidth = 0.5; ctx.beginPath(); ctx.moveTo(hx, hy); ctx.lineTo(ex, ey); ctx.stroke();
     ctx.lineWidth = 0.4; ctx.beginPath(); ctx.arc(ex, ey, 0.55, ang + 0.25 - 1.3, ang + 0.25 + 1.3); ctx.stroke();
+  } else if (L.tool === 'chainsaw') { // orange motor in the hand, a grey bar out in front, a blur of chain
+    ctx.save(); ctx.translate(hx, hy); ctx.rotate(ang + 0.25);
+    ctx.fillStyle = '#e8701a'; ctx.fillRect(-0.9, -0.8, 2, 1.6); ctx.fillStyle = '#2a2a2a'; ctx.fillRect(-0.9, -0.95, 1.2, 0.35);
+    ctx.fillStyle = '#a8adb4'; ctx.fillRect(1.1, -0.35, 3.2, 0.7); ctx.fillStyle = 'rgba(60,60,60,.6)'; ctx.fillRect(1.1, -0.45 + (a > 0 ? 0.1 : 0), 3.2, 0.2);
+    ctx.restore();
+  } else if (L.tool === 'plank') { // a plank carried on the shoulder
+    ctx.fillStyle = '#c8955a'; ctx.fillRect(-4.2, -7.1, 8.6, 0.9); ctx.fillStyle = 'rgba(0,0,0,.2)'; ctx.fillRect(-4.2, -6.4, 8.6, 0.2);
   } else if (L.tool === 'hose') { // nozzle held forward
     ctx.strokeStyle = '#b8b8b0'; ctx.lineWidth = 0.6; ctx.beginPath(); ctx.moveTo(hx, hy); ctx.lineTo(hx + tx * 1.6, hy + ty * 1.6 - 0.3); ctx.stroke();
   }

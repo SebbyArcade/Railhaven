@@ -1,8 +1,9 @@
 import { hash } from '../core/rng.ts';
-import { buildingSquares, capOf, type Building, GOODS, type Good, INDUSTRIES, isLinked, yardLen, yardSquares } from '../buildings/industries.ts';
+import { buildingSquares, buildingUp, capOf, type Building, GOODS, type Good, INDUSTRIES, isLinked, yardLen, yardSquares } from '../buildings/industries.ts';
 import type { Game } from '../state.ts';
 import { barriersDown } from '../buildings/closing.ts';
 import { TILE } from '../world/terrain.ts';
+import { clipBuilt, drawSiteGround, drawSiteWork } from './construction.ts';
 import { upright, barrel, bush, cart, cottage, crate, dog, flowers, hayBale, hen, lamp, logEnd, logSide, person, pine, puff, sack, stoneWall } from './art.ts';
 
 const CRATE: Record<string, string> = { wood: '#8a5a2e', farm: '#d8b44a', stone: '#9a958c', coal: '#2e2b28', iron: '#8a5a4a', oil: '#3a3a48', wool: '#efeadf', sawmill: '#e0b878', brickworks: '#b5523b', gristmill: '#f4efe2', mill: '#9aa0a8', refinery: '#4a4a58', textile: '#5a7ab0', cannery: '#c0c6cc' , glassworks: '#bfe0ee', toolworks: '#7a7e86', furniture: '#a87444', gold: '#e0b84a', gems: '#9ae0ff', jeweller: '#7a1e3a', cocoa: '#8a5a3a', chocolate: '#5a321e', rubber: '#e8e4d8', tyreworks: '#1e1e20' };
@@ -104,7 +105,13 @@ export function drawBuilding(ctx: CanvasRenderingContext2D, g: Game, b: Building
   if (b.kind !== 'dock') stockPile(ctx, b, L);
   // half of all buildings are laid out the other way round along their yard (docks keep their pier and office as built)
   if (b.kind !== 'dock' && H(1) < 0.5) ctx.scale(-1, 1);
-  ART[b.kind](ctx, tm, H, b.lvl, yardLen(b));
+  const up = buildingUp(g, b);
+  if (up === null) ART[b.kind](ctx, tm, H, b.lvl, yardLen(b));
+  else { // just put up: the builders' scene, with the building rising from one end of its row to the other
+    if (b.kind !== 'dock') drawSiteGround(ctx, L, up);
+    ctx.save(); clipBuilt(ctx, L, up); ART[b.kind](ctx, tm, H, b.lvl, yardLen(b)); ctx.restore();
+    drawSiteWork(ctx, L, up, tm, zoom);
+  }
   ctx.restore();
   if (b.id < 0) drawBuildingTags(ctx, g, b, tm, zoom); // the placement preview carries its name; real buildings get theirs over the trains
   void n;

@@ -1,5 +1,5 @@
 import type { Game } from '../state.ts';
-import { buildingSquares, capOf, inputsOf, isFactory, type IndustryKind } from '../buildings/industries.ts';
+import { buildingSquares, buildingUp, capOf, inputsOf, isFactory, type IndustryKind } from '../buildings/industries.ts';
 import { bodyPoint } from '../trains/train.ts';
 import { shipPlace } from '../ships/ships.ts';
 import { townLinked } from '../economy/towns.ts';
@@ -8,7 +8,8 @@ import { isRevealed } from '../world/fog.ts';
 import type { View } from '../render/camera.ts';
 
 /** What makes a sound on the map. Only rules state is read: this never changes the game. */
-export type SoundKind = 'train' | 'load' | 'repair' | 'ship' | 'town' | 'fire' | IndustryKind;
+/** 'build' = builders at work on a building just put up (hammers, saws, a chainsaw, the crane). */
+export type SoundKind = 'train' | 'load' | 'repair' | 'ship' | 'town' | 'fire' | 'build' | IndustryKind;
 
 /** One thing you can hear: how loud (0-1) and where, left -1 to right +1. */
 export interface Hear { id: string; kind: SoundKind; vol: number; pan: number; rate?: number; moving?: boolean }
@@ -39,8 +40,16 @@ export function place(g: Game, v: View, wx: number, wy: number): { vol: number; 
 
 export function hearScene(g: Game, v: View): Scene {
   const near = nearness(g.s.camera.z), out: Scene = { near, sources: [], sea: 0, forest: 0, grass: 0, hills: 0, storm: 0 };
+  const n = g.world.n;
+  // builders at work on a building just put up: the player's own work, so heard a little even zoomed out, and a
+  // building site drowns out what the building itself does (it works from the start, only quietly)
+  for (const b of g.s.buildings ?? []) {
+    const up = buildingUp(g, b); if (up === null) continue;
+    const sq = buildingSquares(n, b), mid = sq[1]!, p = place(g, v, (mid % n + 1) * TILE, (((mid / n) | 0) + 0.5) * TILE);
+    if (p.vol > 0) out.sources.push({ id: `c${b.id}`, kind: 'build', vol: Math.max(0.4, p.vol * near), pan: p.pan, rate: up });
+  }
   if (near <= 0) return out;
-  const n = g.world.n, add = (h: Omit<Hear, 'vol' | 'pan'>, wx: number, wy: number) => {
+  const add = (h: Omit<Hear, 'vol' | 'pan'>, wx: number, wy: number) => {
     const p = place(g, v, wx, wy); if (p.vol * near > 0.02) out.sources.push({ ...h, vol: p.vol * near, pan: p.pan });
   };
   for (const t of g.s.trains) {
@@ -54,6 +63,7 @@ export function hearScene(g: Game, v: View): Scene {
   for (const b of g.s.buildings ?? []) {
     const sq = buildingSquares(n, b), mid = sq[1]!, wx = (mid % n + 1) * TILE, wy = (((mid / n) | 0) + 0.5) * TILE;
     const working = b.kind === 'dock' || (b.stock < capOf(b) && (!isFactory(b.kind) || inputsOf(b.kind).every(k => (b.inbuf?.[k] ?? 0) >= 1)));
+    if (buildingUp(g, b) !== null) continue; // its builders are heard instead (above)
     if (b.fire && g.s.t < b.fire.doneAt) add({ id: `b${b.id}`, kind: 'fire', moving: g.s.t >= b.fire.crewAt }, wx, wy); // on fire: crackling, and the crew's water once they arrive
     else if (working) add({ id: `b${b.id}`, kind: b.kind }, wx, wy);
   }

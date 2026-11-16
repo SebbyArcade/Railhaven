@@ -1,5 +1,5 @@
 import type { Game } from '../state.ts';
-import { buildingSquares } from '../buildings/industries.ts';
+import { buildingSquares, buildingUp } from '../buildings/industries.ts';
 import { TILE } from '../world/terrain.ts';
 import type { View } from '../render/camera.ts';
 import { nearness, place } from './scene.ts';
@@ -8,7 +8,7 @@ import { nearness, place } from './scene.ts';
  * One-off sounds for things that just happened: a building put up, rails laid, an order filled.
  * Found by comparing the game with how it was a moment ago, so game rules never need to know about sound.
  */
-export type CueKind = 'build' | 'rails' | 'unrails' | 'upgrade' | 'remove' | 'train' | 'ship' | 'order' | 'grow' | 'level' | 'break' | 'fire';
+export type CueKind = 'build' | 'built' | 'rails' | 'unrails' | 'upgrade' | 'remove' | 'train' | 'ship' | 'order' | 'grow' | 'level' | 'break' | 'fire';
 export interface Cue { kind: CueKind; vol: number; pan: number }
 
 export interface CueMemo {
@@ -17,6 +17,8 @@ export interface CueMemo {
   trains: number; ships: number; orders: number; rlv: number;
   towns: Map<number, number>; // town id -> level
   breaks: Set<number>; fires: Set<number>;
+  /** buildings whose builders are still at work */
+  ups: Set<number>;
 }
 
 export function cueMemo(g: Game, old?: CueMemo): CueMemo {
@@ -28,6 +30,7 @@ export function cueMemo(g: Game, old?: CueMemo): CueMemo {
     towns: new Map(g.s.sites.filter(s => s.kind === 'town').map(s => [s.id, s.lvl ?? 0])),
     breaks: new Set((g.s.breaks ?? []).map(b => b.square)),
     fires: new Set((g.s.buildings ?? []).filter(b => b.fire && g.s.t < b.fire.doneAt).map(b => b.id)),
+    ups: new Set((g.s.buildings ?? []).filter(b => buildingUp(g, b) !== null).map(b => b.id)),
   };
 }
 
@@ -43,6 +46,7 @@ export function cues(g: Game, v: View, m: CueMemo): Cue[] {
   for (const b of g.s.buildings ?? []) {
     const was = m.blds.get(b.id), [wx, wy] = sq(buildingSquares(n, b)[1]!);
     if (was === undefined) mine('build', wx, wy); else if (b.lvl > was) mine('upgrade', wx, wy);
+    if (m.ups.has(b.id) && !now.ups.has(b.id)) mine('built', wx, wy); // the builders are done
     if (now.fires.has(b.id) && !m.fires.has(b.id)) world('fire', wx, wy);
   }
   if (m.blds.size && [...m.blds.keys()].some(id => !now.blds.has(id))) ui('remove');
