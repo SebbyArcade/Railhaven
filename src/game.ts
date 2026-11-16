@@ -11,7 +11,7 @@ import { buildNetwork, type Network } from './track/network.ts';
 import { trackFromSave, trackToSave } from './track/state.ts';
 import type { TrackMap } from './track/types.ts';
 import { TrainSystem } from './trains/train.ts';
-import { placeShed } from './buildings/shed.ts';
+import { placeShed, shedSiding } from './buildings/shed.ts';
 import { type Building, linkedSquares, tracksOf, yardLanes, yardSquares } from './buildings/industries.ts';
 import { blockedPieces } from './track/breaks.ts';
 import { networkKey, relocate, snapshot } from './trains/relocate.ts';
@@ -30,8 +30,11 @@ export function buildWorld(s: GameState) {
   return world;
 }
 
-function makeNetwork(track: TrackMap, n: number, sites: Site[], buildings: Building[], terr: Uint8Array): Network {
+function makeNetwork(track: TrackMap, n: number, sites: Site[], buildings: Building[], terr: Uint8Array, shed?: { shed: number; mid: number } | null): Network {
   const halls = hallsOf(track, n, sites, terr), dbl = doubleSquares(track, halls), still = new Set<number>(), lanes = new Map<number, number[]>();
+  // the engine shed's siding keeps its own straight square: a gentle turnout curving through it both ways would leave
+  // no room for a new train to stand clear of the line (buying a train then always said the siding was busy)
+  if (shed) { still.add(shed.shed); still.add(shed.mid); }
   const stn = new Set<number>(), ends = new Set<number>(), yard = new Set<number>();
   for (const h of halls) for (const i of [...h.squares, ...h.approaches]) { still.add(i); stn.add(i); }
   for (const h of halls) for (const i of h.approaches) ends.add(i);
@@ -49,7 +52,7 @@ function assemble(s: GameState): Game {
   s.trains ??= []; s.nextId ??= 1;
   const g = { s, world, track } as Game;
   g.linked = linkedSquares(g); placeShed(g); g.linked = linkedSquares(g); // the shed lays its siding first
-  const net = makeNetwork(track, world.n, s.sites, s.buildings ?? [], world.terr);
+  const net = makeNetwork(track, world.n, s.sites, s.buildings ?? [], world.terr, shedSiding(g));
   g.net = net; g.sys = new TrainSystem(net, s.trains); g.sys.speedOf = t => trainSpeedMul(g, t);
   g.sys.onMidReverse = (_t, sq) => { const r = (g.revs ??= new Map()).get(sq); g.revs.set(sq, { n: (r?.n ?? 0) + 1, at: g.s.t }); };
   if (s.netKey !== networkKey(net)) {
@@ -109,7 +112,7 @@ export function trackChanged(g: Game) {
   g.linked = linkedSquares(g);
   const moved = placeShed(g); // may move the shed and its siding: before the rails are rebuilt
   if (moved.length) { g.linked = linkedSquares(g); g.terrainDirty?.(moved); }
-  g.net = makeNetwork(g.track, g.world.n, g.s.sites, g.s.buildings ?? [], g.world.terr);
+  g.net = makeNetwork(g.track, g.world.n, g.s.sites, g.s.buildings ?? [], g.world.terr, shedSiding(g));
   g.dist = new Map();
   g.sys.setNetwork(g.net);
   for (const b of linkedDocks(g)) if (chartSea(g, b)) { (g.news ??= []).push(`⚓ The ${isHomeDock(g, b) ? 'dock' : 'landing'} charts the sea around it: new shores are out of the fog`); }
