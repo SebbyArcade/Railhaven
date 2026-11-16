@@ -300,7 +300,8 @@ export class TrainSystem {
     // where the line beyond turns a corner, the switch (the lanes' fan) sits on the area's own end square: stop short
     // of it, on the plain loading or platform track, so the switch stays clear (when the train fits there)
     const fan = (s: Step) => this.net.pieces[s.piece]!.kind === 'fan';
-    const plain = area.filter(q => (this.net.bySquare.get(q) ?? []).every(id => this.net.pieces[id]!.kind !== 'fan')).length * 32;
+    // plain track length along the area, as built (a dead end's buffer stub may be shorter than a square)
+    const plain = area.reduce((a, q) => { const ps = (this.net.bySquare.get(q) ?? []).map(id => this.net.pieces[id]!); return ps.every(p => p.kind !== 'fan') ? a + Math.max(0, ...ps.filter(p => p.squares.length === 1).map(p => p.len)) : a; }, 0);
     const ok = plain >= len && area.some(q => (this.net.bySquare.get(q) ?? []).some(id => this.net.pieces[id]!.kind === 'fan'))
       ? (s: Step) => inside(s) && !fan(s) : inside;
     // inside the area, at its far end: going on would leave it
