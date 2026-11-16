@@ -1,22 +1,111 @@
 import type { Game } from '../state.ts';
 import { type Building, buildingSquares, GOODS, type Good } from '../buildings/industries.ts';
 import { TILE } from '../world/terrain.ts';
-import { type CargoShip, seaLanes, seaPath, shipPlace } from '../ships/ships.ts';
+import { type CargoShip, seaLanes, seaPath, shipCap, shipPlace } from '../ships/ships.ts';
 import { puff } from './art.ts';
 
-/** crate colours by good */
-const CRATE: Partial<Record<Good, string>> = { wood: '#8a5a2e', farm: '#d8b04a', shellfish: '#d0603a', cans: '#c0c6cc', stone: '#9a9a92', coal: '#2e2a28', iron: '#8a4a3a', wool: '#ece6da', fish: '#5a8aa8', planks: '#c09060', bricks: '#b05a40', flour: '#f0e8d8', steel: '#7a8a9a', oil: '#3a3a40', fuel: '#a8402e', cloth: '#8a6aa8' };
+/** cargo colours by good (the same family as the train wagons' loads) */
+const CRATE: Partial<Record<Good, string>> = { wood: '#8a5a2e', farm: '#d8b04a', shellfish: '#d0603a', cans: '#c0c6cc', stone: '#9a9a92', coal: '#2e2a28', iron: '#8a4a3a', wool: '#ece6da', fish: '#5a8aa8', planks: '#d6ab72', bricks: '#b05a40', flour: '#f0e8d8', steel: '#8a96a4', oil: '#2a2a32', fuel: '#a8402e', cloth: '#8a6aa8', glass: '#bfe0ee', tools: '#7a7e86', furniture: '#a87444', gold: '#e0b84a', gems: '#9ae0ff', jewellery: '#7a1e3a', cocoa: '#8a5a3a', chocolate: '#5a321e', rubber: '#e8e4d8', tyres: '#1e1e20' };
+/** how each good rides on deck: heaped loose, logs, barrels and drums, bales, long bars, stacked boards, or crates */
+type Stow = 'heap' | 'logs' | 'drum' | 'bale' | 'bars' | 'boards' | 'crate';
+const STOW: Partial<Record<Good, Stow>> = { coal: 'heap', stone: 'heap', iron: 'heap', farm: 'heap', cocoa: 'heap', gold: 'heap', wood: 'logs', oil: 'drum', fuel: 'drum', rubber: 'drum', wool: 'bale', cloth: 'bale', steel: 'bars', planks: 'boards' };
+/** zoomed in at least this far, a tag over each ship names what it carries; further out only the deck load shows */
+export const SHIP_TAG_ZOOM = 0.9;
 
-/** A cargo ship: dark hull, cream deck with a wheelhouse and a red-banded funnel, crates coloured by what it carries. */
-export function drawShips(ctx: CanvasRenderingContext2D, g: Game, tm: number, vis: (x: number, y: number) => boolean) {
+/** A cargo ship: dark hull, cream deck with a wheelhouse and a red-banded funnel, its load on deck as it really rides
+ *  (coal heaped, logs, oil drums, crates…), and zoomed in a tag naming what it carries and how much. */
+export function drawShips(ctx: CanvasRenderingContext2D, g: Game, tm: number, vis: (x: number, y: number) => boolean, zoom = 1) {
   for (const b of g.s.buildings ?? []) if (b.kind === 'dock' && b.fish && vis(b.x, b.y)) drawFishingBoats(ctx, g, b, tm);
+  const tags: Tag[] = [];
   for (const s of g.s.ships ?? []) {
     const p = shipPlace(g, s); if (!vis(p.x, p.y)) continue;
-    drawShip(ctx, (p.x + 0.5) * TILE, (p.y + 0.5) * TILE, p.a, s, tm);
+    const X = (p.x + 0.5) * TILE, Y = (p.y + 0.5) * TILE;
+    drawShip(ctx, X, Y, p.a, s, tm, false, shipCap(g));
+    const text = cargoText(s.hold); if (text) tags.push({ X, Y, a: p.a, text, edge: '#6bb8e8' });
   }
   for (const f of g.s.ferries ?? []) { // ⛴ a boat taking a new train over: the train stands on deck
     const p = shipPlace(g, f); if (!vis(p.x, p.y)) continue;
-    drawShip(ctx, (p.x + 0.5) * TILE, (p.y + 0.5) * TILE, p.a, f, tm, true);
+    const X = (p.x + 0.5) * TILE, Y = (p.y + 0.5) * TILE;
+    drawShip(ctx, X, Y, p.a, f, tm, true, shipCap(g));
+    const goods = cargoText(f.hold); tags.push({ X, Y, a: p.a, text: `🚂 Train ${f.train}${goods ? ` · ${goods}` : ''}`, edge: '#7fd36b' });
+  }
+  if (zoom >= SHIP_TAG_ZOOM) drawCargoTags(ctx, tags, zoom);
+}
+
+/** What a hold carries, biggest load first: "🪵 40 · 🧱 20" (three goods at most, then "+2"). Empty: "". */
+export function cargoText(hold: { good: Good; n: number }[]): string {
+  const m = new Map<Good, number>(); for (const q of hold) m.set(q.good, (m.get(q.good) ?? 0) + q.n);
+  const all = [...m].filter(([, v]) => v >= 1).sort((a, b) => b[1] - a[1]); if (!all.length) return '';
+  const top = all.slice(0, 3);
+  return top.map(([k, v]) => `${GOODS[k].icon} ${Math.floor(v)}`).join(' · ') + (all.length > top.length ? ` +${all.length - top.length}` : '');
+}
+
+type Tag = { X: number; Y: number; a: number; text: string; edge: string };
+/** Tags over the ships, upright whatever way the ship is heading, the same size on screen at any zoom, pointing at
+ *  their ship from just above it (or just below, when another ship's tag is in the way). A tag with no room left (it
+ *  would cover another ship or its tag) is skipped rather than drift onto another ship: the deck still shows the load, and the ship's card names it. */
+function drawCargoTags(ctx: CanvasRenderingContext2D, tags: Tag[], zoom: number) {
+  const h = 20 / zoom, put: [number, number, number, number][] = tags.map(t => { // the hulls first: a tag never covers a ship
+    const ew = Math.abs(Math.cos(t.a)) * 21 + Math.abs(Math.sin(t.a)) * 7, eh = Math.abs(Math.sin(t.a)) * 21 + Math.abs(Math.cos(t.a)) * 7;
+    return [t.X - ew, t.Y - eh, t.X + ew, t.Y + eh];
+  });
+  ctx.save(); ctx.font = '700 11px system-ui';
+  for (const t of tags) {
+    const w = (ctx.measureText(t.text).width + 12) / zoom;
+    const ext = Math.abs(Math.sin(t.a)) * 21 + Math.abs(Math.cos(t.a)) * 7; // how far the hull reaches up or down
+    const free = (Y: number) => !put.some(o => t.X - w / 2 < o[2] && t.X + w / 2 > o[0] && Y - h / 2 < o[3] && Y + h / 2 > o[1]);
+    const up = t.Y - ext - 12 / zoom, down = t.Y + ext + 12 / zoom, Y = free(up) ? up : free(down) ? down : NaN;
+    if (Number.isNaN(Y)) continue;
+    put.push([t.X - w / 2, Y - h / 2, t.X + w / 2, Y + h / 2]);
+    ctx.save(); ctx.translate(t.X, Y); ctx.scale(1 / zoom, 1 / zoom);
+    const W = w * zoom, f = Y < t.Y ? 1 : -1; // the pointer goes toward the ship
+    ctx.fillStyle = 'rgba(20,30,42,.9)'; ctx.beginPath(); ctx.roundRect(-W / 2, -9, W, 18, 9); ctx.fill();
+    ctx.strokeStyle = t.edge; ctx.lineWidth = 1.5; ctx.stroke();
+    ctx.fillStyle = 'rgba(20,30,42,.9)'; ctx.beginPath(); ctx.moveTo(-4, f * 8.5); ctx.lineTo(4, f * 8.5); ctx.lineTo(0, f * 13); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#eef4f8'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(t.text, 0, 0.5);
+    ctx.restore();
+  }
+  ctx.restore();
+}
+
+/** One deck slot of cargo (about 4 x 3.2), centred at (u, v) in the ship's frame. */
+function stow(ctx: CanvasRenderingContext2D, good: Good, u: number, v: number) {
+  const col = CRATE[good] ?? '#8a6a40', how = STOW[good] ?? 'crate';
+  ctx.lineWidth = 0.3; ctx.strokeStyle = 'rgba(0,0,0,.4)';
+  switch (how) {
+    case 'heap': { // loose, heaped in an open hold
+      ctx.fillStyle = '#3a3026'; ctx.fillRect(u - 2, v - 1.6, 4, 3.2);
+      ctx.fillStyle = col; ctx.beginPath(); ctx.ellipse(u, v, 1.8, 1.4, 0, 0, 7); ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,.25)'; ctx.beginPath(); ctx.ellipse(u - 0.5, v - 0.4, 0.8, 0.5, 0, 0, 7); ctx.fill();
+      break;
+    }
+    case 'logs': // three logs lying fore and aft, cut ends showing
+      for (const dv of [-1, 0, 1]) {
+        ctx.fillStyle = col; ctx.fillRect(u - 2, v + dv - 0.5, 4, 1); ctx.strokeRect(u - 2, v + dv - 0.5, 4, 1);
+        ctx.fillStyle = '#d8b07a'; ctx.beginPath(); ctx.arc(u + 2, v + dv, 0.48, 0, 7); ctx.fill();
+      }
+      break;
+    case 'drum': // two barrels seen from above
+      for (const du of [-0.95, 0.95]) {
+        ctx.fillStyle = col; ctx.beginPath(); ctx.arc(u + du, v, 0.95, 0, 7); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = 'rgba(255,255,255,.3)'; ctx.beginPath(); ctx.arc(u + du - 0.3, v - 0.3, 0.3, 0, 7); ctx.fill();
+      }
+      break;
+    case 'bale': // a soft bale tied with cord
+      ctx.fillStyle = col; ctx.beginPath(); ctx.roundRect(u - 1.8, v - 1.4, 3.6, 2.8, 1); ctx.fill(); ctx.stroke();
+      ctx.strokeStyle = 'rgba(90,60,30,.6)'; ctx.beginPath(); ctx.moveTo(u - 0.6, v - 1.4); ctx.lineTo(u - 0.6, v + 1.4); ctx.moveTo(u + 0.6, v - 1.4); ctx.lineTo(u + 0.6, v + 1.4); ctx.stroke();
+      break;
+    case 'bars': // long bars, stacked
+      for (const dv of [-0.9, 0, 0.9]) { ctx.fillStyle = col; ctx.fillRect(u - 2, v + dv - 0.35, 4, 0.7); ctx.strokeRect(u - 2, v + dv - 0.35, 4, 0.7); }
+      break;
+    case 'boards': // a strapped stack of boards
+      ctx.fillStyle = col; ctx.fillRect(u - 2, v - 1.4, 4, 2.8); ctx.strokeRect(u - 2, v - 1.4, 4, 2.8);
+      ctx.strokeStyle = 'rgba(90,60,30,.5)'; for (const dv of [-0.47, 0.47]) { ctx.beginPath(); ctx.moveTo(u - 2, v + dv); ctx.lineTo(u + 2, v + dv); ctx.stroke(); }
+      ctx.strokeStyle = '#3a3026'; ctx.beginPath(); ctx.moveTo(u, v - 1.4); ctx.lineTo(u, v + 1.4); ctx.stroke();
+      break;
+    default: // a crate with its lid boards
+      ctx.fillStyle = col; ctx.fillRect(u - 1.8, v - 1.5, 3.6, 3); ctx.strokeRect(u - 1.8, v - 1.5, 3.6, 3);
+      ctx.strokeStyle = 'rgba(0,0,0,.25)'; ctx.beginPath(); ctx.moveTo(u - 1.8, v - 1.5); ctx.lineTo(u + 1.8, v + 1.5); ctx.moveTo(u + 1.8, v - 1.5); ctx.lineTo(u - 1.8, v + 1.5); ctx.stroke();
   }
 }
 
@@ -63,7 +152,7 @@ function drawFishingBoats(ctx: CanvasRenderingContext2D, g: Game, b: Building, t
   }
 }
 
-function drawShip(ctx: CanvasRenderingContext2D, X: number, Y: number, a: number, s: CargoShip, tm: number, train = false) {
+function drawShip(ctx: CanvasRenderingContext2D, X: number, Y: number, a: number, s: CargoShip, tm: number, train = false, hold = 80) {
   const bob = Math.sin(tm * 1.4 + s.id) * 0.5, moving = s.to !== undefined && (s.path?.length ?? 0) - 1 > s.pos;
   ctx.save(); ctx.translate(X, Y + bob); ctx.rotate(a);
   if (moving) { // wake
@@ -75,8 +164,11 @@ function drawShip(ctx: CanvasRenderingContext2D, X: number, Y: number, a: number
   ctx.fillStyle = '#2e3a4a'; ctx.beginPath(); ctx.moveTo(-20, -6); ctx.lineTo(12, -6); ctx.quadraticCurveTo(22, 0, 12, 6); ctx.lineTo(-20, 6); ctx.quadraticCurveTo(-22, 0, -20, -6); ctx.fill();
   ctx.fillStyle = '#a8402e'; ctx.fillRect(-20, 4.6, 32, 1.4); ctx.fillRect(-20, -6, 32, 1.4);
   ctx.fillStyle = '#d8cdb4'; ctx.beginPath(); ctx.moveTo(-18, -4.4); ctx.lineTo(11, -4.4); ctx.quadraticCurveTo(18, 0, 11, 4.4); ctx.lineTo(-18, 4.4); ctx.closePath(); ctx.fill();
-  // cargo: crates in two rows, coloured by good, as many as the hold is full
-  const goods: Good[] = []; for (const q of s.hold) for (let k = 0; k < Math.ceil(q.n / 10); k++) goods.push(q.good);
+  // cargo on deck: up to 8 slots in two rows, filled as the hold fills, each good stowed its own way, biggest load first
+  const load = s.hold.reduce((a, q) => a + q.n, 0), cap = Math.max(load, hold, 1);
+  const slots = load > 0 ? Math.max(1, Math.min(8, Math.round(load / cap * 8))) : 0, goods: Good[] = [];
+  const by = [...s.hold].sort((p, q) => q.n - p.n);
+  for (const q of by) for (let k = 0; k < Math.max(1, Math.round(q.n / Math.max(1, load) * slots)) && goods.length < slots; k++) goods.push(q.good);
   if (train) { // two rails on deck, a little steam engine and its tender
     ctx.strokeStyle = '#6a6058'; ctx.lineWidth = 0.5; for (const v of [-1.6, 1.6]) { ctx.beginPath(); ctx.moveTo(-6, v); ctx.lineTo(13, v); ctx.stroke(); }
     ctx.fillStyle = '#3a2a20'; ctx.fillRect(-5.5, -2.4, 5, 4.8); // tender
@@ -86,11 +178,7 @@ function drawShip(ctx: CanvasRenderingContext2D, X: number, Y: number, a: number
     ctx.fillStyle = '#1e1a18'; ctx.beginPath(); ctx.arc(10.4, 0, 1, 0, 7); ctx.fill(); // chimney
     ctx.fillStyle = '#c8a040'; ctx.fillRect(4.5, -2, 0.6, 4); // brass band
   }
-  for (let k = 0; k < Math.min(8, goods.length); k++) {
-    const u = -4 + (k >> 1) * 4, v = (k & 1) ? 0.4 : -3.4;
-    ctx.fillStyle = CRATE[goods[k]!] ?? '#8a6a40'; ctx.fillRect(u, v, 3.4, 3);
-    ctx.strokeStyle = 'rgba(0,0,0,.35)'; ctx.lineWidth = 0.3; ctx.strokeRect(u, v, 3.4, 3);
-  }
+  if (!train) for (let k = 0; k < goods.length; k++) stow(ctx, goods[k]!, -3.6 + (k >> 1) * 4.2, (k & 1) ? 2 : -2);
   // wheelhouse and funnel at the stern
   ctx.fillStyle = '#efe6d2'; ctx.fillRect(-16, -3.4, 8, 6.8);
   ctx.fillStyle = '#6f93a8'; for (let w = 0; w < 3; w++) ctx.fillRect(-9.4, -2.6 + w * 2, 1, 1.2);
@@ -99,5 +187,4 @@ function drawShip(ctx: CanvasRenderingContext2D, X: number, Y: number, a: number
   ctx.fillStyle = '#1e1a18'; ctx.beginPath(); ctx.arc(-12, 0, 0.9, 0, 7); ctx.fill();
   ctx.restore();
   puff(ctx, X - Math.cos(a) * 12, Y - Math.sin(a) * 12 - 2, tm + s.id, true, 1);
-  void GOODS;
 }
