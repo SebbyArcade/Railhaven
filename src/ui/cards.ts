@@ -239,12 +239,12 @@ function dockCard(g: Game, b: Building, page?: string): string {
   const name = (id: number) => { const o = g.s.buildings!.find(x => x.id === id)!; const k = islandOfB(g, o); return k === g.world.home ? 'Ashford Isle dock' : `${islandName(g, k)} landing`; };
   // islands this dock reaches, nearest first
   const near = () => {
-    const d = seaDist(g, b), n = g.world.n, m = new Map<number, number>();
+    const d = seaDist(g, b), n = g.world.n, m = new Map<number, number>(), at = new Map<number, number>();
     for (let i = 0; i < n * n; i++) {
       const v = d[i]!; if (v < 0 || v > dockRange(b)) continue;
-      for (const j of [i + 1, i - 1, i + n, i - n]) { const k = g.world.islandOf[j]; if (k === undefined || k < 0 || !g.world.islands[k]!.name || k === islandOfB(g, b)) continue; if (!m.has(k) || m.get(k)! > v) m.set(k, v); }
+      for (const j of [i + 1, i - 1, i + n, i - n]) { const k = g.world.islandOf[j]; if (k === undefined || k < 0 || !g.world.islands[k]!.name || k === islandOfB(g, b)) continue; if (!m.has(k) || m.get(k)! > v) { m.set(k, v); at.set(k, j); } }
     }
-    return [...m].sort((p, q) => p[1] - q[1]).slice(0, 5);
+    return [...m].sort((p, q) => p[1] - q[1]).slice(0, 5).map(([k, v]) => [k, v, at.get(k)!] as const);
   };
   const back = `<button class="act back" data-act="page" data-page="">‹ Back</button>`;
   if (page === 'sea') {
@@ -269,9 +269,9 @@ function dockCard(g: Game, b: Building, page?: string): string {
   if (page === 'isl') {
     const list = near();
     h += `<h3>🏝 Islands in reach</h3>`;
-    for (const [k, v] of list) {
-      const has = (g.s.buildings ?? []).some(o => o.kind === 'dock' && islandOfB(g, o) === k);
-      h += `<div class="row"><b class="ico">🏝</b><div class="grow"><div class="line"><span>${esc(g.world.islands[k]!.name!)}</span><span>${v} squares</span></div><small>${has ? '⚓ You have a landing there' : '🏗 Build → Dock on its shore to land there'}</small></div></div>`;
+    for (const [k, v, at] of list) {
+      const has = (g.s.buildings ?? []).some(o => o.kind === 'dock' && islandOfB(g, o) === k), n = g.world.n;
+      h += `<div class="row"><b class="ico">🏝</b><div class="grow"><div class="line"><span>${esc(g.world.islands[k]!.name!)}</span><span>${v} squares</span></div><small>${has ? '⚓ You have a landing there' : '🏗 Its shore glows where a landing fits'}</small></div>${has ? '' : `<button class="mini" data-act="landat" data-x="${at % n}" data-y="${(at / n) | 0}">⚓ Land ›</button>`}</div>`;
     }
     if (!list.length) h += `<div class="note">🌊 No other island within reach yet: a bigger dock sails farther</div>`;
     if (b.lvl < MAX_LVL) { const p = levelPrice(b); h += `<button class="act" data-act="lvl" data-id="${b.id}" ${g.s.money >= p ? '' : 'disabled'}>⬆ Level ${b.lvl + 1}: ${levelGain(b)} · ${fmtMoney(p)}</button>`; }
@@ -318,7 +318,7 @@ function dockCard(g: Game, b: Building, page?: string): string {
   // front: one status line, then the tiles
   if (!linked) h += home ? `<div class="warn">🔌 Not on the railway yet: join one end of its yard to your track (🛤 Rails: draw from either side)</div>` : `<div class="warn">🌊 No dock of yours reaches this landing</div>`;
   else if (waiting && !ships) h += `<div class="warn">🚢 ${waiting} goods wait for a ship: buy one under Sea routes</div>`;
-  else h += `<div class="gift">🌊 Charts the sea ${dockRange(b)} squares out: shores in reach come out of the fog</div>`;
+  else h += `<div class="gift">🌊 Charts all the sea it reaches, ${dockRange(b)} squares out: every shore it can land on is out of the fog</div>`;
   const sp = islandSpec(g, islandOfB(g, b)); if (sp) h += `<div class="note">★ ${SPEC_TEXT[sp]}: ${sp === 'fish' ? 'fishing boats here catch' : `${INDUSTRIES[sp].name}s here make`} 50% more</div>`;
   const tile = (pg: string, icon: string, title: string, sub: string, alert = false) => `<button class="tile${alert ? ' alert' : ''}" data-act="page" data-page="${pg}"><b>${icon} ${title}</b><small>${sub}</small></button>`;
   const nIsl = near().length, nTr = g.s.trains.filter(t => islandOfTrain(g, t) === rIsl).length;

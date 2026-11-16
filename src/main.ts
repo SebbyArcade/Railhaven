@@ -313,6 +313,7 @@ cardEl.onclick = e => {
     closeCard(); lookAt(+b.dataset.x!, +b.dataset.y!); tools.setMode('rail'); toast('🛤 Drag track from your line to one end of its yard'); return;
   }
   if (b.dataset.act === 'builddock') { closeCard(); startBuild('dock'); return; }
+  if (b.dataset.act === 'landat') { closeCard(); lookAt(+b.dataset.x!, +b.dataset.y!); startBuild('dock'); return; } // ⚓ Land › on a dock's Islands in reach
   if (b.dataset.act === 'shipup') { const k = b.dataset.k as ShipUpKey, why = buyShipUp(game, k); toast(why || `${SHIP_UP[k].icon} ${SHIP_UP[k].name}: ${SHIP_UP[k].text(shipUpLvl(game, k))}`); renderCard(); return; }
   if (b.dataset.act === 'fleet') { const k = b.dataset.k as FleetKey, isl = b.dataset.isl !== undefined ? +b.dataset.isl : game.world.home, why = buyFleet(game, k, isl); toast(why || `${FLEET[k].icon} ${FLEET[k].name}: ${FLEET[k].text(fleetLvl(game, k, isl))}`); renderCard(); return; }
   if (b.dataset.act === 'found') {

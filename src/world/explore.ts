@@ -221,8 +221,13 @@ export function lightMul(g: Game, x: number, y: number): number {
 // ---- scouts
 
 export const SCOUT_CAP = { land: 36, sea: 50 }, SCOUT_SPEED = 2, SCOUT_R = 3, MAX_SCOUTS = 2;
+/** Boats see farther over open water: they uncover this many squares either side (scouts on foot SCOUT_R). */
+export const SCOUT_R_SEA = 4;
+/** A boat costs the same for every square sailed (Sébastien found boat scouting got expensive fast, 2026-11-16). */
+export const BOAT_SQ = 60;
 export interface Scout {
   id: number; path: number[]; pos: number; boat: boolean; paid: number;
+  /** boats: how many times it has sailed round land it found in the fog */ rounds?: number;
   /** where it set out from, for its report */ from?: string;
   /** what it uncovered on the way: sites (towns, settlement sites, deposits), landmarks, islands sighted */
   saw?: { sites: number[]; pois: number[]; isl: number[] };
@@ -240,8 +245,9 @@ export interface ScoutReport {
   link?: Record<number, { sq: number; cost: number } | null>;
 }
 export const REPORTS_KEPT = 12;
-/** A route of n squares: 20 per square plus a little more for each square farther out (twice the old game, Sébastien found scouting too cheap); boats cost half again. */
-export const scoutCost = (n: number, boat: boolean) => Math.round(2 * (10 * n + n * (n + 1)) * (boat ? 1.5 : 1)); // twice the old game's price (Sébastien found scouting too cheap)
+/** A route of n squares. On foot: 20 per square plus a little more for each square farther out (twice the old game,
+ *  Sébastien found scouting too cheap). By boat: a flat BOAT_SQ a square, so far shores stay worth a look. */
+export const scoutCost = (n: number, boat: boolean) => boat ? BOAT_SQ * n : Math.round(2 * (10 * n + n * (n + 1)));
 
 /** Where scouts can set out from: towns on the railway (on foot) and docks on the railway (by boat). */
 export function scoutStarts(g: Game): { sq: number; boat: boolean; name: string }[] {
@@ -267,6 +273,60 @@ export function scoutStepError(g: Game, path: number[], i: number, boat: boolean
   return '';
 }
 
+/**
+ * ⛵ The way a boat sails from square `from` to square `to`: the fewest squares over water, or through the fog (it may
+ * hide land: the boat sails round what it finds). Squares in `avoid` are not used again. Among equally short ways it
+ * keeps to the sea it can see. Returns the squares after `from`, at most `max` of them (cut short when the way is
+ * longer), or null when no way is known.
+ */
+export function boatRoute(g: Game, from: number, to: number, max: number, avoid: ReadonlySet<number> = new Set()): number[] | null {
+  const n = g.world.n, t = g.world.terr;
+  const open = (i: number) => (!t[i] || !isRevealed(g, i)) && !avoid.has(i);
+  if (from === to || !open(to)) return null;
+  // distances back from the goal, then walk forward downhill from the start
+  const d = new Int32Array(n * n).fill(-1), q = [to]; d[to] = 0;
+  for (let h = 0; h < q.length && d[from]! < 0; h++) {
+    const i = q[h]!, x = i % n, y = (i / n) | 0;
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+      const X = x + dx, Y = y + dy; if (X < 0 || Y < 0 || X >= n || Y >= n) continue;
+      const j = Y * n + X; if (d[j]! >= 0 || (j !== from && !open(j))) continue;
+      d[j] = d[i]! + 1; q.push(j);
+    }
+  }
+  if (d[from]! < 0) return null;
+  const out: number[] = []; let cur = from;
+  while (cur !== to && out.length < max) {
+    const x = cur % n, y = (cur / n) | 0; let best = -1;
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+      const X = x + dx, Y = y + dy; if (X < 0 || Y < 0 || X >= n || Y >= n) continue;
+      const j = Y * n + X; if (d[j] !== d[cur]! - 1) continue;
+      if (best < 0 || (isRevealed(g, j) && !isRevealed(g, best))) best = j;
+    }
+    out.push(best); cur = best;
+  }
+  return out;
+}
+
+/** Squares a boat may add to sail round land it finds in the fog (paid for as it goes, when the money is there). */
+export const ROUND_SPARE = 10;
+
+/**
+ * A boat met land hidden in the fog at path[k]: sail round it to the same end. The way round may be up to ROUND_SPARE
+ * squares longer than what is left of the route (the extra squares are paid at BOAT_SQ, only if the money is there);
+ * a shorter way gives the squares not sailed back.
+ */
+function sailRound(g: Game, s: Scout, k: number): boolean {
+  const from = s.path[k - 1]!, to = s.path.at(-1)!, left = s.path.length - 1 - (k - 1);
+  const spare = Math.max(0, Math.min(ROUND_SPARE, Math.floor(g.s.money / BOAT_SQ), SCOUT_CAP.sea + ROUND_SPARE - (s.path.length - 1)));
+  const way = boatRoute(g, from, to, left + spare, new Set(s.path.slice(0, k - 1)));
+  if (!way || way.at(-1) !== to) return false;
+  const diff = (way.length - left) * BOAT_SQ; // + more squares to pay, - squares not sailed come back
+  g.s.money -= diff; s.paid += diff;
+  s.path = [...s.path.slice(0, k), ...way];
+  s.pos = Math.min(s.pos, s.path.length - 1);
+  return true;
+}
+
 export function sendScout(g: Game, path: number[], boat: boolean): Scout | string {
   if ((g.s.scouts ?? []).length >= MAX_SCOUTS) return `At most ${MAX_SCOUTS} scouts out at once: wait for one to come back`;
   const steps = path.length - 1; if (steps < 1) return 'Draw a route first';
@@ -280,12 +340,12 @@ export function sendScout(g: Game, path: number[], boat: boolean): Scout | strin
 
 /** Uncover the land round (x, y) for a scout, noting what came out of the fog for its report. */
 function scoutReveal(g: Game, s: Scout, x: number, y: number) {
-  const n = g.world.n, r = SCOUT_R + 1, near = (o: { x: number; y: number }) => Math.abs(o.x - x) <= r && Math.abs(o.y - y) <= r;
+  const R = s.boat ? SCOUT_R_SEA : SCOUT_R, n = g.world.n, r = R + 1, near = (o: { x: number; y: number }) => Math.abs(o.x - x) <= r && Math.abs(o.y - y) <= r;
   const hid = (o: { x: number; y: number }) => !isRevealed(g, o.y * n + o.x);
   const sites = g.s.sites.filter(o => near(o) && hid(o)), pois = poisOf(g).filter(p => near(p) && hid(p));
   const isl = new Set<number>();
   for (let j = y - r; j <= y + r; j++) for (let i = x - r; i <= x + r; i++) if (i >= 0 && j >= 0 && i < n && j < n && g.world.terr[j * n + i] && !isRevealed(g, j * n + i)) isl.add(g.world.islandOf[j * n + i]!);
-  reveal(g, x, y, SCOUT_R);
+  reveal(g, x, y, R);
   const saw = (s.saw ??= { sites: [], pois: [], isl: [] });
   for (const o of sites) if (!hid(o) && !saw.sites.includes(o.id)) saw.sites.push(o.id);
   for (const p of pois) if (!hid(p) && !saw.pois.includes(p.id)) saw.pois.push(p.id);
@@ -351,6 +411,10 @@ export function tickScouts(g: Game, dt: number) {
     s.pos = Math.min(s.path.length - 1, s.pos + SCOUT_SPEED * dt);
     for (let k = before + 1; k <= Math.floor(s.pos); k++) {
       const i = s.path[k]!, water = !g.world.terr[i];
+      if (water !== s.boat && s.boat && (s.rounds ?? 0) < 20 && sailRound(g, s, k)) { // land under the fog: the boat sails round it
+        if (!s.rounds) news(g, '⛵ The boat found land in the fog and sails round it');
+        s.rounds = (s.rounds ?? 0) + 1; k--; continue;
+      }
       if (water !== s.boat) { // wrong ground under the fog: the trip ends one square back
         s.pos = k - 1; const done = k - 1, left = s.path.length - 1 - done;
         const back = Math.round((s.paid - scoutCost(done, s.boat)) * 0.9);

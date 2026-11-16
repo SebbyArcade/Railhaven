@@ -26,7 +26,8 @@ import { reachedIslands } from '../src/progress/missions.ts';
 import { monitor, report } from './playtest-watch.ts';
 
 const [seed = 4242, minutes = 20] = process.argv.slice(2).map(Number);
-let g = newGame(seed), n = g.world.n, ash = g.s.sites[0]!;
+// BOTLOAD=save.json: carry on from a saved game instead of a new map
+let g = process.env.BOTLOAD ? await (async () => { const { loadFrom } = await import('../src/save/save.ts'); const txt = (await import('node:fs')).readFileSync(process.env.BOTLOAD!, 'utf8'); return loadFrom({ getItem: () => txt, setItem: () => {} } as unknown as Storage)!; })() : newGame(seed), n = g.world.n, ash = g.s.sites[0]!;
 const log: string[] = [];
 let rescues = 0;
 

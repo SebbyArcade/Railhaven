@@ -92,6 +92,7 @@ export function newGame(seed = Math.floor(Math.random() * 1e6), mapV = MAP_VERSI
 export function loadGame(s: GameState): Game {
   const g = assemble(s);
   for (const b of g.s.buildings ?? []) revealAround(g, b); // older saves: buildings placed before they uncovered land
+  for (const b of linkedDocks(g)) chartSea(g, b); // older saves: docks that charted only part of their reach chart the rest
   return g;
 }
 
