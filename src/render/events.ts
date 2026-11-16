@@ -1,4 +1,5 @@
 import type { Game } from '../state.ts';
+import { FIREFIGHTER, FITTER, GANG, worker } from './art.ts';
 import { buildingSquares } from '../buildings/industries.ts';
 import { bodyPoint } from '../trains/train.ts';
 import { TILE } from '../world/terrain.ts';
@@ -20,15 +21,13 @@ export function drawCrewCar(ctx: CanvasRenderingContext2D, kind: CrewRun['kind']
     ctx.beginPath(); ctx.moveTo(-5.5, -1.2); ctx.lineTo(2.2, -1.2); ctx.moveTo(-5.5, 1.2); ctx.lineTo(2.2, 1.2);
     for (let x = -5; x <= 2; x += 1.6) { ctx.moveTo(x, -1.2); ctx.lineTo(x, 1.2); } ctx.stroke();
     ctx.fillStyle = Math.floor(tm * 4) % 2 ? '#5aa8ff' : '#1e4a9a'; ctx.beginPath(); ctx.arc(4.8, 0, 1.1, 0, 7); ctx.fill(); // blue lamp
-    if (riding) for (const [x, y] of [[-3.8, -4.4], [-0.8, 4.4]] as const) { // firefighters on the running boards
-      ctx.fillStyle = '#2b3d6b'; ctx.beginPath(); ctx.arc(x, y, 1.7, 0, 7); ctx.fill(); ctx.fillStyle = '#f0c030'; ctx.beginPath(); ctx.arc(x, y, 1.1, 0, 7); ctx.fill();
-    }
+    if (riding) for (const [x, y, f] of [[-3.8, -3.6, -1], [-0.8, 3.6, 1]] as const) worker(ctx, x, y, { ...FIREFIGHTER, tool: 'none' }, f, 0, 0.75); // firefighters on the running boards
   } else {
     ctx.fillStyle = '#6b4a2e'; ctx.fillRect(-5, -3, 10, 6); ctx.fillStyle = '#3a2a1a'; ctx.fillRect(-0.5, -3, 1, 6); // deck and lever post
     if (riding) {
-      const sw = Math.sin(tm * 8) * 2.2; // the see-saw pump lever going up and down
-      ctx.strokeStyle = '#2a211c'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(-sw - 3, 0); ctx.lineTo(sw + 3, 0); ctx.stroke();
-      for (const x of [-3.2, 3.2]) { ctx.fillStyle = '#f0a020'; ctx.beginPath(); ctx.arc(x, 0, 1.8, 0, 7); ctx.fill(); ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.arc(x, 0, 0.8, 0, 7); ctx.fill(); }
+      const sw = Math.sin(tm * 8); // the see-saw pump lever going up and down, one worker at each end
+      ctx.strokeStyle = '#2a211c'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(-sw * 2.2 - 3, 0); ctx.lineTo(sw * 2.2 + 3, 0); ctx.stroke();
+      worker(ctx, -3.2, 1.5, { ...GANG, tool: 'pump' }, 1, sw, 0.75); worker(ctx, 3.2, 1.5, { ...GANG, hat: '#f2f2ee', tool: 'pump' }, -1, -sw, 0.75);
     }
   }
   ctx.restore();
@@ -68,7 +67,9 @@ export function drawMishaps(ctx: CanvasRenderingContext2D, g: Game, tm: number, 
         ctx.fillStyle = '#222'; ctx.beginPath(); ctx.arc(ex - 4, ey + 9.5, 1.8, 0, 7); ctx.arc(ex + 4, ey + 9.5, 1.8, 0, 7); ctx.fill();
       }
       for (const [dx, ph] of [[-4, 0], [4, 1.3]] as const) {
-        const fx = ex + dx, fy = ey - 3; ctx.fillStyle = '#2b3d6b'; ctx.beginPath(); ctx.arc(fx, fy, 2, 0, 7); ctx.fill(); ctx.fillStyle = '#f0c030'; ctx.beginPath(); ctx.arc(fx, fy - 1, 1.2, 0, 7); ctx.fill();
+        const f = tx >= ex + dx ? 1 : -1, k = 0.9;
+        worker(ctx, ex + dx, ey + 2, FIREFIGHTER, f, 0, k);
+        const fx = ex + dx + f * 3.6 * k, fy = ey + 2 - 5.6 * k; // the nozzle
         ctx.strokeStyle = 'rgba(150,200,255,.75)'; ctx.lineWidth = 1.4; ctx.setLineDash([2, 2]); ctx.lineDashOffset = -tm * 30 - ph * 4;
         ctx.beginPath(); ctx.moveTo(fx, fy); ctx.quadraticCurveTo((fx + tx) / 2, Math.min(fy, ty) - 12, tx + dx, ty - 4); ctx.stroke(); ctx.setLineDash([]);
       }
@@ -92,11 +93,14 @@ export function drawMishaps(ctx: CanvasRenderingContext2D, g: Game, tm: number, 
     const ox = -p.ty * 11, oy = p.tx * 11; // beside the line
     if (t < tr.broke.crewAt) { // a red warning lamp until the crew comes
       ctx.fillStyle = Math.floor(tm * 3) % 2 ? '#ff4a3a' : '#a02018'; ctx.beginPath(); ctx.arc(p.x + ox, p.y + oy, 2.6, 0, 7); ctx.fill();
-    } else { // the crew's handcar and a fitter with a spanner
-      ctx.fillStyle = '#6b4a2e'; ctx.fillRect(p.x + ox * 1.4 - 4, p.y + oy * 1.4 - 2.5, 8, 5);
-      const sw = Math.sin(tm * 7); ctx.fillStyle = '#f0a020'; ctx.beginPath(); ctx.arc(p.x + ox * 0.7, p.y + oy * 0.7, 1.9, 0, 7); ctx.fill();
-      ctx.strokeStyle = '#3a2a1a'; ctx.lineWidth = 0.9; ctx.beginPath(); ctx.moveTo(p.x + ox * 0.7, p.y + oy * 0.7); ctx.lineTo(p.x + ox * 0.35 + sw * 2, p.y + oy * 0.35 - 2); ctx.stroke();
-      if (sw > 0.9) { ctx.fillStyle = '#ffe27a'; ctx.fillRect(p.x + ox * 0.3, p.y + oy * 0.3 - 3, 1, 1); }
+    } else { // the crew's handcar with a tool box; a fitter turning a spanner on the engine, a mate handing tools
+      const hx = p.x + ox * 1.45, hy = p.y + oy * 1.45;
+      ctx.fillStyle = 'rgba(0,0,0,.25)'; ctx.fillRect(hx - 3.4, hy - 1.9, 8, 5);
+      ctx.fillStyle = '#6b4a2e'; ctx.fillRect(hx - 4, hy - 2.5, 8, 5); ctx.fillStyle = '#b8402c'; ctx.fillRect(hx - 3, hy - 2, 3.2, 2);
+      const wx = p.x + ox * 0.75, wy = p.y + oy * 0.75 + 3, f = p.x >= wx ? 1 : -1;
+      worker(ctx, wx, wy, FITTER, f, Math.sin(tm * 7), 1.1);
+      if (Math.sin(tm * 7) > 0.9) { ctx.fillStyle = '#ffe27a'; ctx.fillRect(wx + f * 4, wy - 6, 0.8, 0.8); }
+      worker(ctx, hx + 2, hy + 4, { ...GANG, tool: 'spanner' }, f, Math.sin(tm * 1.5) * 0.5, 1.1);
     }
   }
 }

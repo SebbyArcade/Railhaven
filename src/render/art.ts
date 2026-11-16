@@ -117,6 +117,65 @@ function person0(ctx: Ctx, u: number, v: number, coat: string, hat: string) {
   ctx.fillStyle = hat; ctx.beginPath(); ctx.arc(u, v - 1.55, 0.7, Math.PI, 0); ctx.fill();
 }
 
+export type Tool = 'hammer' | 'spanner' | 'bar' | 'hose' | 'pump' | 'none';
+export interface WorkerLook { coat: string; trim: string; legs: string; hat: string; brim?: string; tool: Tool }
+/** Rail repair gang: orange hi-vis jacket with silver bands, navy work trousers, yellow hard hat. */
+export const GANG: WorkerLook = { coat: '#f08a1c', trim: '#e8eef2', legs: '#2c3550', hat: '#f4c628', tool: 'hammer' };
+/** Fitter in blue overalls with an orange hi-vis vest and a white hard hat. */
+export const FITTER: WorkerLook = { coat: '#2f5c9a', trim: '#f08a1c', legs: '#2f5c9a', hat: '#f2f2ee', tool: 'spanner' };
+/** Firefighter: dark turnout coat with yellow bands, yellow helmet with a long back brim. */
+export const FIREFIGHTER: WorkerLook = { coat: '#2a2f3a', trim: '#e8d040', legs: '#2a2f3a', hat: '#f0c030', brim: '#d8a820', tool: 'hose' };
+
+/**
+ * A worker standing on the ground, seen from the side like the model village's people but a little larger:
+ * boots, work trousers, a jacket with reflective bands, arms, a face and a hard hat, holding a tool.
+ * Feet at (u, v). `f` = facing (1 right, -1 left); `a` = the working arm's swing from -1 (raised) to 1 (struck).
+ */
+export function worker(ctx: Ctx, u: number, v: number, look: WorkerLook, f: 1 | -1, a: number, k = 1) {
+  upright(ctx, u, v, () => { ctx.save(); ctx.scale(f * k, k); worker0(ctx, look, a); ctx.restore(); });
+}
+function worker0(ctx: Ctx, L: WorkerLook, a: number) {
+  ctx.fillStyle = 'rgba(0,0,0,.28)'; ctx.beginPath(); ctx.ellipse(0.6, 0.2, 2.6, 0.9, 0, 0, 7); ctx.fill(); // shadow
+  // legs apart in a working stance, boots
+  ctx.fillStyle = L.legs; ctx.fillRect(-1.25, -3.2, 1.05, 3); ctx.fillRect(0.25, -3.2, 1.05, 3);
+  ctx.fillStyle = '#1e1a16'; ctx.fillRect(-1.45, -0.55, 1.35, 0.7); ctx.fillRect(0.2, -0.55, 1.45, 0.7);
+  // the arm at the back
+  ctx.strokeStyle = L.coat; ctx.lineCap = 'round'; ctx.lineWidth = 0.9;
+  ctx.beginPath(); ctx.moveTo(-0.6, -5.6); ctx.lineTo(-1.5, -3.9); ctx.stroke();
+  // jacket with reflective bands
+  ctx.fillStyle = L.coat; ctx.beginPath(); ctx.roundRect(-1.5, -6.6, 3, 3.6, 0.6); ctx.fill();
+  ctx.fillStyle = L.trim; ctx.fillRect(-1.5, -4.4, 3, 0.45); ctx.fillRect(-1.5, -5.6, 3, 0.35);
+  if (L === FITTER) { ctx.fillStyle = L.trim; ctx.fillRect(-1.5, -6.6, 0.7, 2.2); ctx.fillRect(0.8, -6.6, 0.7, 2.2); } // hi-vis vest over overalls
+  // head
+  ctx.fillStyle = '#e8bf98'; ctx.beginPath(); ctx.arc(0.15, -7.55, 0.95, 0, 7); ctx.fill();
+  ctx.fillStyle = '#2a1e16'; ctx.fillRect(0.75, -7.7, 0.25, 0.25); // eye
+  // hard hat: dome and brim (a firefighter's helmet has a long brim at the back)
+  ctx.fillStyle = L.hat; ctx.beginPath(); ctx.arc(0.1, -8.05, 1.1, Math.PI, 0); ctx.fill();
+  ctx.fillStyle = L.brim ?? L.hat; ctx.fillRect(-1.25, -8.15, 2.75, 0.45);
+  if (L.brim) ctx.fillRect(-1.9, -8.15, 0.8, 0.9);
+  ctx.fillStyle = 'rgba(255,255,255,.45)'; ctx.fillRect(-0.4, -8.95, 0.7, 0.3); // shine
+  // the working arm and its tool
+  const ang = L.tool === 'hammer' || L.tool === 'bar' ? -1.9 + (a + 1) * 1.05 : L.tool === 'spanner' ? 0.2 + a * 0.35 : L.tool === 'pump' ? -0.3 + a * 0.5 : 0.15;
+  const sx = 0.6, sy = -5.9, hx = sx + Math.cos(ang) * 2.2, hy = sy + Math.sin(ang) * 2.2 + 1.2;
+  ctx.strokeStyle = L.coat; ctx.lineWidth = 0.95; ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(hx, hy); ctx.stroke();
+  ctx.fillStyle = L.tool === 'hose' ? '#1a1a1a' : '#e8bf98'; ctx.beginPath(); ctx.arc(hx, hy, 0.45, 0, 7); ctx.fill(); // hand / glove
+  const tx = Math.cos(ang + 0.25), ty = Math.sin(ang + 0.25);
+  if (L.tool === 'hammer') { // sledgehammer: wooden shaft, steel head
+    const ex = hx + tx * 3.6, ey = hy + ty * 3.6;
+    ctx.strokeStyle = '#a07040'; ctx.lineWidth = 0.45; ctx.beginPath(); ctx.moveTo(hx - tx * 0.6, hy - ty * 0.6); ctx.lineTo(ex, ey); ctx.stroke();
+    ctx.save(); ctx.translate(ex, ey); ctx.rotate(ang + 0.25); ctx.fillStyle = '#4a4e54'; ctx.fillRect(-0.55, -0.9, 1.1, 1.8); ctx.restore();
+  } else if (L.tool === 'bar') { // long crowbar
+    ctx.strokeStyle = '#5a5e64'; ctx.lineWidth = 0.4; ctx.beginPath(); ctx.moveTo(hx - tx, hy - ty); ctx.lineTo(hx + tx * 3.8, hy + ty * 3.8); ctx.stroke();
+  } else if (L.tool === 'spanner') { // big spanner held out
+    const ex = hx + tx * 2.2, ey = hy + ty * 2.2;
+    ctx.strokeStyle = '#9aa0a8'; ctx.lineWidth = 0.5; ctx.beginPath(); ctx.moveTo(hx, hy); ctx.lineTo(ex, ey); ctx.stroke();
+    ctx.lineWidth = 0.4; ctx.beginPath(); ctx.arc(ex, ey, 0.55, ang + 0.25 - 1.3, ang + 0.25 + 1.3); ctx.stroke();
+  } else if (L.tool === 'hose') { // nozzle held forward
+    ctx.strokeStyle = '#b8b8b0'; ctx.lineWidth = 0.6; ctx.beginPath(); ctx.moveTo(hx, hy); ctx.lineTo(hx + tx * 1.6, hy + ty * 1.6 - 0.3); ctx.stroke();
+  }
+  ctx.lineCap = 'butt';
+}
+
 /** one log seen end-on: bark, pale wood, growth rings */
 export function logEnd(ctx: Ctx, u: number, v: number, r: number) {
   ctx.fillStyle = '#5b3a1e'; ctx.beginPath(); ctx.arc(u, v, r, 0, 7); ctx.fill();
