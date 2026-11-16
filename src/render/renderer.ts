@@ -9,7 +9,7 @@ import { drawFog } from './fog.ts';
 import { drawSites } from './sites.ts';
 import { drawHall } from './stations.ts';
 import { drawBreak, drawShed } from './shed.ts';
-import { drawBuilding, drawBuildingTags, drawQuay } from './buildings.ts';
+import { drawBuilding, drawBuildingFar, drawBuildingTags, drawQuay } from './buildings.ts';
 import { drawFields } from './fields.ts';
 import { shedSquare } from '../buildings/shed.ts';
 import { hallsOf } from '../buildings/stations.ts';
@@ -72,8 +72,10 @@ export class Renderer {
     this.terrain.setSeason(seasonOf(g.s.t));
     this.terrain.draw(ctx, x0, y0, x1, y1, cam.z);
     if (cam.z >= 0.6) {
+      const waves = new Path2D(); // every swell line in one stroke: one per square was slow on a phone
       for (let y = Math.max(0, y0); y <= Math.min(n - 1, y1); y++) for (let x = Math.max(0, x0); x <= Math.min(n - 1, x1); x++)
-        if (g.world.terr[y * n + x] === 0 && isRevealed(g, y * n + x)) drawWaterLive(ctx, g.world, x, y, tm);
+        if (g.world.terr[y * n + x] === 0 && isRevealed(g, y * n + x)) drawWaterLive(ctx, g.world, x, y, tm, waves);
+      ctx.strokeStyle = 'rgba(255,255,255,.18)'; ctx.lineWidth = 1.5; ctx.stroke(waves);
     }
     const vis = (sq: number) => { const x = sq % n, y = (sq / n) | 0; return x >= x0 - 1 && x <= x1 + 1 && y >= y0 - 1 && y <= y1 + 1; };
     // 🚢 the Ships card shows every sea route; a ship's card shows its way ahead
@@ -91,7 +93,7 @@ export class Renderer {
     drawParks(ctx, g, x0, y0, x1, y1, cam.z, tm);
     drawSites(ctx, g, x0, y0, x1, y1, cam.z, tm, halls);
     for (const b of g.s.buildings ?? []) if (vis(b.y * n + b.x) && isRevealed(g, b.y * n + b.x)) drawFields(ctx, g, b, tm, cam.z);
-    for (const b of g.s.buildings ?? []) if (vis(b.y * n + b.x) && isRevealed(g, b.y * n + b.x)) drawBuilding(ctx, g, b, tm, cam.z);
+    for (const b of g.s.buildings ?? []) if (vis(b.y * n + b.x) && isRevealed(g, b.y * n + b.x)) drawBuildingFar(ctx, g, b, tm, cam.z);
     for (const b of g.s.breaks ?? []) if (vis(b.square)) drawBreak(ctx, g, b, tm);
     drawTrains(ctx, g.net, g.s.trains, tm);
     drawShed(ctx, g, tm); // after trains: a train on the siding runs in under its roof

@@ -1,3 +1,4 @@
+import { FAR_ZOOM } from './buildings.ts';
 import type { Game } from '../state.ts';
 import { TILE } from '../world/terrain.ts';
 import { isRevealed } from '../world/fog.ts';
@@ -88,12 +89,35 @@ function marker(ctx: CanvasRenderingContext2D, X: number, Y: number, icon: strin
   ctx.font = `${Math.round(r * 1.2)}px system-ui`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(icon, X, Y + 0.5);
 }
 
+/**
+ * Far out a landmark is drawn into a small picture refreshed about four times a second, like the buildings (see
+ * drawBuildingFar): its many little shapes made panning a big map slow.
+ */
+const lpics = new Map<Poi, { c: HTMLCanvasElement; s: number; at: number; got: boolean }>();
+let lbudget = { tm: -1, left: 0 };
+const LSCALES = [0.25, 0.375, 0.5, 0.75, 1, 1.5, 2];
+function farLandmark(ctx: CanvasRenderingContext2D, p: Poi, X: number, Y: number, tm: number): boolean {
+  if (typeof document === 'undefined') return false;
+  const m = ctx.getTransform(), px = Math.hypot(m.a, m.b), sc = LSCALES.find(k => k >= px) ?? LSCALES.at(-1)!;
+  const slot = Math.floor(tm * 4 + (p.x % 7) / 7), W = 144, H = 144; // the landmark spans about two squares round its middle (a lighthouse's turning beam is drawn live)
+  if (tm !== lbudget.tm) lbudget = { tm, left: 4 };
+  let q = lpics.get(p);
+  if (!q || q.s !== sc || q.got !== !!p.got || (q.at !== slot && lbudget.left-- > 0)) {
+    const c = q?.c ?? document.createElement('canvas'), w = Math.ceil(W * sc), h = Math.ceil(H * sc);
+    if (c.width !== w || c.height !== h) { c.width = w; c.height = h; }
+    const cx = c.getContext('2d'); if (!cx) return false;
+    cx.setTransform(1, 0, 0, 1, 0, 0); cx.clearRect(0, 0, w, h); cx.setTransform(sc, 0, 0, sc, W / 2 * sc, H * 0.6 * sc);
+    drawLandmark(cx, p, tm);
+    q = { c, s: sc, at: slot, got: !!p.got }; lpics.set(p, q);
+  }
+  ctx.drawImage(q.c, X - W / 2, Y - H * 0.6, W, H);
+  return true;
+}
+
 /** A hand-made miniature landmark (see landmarks.ts), with a question flag until it is taken over. */
 function drawPoi(ctx: CanvasRenderingContext2D, p: Poi, tm: number, z: number) {
   const X = (p.x + 0.5) * TILE, Y = (p.y + 0.5) * TILE;
-  ctx.save(); ctx.translate(X, Y);
-  drawLandmark(ctx, p, tm);
-  ctx.restore();
+  if (!(z < FAR_ZOOM && p.kind !== 'lighthouse' && farLandmark(ctx, p, X, Y, tm))) { ctx.save(); ctx.translate(X, Y); drawLandmark(ctx, p, tm); ctx.restore(); }
   if (!p.got && p.kind !== 'wreck' && z >= 0.7) { // not yet taken over: a small question flag
     ctx.font = '700 11px system-ui'; ctx.textAlign = 'center'; ctx.fillStyle = 'rgba(28,22,16,.75)'; ctx.beginPath(); ctx.arc(X + 18, Y - 22, 7, 0, 7); ctx.fill(); ctx.fillStyle = '#ffd27a'; ctx.textBaseline = 'middle'; ctx.fillText(POI[p.kind].icon, X + 18, Y - 21.5);
   }
