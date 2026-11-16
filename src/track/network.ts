@@ -17,6 +17,9 @@ export interface NetworkOptions {
   crossOk?: (i: number) => boolean;
   /** station approach squares: a crossover goes next to each, so trains that turn back in a station can reach their own lane */
   stationEnd?: (i: number) => boolean;
+  /** dead ends in station halls and yards: the rails run on to the far edge of the square (the buffer stop stands
+   *  there), so a whole train fits along the platform clear of the switch at the other end */
+  stubToEdge?: (i: number) => boolean;
 }
 
 /** The rail network built from painted squares. Rebuilt whenever track changes. */
@@ -150,7 +153,8 @@ export function buildNetwork(track: TrackMap, n: number, opt: NetworkOptions = {
     if (consumed.has(i)) continue;
     const s = sides(links(i));
     if (s.length === 1) { // dead end: a short stub to a buffer stop at the centre
-      const d = s[0]!, [cx, cy] = centre(i);
+      const d = s[0]!, [c0, c1] = centre(i), far = opt.stubToEdge?.(i) ? T / 2 - 3 : 0;
+      const cx = c0 - DX[d] * far, cy = c1 - DY[d] * far;
       for (const o of laneOffsets(i, d)) {
         const p = port(i, d, o), q: V2 = DX[d] !== 0 ? [cx, cy + o] : [cx + o, cy];
         add([p[0], p[1], q[0], q[1]], [i], 'straight', [-DX[d], -DY[d]], [-DX[d], -DY[d]], true);

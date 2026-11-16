@@ -41,13 +41,14 @@ function makeNetwork(track: TrackMap, n: number, sites: Site[], buildings: Build
   const stn = new Set<number>(), ends = new Set<number>(), yard = new Set<number>();
   for (const h of halls) for (const i of [...h.squares, ...h.approaches]) { still.add(i); stn.add(i); }
   for (const h of halls) for (const i of h.approaches) ends.add(i);
+  const inHall = new Set(halls.flatMap(h => h.squares)), inYard = new Set(buildings.flatMap(b => yardSquares(n, b)));
   for (const b of buildings) { // yards: two loading tracks, the turnouts on the square past each end
     const sq = yardSquares(n, b), along = b.horizontal ? 0b0101 : 0b1010, step = b.horizontal ? 1 : n;
     const ln = tracksOf(b) > 2 ? yardLanes(b) : undefined; // 3 or 4 loading tracks: the extra ones run out on the strip
     for (const i of sq) { if (track.has(i)) { dbl.add(i); if (ln) lanes.set(i, ln); } still.add(i); yard.add(i); }
     for (const i of [sq[0]! - step, sq.at(-1)! + step]) { const t = track.get(i); still.add(i); yard.add(i); if (t && (t.links & ~along) === 0) { dbl.add(i); if (ln) lanes.set(i, ln); } }
   }
-  return buildNetwork(track, n, { forceDouble: i => dbl.has(i), noWide: i => still.has(i), lanes: i => lanes.get(i), crossOk: i => ends.has(i) && !yard.has(i), stationEnd: i => ends.has(i) });
+  return buildNetwork(track, n, { forceDouble: i => dbl.has(i), noWide: i => still.has(i), lanes: i => lanes.get(i), crossOk: i => ends.has(i) && !yard.has(i), stationEnd: i => ends.has(i), stubToEdge: i => inHall.has(i) || inYard.has(i) });
 }
 
 function assemble(s: GameState): Game {
@@ -105,7 +106,8 @@ function surveyLandings(g: Game) {
     if (isHomeDock(g, b)) continue;
     const k = g.world.islandOf[yardSquares(n, b)[0]!];
     const found = g.s.sites.filter(s => s.kind === 'dep' && s.hidden && g.world.islandOf[s.y * n + s.x] === k);
-    for (const s of found) { s.hidden = false; reveal(g, s.x, s.y, 2); }
+    for (const s of found) s.hidden = false; // marked over the fog (render/explore.ts), not cleared round each: he found the holes random
+
     if (found.length) (g.news ??= []).push(`🔎 The landing crew surveyed ${g.world.islands[k!]?.name ?? 'the island'}: ${[...new Set(found.map(s => s.res === 'iron' ? '🧲 iron' : s.res === 'oil' ? '🛢 oil' : s.res))].join(' and ')} found`);
   }
 }

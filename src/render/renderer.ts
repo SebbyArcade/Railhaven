@@ -22,7 +22,7 @@ import { TerrainCache } from './terrainCache.ts';
 import { drawWaterLive } from './terrainArt.ts';
 import { drawTrack } from './track.ts';
 import { drawTrains } from './trains.ts';
-import { drawMishaps, drawStorm, stormFlash } from './events.ts';
+import { drawMishaps, drawStorm, stormFlash, stormInView } from './events.ts';
 import { drawSeaRoutes, drawShips } from './ships.ts';
 import { drawExplore, drawPoiZones, drawScouting, drawMaps } from './explore.ts';
 import { islandSpec, SPEC_TEXT } from '../world/specialty.ts';
@@ -45,6 +45,8 @@ function builtOn(g: Game, i: number): boolean {
 /** Draws one frame. Reads the game, never changes it. */
 export class Renderer {
   readonly terrain: TerrainCache;
+  /** the station halls drawn last frame (screenshot checks find them here) */
+  halls: import("../buildings/stations.ts").Hall[] = [];
   private plan: Plan = Object.assign(new Map(), { docks: new Map() });
   private planAt = -9;
   private alerts = new Set<number>();
@@ -76,8 +78,8 @@ export class Renderer {
       let k = 0; for (const q of p.squares) if (!g.world.terr[q]) k = Math.max(k, landDistance(g, q));
       return Math.min(3, k);
     });
-    const halls = hallsOf(g.track, n, g.s.sites, g.world.terr);
-    for (const h of halls) if (vis(h.squares[1]) && isRevealed(g, h.squares[1])) drawHall(ctx, g.s.seed, h, cam.z);
+    const halls = hallsOf(g.track, n, g.s.sites, g.world.terr); this.halls = halls;
+    for (const h of halls) if (vis(h.squares[1]) && isRevealed(g, h.squares[1])) drawHall(ctx, g.s.seed, h, cam.z, tm);
     drawParks(ctx, g, x0, y0, x1, y1, cam.z, tm);
     drawSites(ctx, g, x0, y0, x1, y1, cam.z, tm, halls);
     for (const b of g.s.buildings ?? []) if (vis(b.y * n + b.x) && isRevealed(g, b.y * n + b.x)) drawFields(ctx, g, b, tm, cam.z);
@@ -116,7 +118,9 @@ export class Renderer {
     this.drawIslandNames(ctx, cam.z);
     ctx.restore();
     if (seasonOf(g.s.t) === 3) this.drawSnow(ctx, view, tm);
-    const st = g.s.storm, fl = st && Math.hypot(st.x * TILE - cam.x, st.y * TILE - cam.y) * cam.z < Math.max(view.w, view.h) ? stormFlash(g, tm) : 0;
+    // lightning only when you can see the storm: its dark middle on screen and not hidden in the fog (he saw white
+    // flashes with no storm in sight: one just below the screen edge used to flash too)
+    const fl = stormInView(g, cam, view) ? stormFlash(g, tm) : 0;
     if (fl) { ctx.fillStyle = `rgba(235,240,255,${fl})`; ctx.fillRect(0, 0, view.w, view.h); } // lightning
     const v = this.tools?.view; if (v) drawView(ctx, g, v, view, this.views.get(g, v, tm), tm, this.arrows);
   }
