@@ -63,4 +63,18 @@ export function attachInput(el: HTMLElement, cam: () => Camera, view: () => View
   el.addEventListener('pointercancel', e => { pts.delete(e.pointerId); pinch = null; down = null; if (painting) { painting = false; h.dragEnd?.(); } });
   el.addEventListener('wheel', e => { e.preventDefault(); const p = rel(e), c = cam(); zoomAt(c, view(), p.x, p.y, c.z * Math.exp(-e.deltaY * 0.0015)); clampCamera(c, mapSize()); }, { passive: false });
   el.addEventListener('touchmove', e => e.preventDefault(), { passive: false });
+  // A finger tap ends with the browser's own click at the same spot, sent to whatever is there after the tap was handled.
+  // A tap that opens a card put a card button there, which got pressed (he tapped an upgradable town and got the map
+  // purchase, 2026-11-16). The canvas works from pointer events only, so its taps never need that click.
+  el.addEventListener('touchend', e => { if (e.cancelable) e.preventDefault(); }, { passive: false });
+  el.addEventListener('pointerup', e => { if (e.pointerType !== 'mouse') lastTap = { x: e.clientX, y: e.clientY, at: performance.now() }; }, true);
 }
+
+/** Where and when the last finger tap on the map ended. */
+let lastTap = { x: 0, y: 0, at: -1e9 };
+// Backstop for browsers that still send the tap's click: a click right on the spot of a map tap, just after it, is dropped
+// unless it lands on the map itself.
+addEventListener('click', e => {
+  if (e.target instanceof HTMLCanvasElement) return;
+  if (performance.now() - lastTap.at < 450 && Math.hypot(e.clientX - lastTap.x, e.clientY - lastTap.y) < 40) { e.stopPropagation(); e.preventDefault(); }
+}, true);
