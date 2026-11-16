@@ -1,7 +1,8 @@
 import { stationsText } from '../track/joins.ts';
 import { restoreShed, type Shed } from '../buildings/shed.ts';
 import { shipPlace } from '../ships/ships.ts';
-import type { Game } from '../state.ts';
+import type { Game, Site } from '../state.ts';
+import { islandName } from '../ships/docks.ts';
 import { boatRoute, MAX_SCOUTS, SCOUT_CAP, scoutCost, scoutStarts, scoutStepError, sendScout } from '../world/explore.ts';
 import { trackChanged } from '../game.ts';
 import { type BuiltStroke, buildPlan, extendPlan, isAnchor, type PaintPlan, planCost, planError, startPlan, undoStroke, yardStart } from '../track/paint.ts';
@@ -12,7 +13,7 @@ import { buyTrain, trainPrice } from '../economy/dispatch.ts';
 import { bodyPoint, trainLength } from '../trains/train.ts';
 import { fmtMoney, toast } from './hud.ts';
 import type { Card } from './cards.ts';
-import { badSquares, bestPlacement, build, footprint, INDUSTRIES, type IndustryKind, isLinked, placeError, placementsAt, priceOf, islandAtYard, shareAt, harmOf, harmText, nearestSpot, noSpotText, lockedText, linkedSquares, yardSquares, yardLen, DOCK_LEN, yardSet } from '../buildings/industries.ts';
+import { badSquares, bestPlacement, build, footprint, INDUSTRIES, type IndustryKind, isLinked, placeError, placementsAt, priceOf, islandAtYard, shareAt, harmOf, harmText, nearestSpot, noSpotText, lockedText, linkedSquares, yardSquares, yardLen, DOCK_LEN, yardSet, MINES } from '../buildings/industries.ts';
 import { refundOf, removeBuilding } from '../economy/upgrades.ts';
 import { townLinked } from '../economy/towns.ts';
 import { hallOf } from '../buildings/stations.ts';
@@ -124,15 +125,28 @@ export class Tools {
   cancel() { this.again = null; if (this.mode !== 'map') this.mapPv = null; this.scout = null; this.plan = null; this.dbl.clear(); this.removeAt = null; this.preview = null; this.previewErr = ''; this.dragOff = null; if (this.mode !== 'build') this.buildKind = null; }
 
   /** choose what to build: glowing squares show where it fits */
-  chooseBuild(k: IndustryKind): { x: number; y: number } | null {
+  /**
+   * Start placing a building. With a view (picked from the Build menu) the outline stays where the player is
+   * looking: on the nearest spot that fits inside the view, else on the nearest deposit of its kind in view (red,
+   * with the exact reason), else in the middle (red). A fit further away is only named in `away`, never jumped to.
+   * Without a view (Go › / Show me) it goes to the nearest spot that fits.
+   */
+  chooseBuild(k: IndustryKind, view?: { hw: number; hh: number }): { spot: { x: number; y: number }; away?: string } | null {
     this.mode = 'build'; this.buildKind = k; this.preview = null; this.glowKey = '';
-    const g = this.g(), c = g.s.camera, cx = Math.floor(c.x / 32), cy = Math.floor(c.y / 32);
+    const g = this.g(), c = g.s.camera, cx = Math.floor(c.x / 32), cy = Math.floor(c.y / 32), n = g.world.n;
+    const inView = (x: number, y: number) => !view || (Math.abs(x + 0.5 - c.x / 32) <= view.hw && Math.abs(y + 0.5 - c.y / 32) <= view.hh);
     const spot = nearestSpot(g, k, cx, cy);
-    // the outline appears at once: on the nearest spot that fits, or in the middle of the view (red, with the reason)
-    const at = spot ? bestPlacement(g, k, spot.x, spot.y).place : null;
-    this.setPreview(at ?? { kind: k, ...placeAround(true, 1, cx, cy, k === 'dock' ? DOCK_LEN : 4) });
+    if (spot && inView(spot.x, spot.y)) { this.setPreview(bestPlacement(g, k, spot.x, spot.y).place!); return { spot }; }
+    // nothing fits in view: show the outline here anyway, red, with the reason
+    const dep = MINES.has(k) ? g.s.sites.filter(s => s.kind === 'dep' && s.res === INDUSTRIES[k].makes && !s.hidden && inView(s.x, s.y))
+      .sort((p, q) => Math.hypot(p.x - cx, p.y - cy) - Math.hypot(q.x - cx, q.y - cy))[0] : undefined;
+    if (dep) this.moveTo(dep.x, dep.y);
+    else this.setPreview({ kind: k, ...placeAround(true, 1, cx, cy, k === 'dock' ? DOCK_LEN : 4) });
     if (!spot) { toast(noSpotText(k)); return null; }
-    return spot;
+    let town: Site | undefined, bd = Infinity;
+    for (const t of g.s.sites) if (t.kind === 'town' && (t.pop ?? 0) > 0) { const d = Math.hypot(t.x - spot.x, t.y - spot.y); if (d < bd) { bd = d; town = t; } }
+    const isl = islandName(g, g.world.islandOf[spot.y * n + spot.x]!);
+    return { spot, away: `${town ? `near ${town.name}, ` : ''}${isl === 'Small island' ? 'on a small island' : `on ${isl}`}` };
   }
 
   private setPreview(p: Placement) {

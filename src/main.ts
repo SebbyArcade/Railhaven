@@ -332,8 +332,8 @@ cardEl.onclick = e => {
   if (b.dataset.act === 'railto') { // 🔌 from the Orders board: Rails mode at a building that isn't joined yet
     closeCard(); lookAt(+b.dataset.x!, +b.dataset.y!); tools.setMode('rail'); toast('🛤 Drag track from your line to one end of its yard'); return;
   }
-  if (b.dataset.act === 'builddock') { closeCard(); startBuild('dock'); return; }
-  if (b.dataset.act === 'landat') { closeCard(); lookAt(+b.dataset.x!, +b.dataset.y!); startBuild('dock'); return; } // ⚓ Land › on a dock's Islands in reach
+  if (b.dataset.act === 'builddock') { closeCard(); startBuild('dock', true); return; }
+  if (b.dataset.act === 'landat') { closeCard(); lookAt(+b.dataset.x!, +b.dataset.y!); startBuild('dock', true); return; } // ⚓ Land › on a dock's Islands in reach
   if (b.dataset.act === 'shipup') { const k = b.dataset.k as ShipUpKey, why = buyShipUp(game, k); toast(why || `${SHIP_UP[k].icon} ${SHIP_UP[k].name}: ${SHIP_UP[k].text(shipUpLvl(game, k))}`); renderCard(); return; }
   if (b.dataset.act === 'fleet') { const k = b.dataset.k as FleetKey, isl = b.dataset.isl !== undefined ? +b.dataset.isl : game.world.home, why = buyFleet(game, k, isl); toast(why || `${FLEET[k].icon} ${FLEET[k].name}: ${FLEET[k].text(fleetLvl(game, k, isl))}`); renderCard(); return; }
   if (b.dataset.act === 'found') {
@@ -414,7 +414,7 @@ tipEl.onclick = e => {
   if (b.dataset.tipone !== undefined) { tipAsk = false; tipHideUntil = game.s.t + 300; updateTip(); return; } // back in five game minutes if still needed
   if (b.dataset.tipgo !== undefined && tipNow) {
     const go = tipNow.go;
-    if (go.kind === 'build') startBuild(go.what);
+    if (go.kind === 'build') startBuild(go.what, true);
     else if (go.kind === 'bld') { const x = game.s.buildings?.find(q => q.id === go.id); if (x) { lookAt(x.x, x.y); openCard({ kind: 'bld', id: x.id }); } }
     else if (go.kind === 'train') { const p = (window as any).railhaven.trainAt(go.id); if (p) { game.s.camera.x = p.x; game.s.camera.y = p.y; } tools.selected = go.id; openCard({ kind: 'train', id: go.id }); }
     else openCard({ kind: 'orders', id: 0 });
@@ -422,22 +422,25 @@ tipEl.onclick = e => {
   }
 };
 
-function startBuild(k: IndustryKind) {
+function startBuild(k: IndustryKind, go = false) {
   const lock = lockedText(game, k);
   if (lock) { toast(`${lock}: fill more town orders to raise your Railway level`); return; }
   menuOpen = false;
-  const spot = tools.chooseBuild(k);
-  if (!spot) return;
-  // the nearest spot is off screen: bring it into view (the camera moves, nothing is built)
-  const c = game.s.camera, [sx, sy] = [(spot.x + 0.5) * 32, (spot.y + 0.5) * 32];
-  if (Math.abs(sx - c.x) * c.z > view.w * 0.4 || Math.abs(sy - c.y) * c.z > view.h * 0.3) { c.x = sx; c.y = sy; toast('The nearest spot that fits is glowing here'); }
+  const c = game.s.camera, hw = (view.w * 0.5) / c.z / 32, hh = (view.h * 0.4) / c.z / 32;
+  const r = tools.chooseBuild(k, go ? undefined : { hw, hh });
+  if (!r) return;
+  const bring = () => { c.x = (r.spot.x + 0.5) * 32; c.y = (r.spot.y + 0.5) * 32; };
+  // asked to be taken there (mission or tip Go ›, lesson Show me): bring the spot into view
+  if (go) { if (Math.abs((r.spot.x + 0.5) * 32 - c.x) * c.z > view.w * 0.4 || Math.abs((r.spot.y + 0.5) * 32 - c.y) * c.z > view.h * 0.3) { bring(); toast('The nearest spot that fits is glowing here'); } return; }
+  // picked from the Build menu: the camera stays where the player is looking; the nearest fit elsewhere is only offered
+  if (r.away) toast(`Nothing fits here. Nearest spot that fits: ${r.away}`, 6000, () => { tools.chooseBuild(k); bring(); });
 }
 /** Go › on a mission: open the place it is about, or start the build it asks for. */
 function goMission(i: number) {
   const m = missionsOf(game)[i]; if (!m) return;
   closeCard(); menuOpen = false; tools.mode = 'pan'; tools.cancel();
   const site = m.site !== undefined ? game.s.sites.find(s => s.id === m.site) : undefined, n = game.world.n;
-  if (m.ty === 'build') { startBuild(m.k!); return; }
+  if (m.ty === 'build') { startBuild(m.k!, true); return; }
   if (m.ty === 'find') {
     const from = game.s.sites.filter(t => t.kind === 'town' && townLinked(game, t)).sort((p, q) => Math.hypot(p.x - site!.x, p.y - site!.y) - Math.hypot(q.x - site!.x, q.y - site!.y))[0] ?? ashford(game);
     lookAt(Math.round((from.x * 2 + site!.x) / 3), Math.round((from.y * 2 + site!.y) / 3));
@@ -445,7 +448,7 @@ function goMission(i: number) {
   }
   if (m.ty === 'reach') {
     const isl = game.world.islands[m.isl!]!;
-    if (isRevealed(game, isl.cy * n + isl.cx)) { lookAt(isl.cx, isl.cy); startBuild('dock'); return; }
+    if (isRevealed(game, isl.cy * n + isl.cx)) { lookAt(isl.cx, isl.cy); startBuild('dock', true); return; }
     const d = (game.s.buildings ?? []).find(b => b.kind === 'dock' && islandOfB(game, b) === game.world.home);
     if (d) { lookAt(d.x, d.y); openCard({ kind: 'bld', id: d.id, page: 'isl' }); }
     toast(`🌫 ${isl.name} is still in the fog: send a scout boat from your dock to find its shore`); return;
@@ -512,7 +515,7 @@ function showLesson() {
   closeCard(); menuOpen = false; tools.mode = 'pan'; tools.cancel();
   const loose = n === 1 ? unlinked(b => b.kind === 'wood') : n === 3 ? unlinked(b => b.kind === 'farm') : n === 8 ? unlinked(b => isFactory(b.kind)) : undefined;
   if (loose) { const e = yardEnd(loose), N = game.world.n; lookAt(Math.round(((e % N) + a.x) / 2), Math.round((((e / N) | 0) + a.y) / 2)); tools.mode = 'rail'; toast('👇 Drag from your line to the ringed square and on onto the blue loading track, then ✓ Build'); return; }
-  if (k && !(game.s.buildings ?? []).some(b => b.kind === k)) { startBuild(k); toast('👇 The outline sits on a spot that fits: tap ✓ Build'); return; }
+  if (k && !(game.s.buildings ?? []).some(b => b.kind === k)) { startBuild(k, true); toast('👇 The outline sits on a spot that fits: tap ✓ Build'); return; }
   if (n === 2 && !game.s.shed) { lookAt(a.x, a.y); tools.mode = 'rail'; toast('👇 Run a few straight squares of track off your line near Ashford: the engine shed goes beside them'); return; }
   if (n === 2) { tools.mode = 'train'; toast('👇 Tap ✓ Buy'); return; }
   if (n === 4 || n === 6) {
