@@ -1,7 +1,7 @@
 import { hasProject, PARK_PRICE, type ParkKind, parkFree, parkSpot, parksOf, projectOf } from '../buildings/parks.ts';
 import type { Game, GameState, Resource, Site } from '../state.ts';
 import { loadGame, newGame, trackChanged } from '../game.ts';
-import { build, growsTracks, stripError, capOf, type Building, footprint, INDUSTRIES, type IndustryKind, isFactory, isLinked, placeError, placementsAt, priceOf, buildingSquares, yardSquares, type Good } from '../buildings/industries.ts';
+import { build, growsTracks, stripError, capOf, type Building, footprint, INDUSTRIES, type IndustryKind, isFactory, isLinked, placeError, placementsAt, priceOf, buildingSquares, yardSquares, yardLen, type Good } from '../buildings/industries.ts';
 import { stationLinkError } from '../buildings/stations.ts';
 import { orderOf, sizeCap } from '../economy/towns.ts';
 import { railLevel } from '../economy/dispatch.ts';
@@ -264,7 +264,7 @@ function dockOnIsland(g: Game, x: number, y: number, openWater = false) {
   for (let dy = -30; dy <= 30; dy++) for (let dx = -30; dx <= 30; dx++) {
     const d = Math.hypot(dx, dy); if (d >= bd || d > 30) continue;
     const i = (y + dy) * n + x + dx; if (w.terr[i] !== 0 || ![1, -1, n, -n].some(e => w.islandOf[i + e] === isl)) continue; // pier squares: water by this island
-    for (const p of placementsAt('dock', x + dx, y + dy)) if ((!openWater || pierSea(g, p) === 4) && !placeError(g, p)) { best = p; bd = d; break; }
+    for (const p of placementsAt('dock', x + dx, y + dy)) if ((!openWater || pierSea(g, p) === yardLen(p)) && !placeError(g, p)) { best = p; bd = d; break; }
   }
   return best;
 }
@@ -318,7 +318,7 @@ function placeNear(g: Game, kind: IndustryKind, x: number, y: number, openWater 
     const px = cx! + dx - x, py = cy! + dy - y;
     for (const p of placementsAt(kind, x + px, y + py)) {
       const key = `${p.x},${p.y},${+p.horizontal},${p.side}`; if (seen.has(key)) continue; seen.add(key); // each spot is reached from all 4 of its squares
-      if (openWater && pierSea(g, p) < 4) continue;
+      if (openWater && pierSea(g, p) < yardLen(p)) continue;
       if (placeError(g, p)) continue;
       if (kind === 'dock' && g.world.islandOf[yardSquares(n, p)[0]!] !== isl) continue; // a dock stays on the island it served
       const ys = yardSquares(n, p), on = ys.filter(i => g.track.has(i)).length;

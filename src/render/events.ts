@@ -62,7 +62,7 @@ export function drawMishaps(ctx: CanvasRenderingContext2D, g: Game, tm: number, 
       const p = run ? runPoint(g, run, b.fire.crewAt) : null;
       if (p) { drawCrewCar(ctx, 'fire', p, tm, false); const k = Math.hypot(tx - p.x, ty - p.y) || 1; ex = p.x + (tx - p.x) / k * 9; ey = p.y + (ty - p.y) / k * 9; } // they stand between the engine and the fire
       else {
-        const e = sq[3]!; ex = (e % n + 0.5) * TILE; ey = (((e / n) | 0) + 0.5) * TILE;
+        const e = sq.at(-1)!; ex = (e % n + 0.5) * TILE; ey = (((e / n) | 0) + 0.5) * TILE;
         ctx.fillStyle = '#c8322a'; ctx.fillRect(ex - 7, ey + 2, 14, 7); ctx.fillStyle = '#e8c070'; ctx.fillRect(ex - 6, ey + 1, 12, 1.5);
         ctx.fillStyle = '#222'; ctx.beginPath(); ctx.arc(ex - 4, ey + 9.5, 1.8, 0, 7); ctx.arc(ex + 4, ey + 9.5, 1.8, 0, 7); ctx.fill();
       }

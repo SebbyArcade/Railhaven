@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { newGame } from '../src/game.ts';
-import { buildingSquares, isLinked, placeError, placementsAt, yardSquares } from '../src/buildings/industries.ts';
+import { buildingSquares, DOCK_LEN, isLinked, placeError, placementsAt, yardLen, yardSquares } from '../src/buildings/industries.ts';
+import { trainLength } from '../src/trains/train.ts';
+import { TILE } from '../src/world/terrain.ts';
 import { reveal } from '../src/world/fog.ts';
 import { isAnchor } from '../src/track/paint.ts';
 import { buyTrainAt } from '../src/economy/dispatch.ts';
@@ -39,5 +41,17 @@ describe('docks and landings', () => {
     }
     expect(half).toBeGreaterThan(0); // ragged spots on Ashford Isle now take a dock
     expect(one).toBeGreaterThan(0);
+  });
+
+  it('docks are 3 squares long, and a whole train still fits along the yard (he asked, 2026-11-16)', () => {
+    const { g, dock, landing } = dockAndLanding(4242), n = g.world.n;
+    for (const b of [dock, landing]) { expect(yardSquares(n, b)).toHaveLength(DOCK_LEN); expect(buildingSquares(n, b)).toHaveLength(DOCK_LEN); }
+    expect(placementsAt('dock', 10, 10).every(p => yardLen(p) === 3)).toBe(true);
+    expect(placementsAt('wood', 10, 10).every(p => yardLen(p) === 4)).toBe(true);
+    const t = buyTrainAt(g, landing); if (typeof t === 'string') throw new Error(t);
+    expect(trainLength(t)).toBeLessThan(DOCK_LEN * TILE);
+    // docks in older saves have no length and stay 4 squares
+    const old = { ...dock }; delete old.len;
+    expect(yardSquares(n, old)).toHaveLength(4);
   });
 });
