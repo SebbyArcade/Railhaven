@@ -1,5 +1,5 @@
 import { hash } from '../core/rng.ts';
-import { capOf, type Building, GOODS, type Good, INDUSTRIES, isLinked, yardLen } from '../buildings/industries.ts';
+import { buildingSquares, capOf, type Building, GOODS, type Good, INDUSTRIES, isLinked, yardLen, yardSquares } from '../buildings/industries.ts';
 import type { Game } from '../state.ts';
 import { barriersDown } from '../buildings/closing.ts';
 import { TILE } from '../world/terrain.ts';
@@ -50,6 +50,39 @@ function stockChip(ctx: CanvasRenderingContext2D, b: Building, cx: number, cy: n
   ctx.beginPath(); ctx.roundRect(-w / 2, -h / 2, w, h, 6.5); ctx.fill();
   ctx.fillStyle = full ? '#ffc35a' : '#f6e7c6'; ctx.fillText(text, 0, 0.5);
   ctx.restore();
+}
+
+/**
+ * A dock's quay: where its yard track runs on a thin strip of land (one square wide, or the tip of a spit), the shore
+ * is built up into a stone quay wall, so the rails stand on solid ground instead of seeming to float on the sea.
+ * Drawn under the rails.
+ */
+export function drawQuay(ctx: CanvasRenderingContext2D, g: Game, b: Building) {
+  if (b.kind !== 'dock') return;
+  const n = g.world.n, T = TILE, t = g.world.terr, pier = new Set(buildingSquares(n, b)), yard = yardSquares(n, b);
+  const water = (j: number) => j >= 0 && j < n * n && t[j] === 0 && !pier.has(j);
+  for (const i of yard) {
+    const x = i % n, y = (i / n) | 0, X = x * T, Y = y * T;
+    // E S W N: the sides of this square that face open water (not the pier, which stands over it anyway)
+    const sides = [[x < n - 1 && water(i + 1), 0], [water(i + n), 1], [x > 0 && water(i - 1), 2], [water(i - n), 3]].filter(s => s[0]).map(s => s[1] as number);
+    if (!sides.length) continue;
+    // packed gravel over the whole square (the sand strips would show the sea through)
+    ctx.fillStyle = '#a39276'; ctx.fillRect(X, Y, T, T);
+    ctx.fillStyle = 'rgba(70,56,36,.18)';
+    for (let k = 0; k < 10; k++) ctx.fillRect(X + 2 + hash(g.s.seed, x, y, 300 + k) * (T - 4), Y + 2 + hash(g.s.seed, y, x, 310 + k) * (T - 4), 1, 1);
+    for (const d of sides) {
+      // the wall: dressed stone blocks along the water side, a little out over the water, with its shadow on the sea
+      const W = 4, horiz = d === 1 || d === 3, out = d === 0 || d === 1 ? 1 : -1;
+      const wx = d === 0 ? X + T - 1 : d === 2 ? X - W + 1 : X, wy = d === 1 ? Y + T - 1 : d === 3 ? Y - W + 1 : Y;
+      const ww = horiz ? T : W, wh = horiz ? W : T;
+      ctx.fillStyle = 'rgba(8,28,58,.35)'; ctx.fillRect(wx + (horiz ? 0 : out * 2), wy + (horiz ? out * 2 : 0), ww, wh);
+      ctx.fillStyle = '#8e877a'; ctx.fillRect(wx, wy, ww, wh);
+      ctx.fillStyle = '#b3ad9f'; if (horiz) ctx.fillRect(wx, d === 1 ? wy : wy + wh - 1, ww, 1); else ctx.fillRect(d === 0 ? wx : wx + ww - 1, wy, 1, wh);
+      ctx.strokeStyle = 'rgba(40,36,30,.45)'; ctx.lineWidth = 0.4; ctx.beginPath();
+      for (let u = 0; u <= T; u += 5.4) { if (horiz) { ctx.moveTo(wx + u, wy); ctx.lineTo(wx + u, wy + wh); } else { ctx.moveTo(wx, wy + u); ctx.lineTo(wx + ww, wy + u); } }
+      ctx.stroke();
+    }
+  }
 }
 
 /**

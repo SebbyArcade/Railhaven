@@ -9,7 +9,7 @@ import { drawFog } from './fog.ts';
 import { drawSites } from './sites.ts';
 import { drawHall } from './stations.ts';
 import { drawBreak, drawShed } from './shed.ts';
-import { drawBuilding, drawBuildingTags } from './buildings.ts';
+import { drawBuilding, drawBuildingTags, drawQuay } from './buildings.ts';
 import { drawFields } from './fields.ts';
 import { shedSquare } from '../buildings/shed.ts';
 import { hallsOf } from '../buildings/stations.ts';
@@ -75,6 +75,7 @@ export class Renderer {
         if (g.world.terr[y * n + x] === 0 && isRevealed(g, y * n + x)) drawWaterLive(ctx, g.world, x, y, tm);
     }
     const vis = (sq: number) => { const x = sq % n, y = (sq / n) | 0; return x >= x0 - 1 && x <= x1 + 1 && y >= y0 - 1 && y <= y1 + 1; };
+    for (const b of g.s.buildings ?? []) if (b.kind === 'dock' && vis(b.y * n + b.x) && isRevealed(g, b.y * n + b.x)) drawQuay(ctx, g, b); // under the rails
     drawTrack(ctx, g.net, p => p.squares.some(vis), cam.z, p => {
       let k = 0; for (const q of p.squares) if (!g.world.terr[q]) k = Math.max(k, landDistance(g, q));
       return Math.min(3, k);

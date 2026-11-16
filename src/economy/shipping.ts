@@ -2,7 +2,7 @@ import type { Game, Site } from '../state.ts';
 import type { Train } from '../trains/train.ts';
 import { bufOf, type Building, GOODS, type Good, INDUSTRIES, inputsOf, isFactory, isLinked, outputOf, yardSquares } from '../buildings/industries.ts';
 import { hallOf } from '../buildings/stations.ts';
-import { orderOf, steadyGoods, townLinked, townRoom } from './towns.ts';
+import { orderOf, steadyFull, steadyGoods, townLinked, townRoom } from './towns.ts';
 import { capOf, minLoad, trainCap } from './upgrades.ts';
 import { isDock, islandOfB } from '../ships/docks.ts';
 import { tradeRoom } from './trade.ts';
@@ -44,7 +44,7 @@ export const bldDist = (g: Game, b: Building) => railDist(g, 'b' + b.id, yardSqu
 export type Dest = { kind: 'town' | 'bld'; id: number };
 export type Why = 'order' | 'factory' | 'steady' | 'extra';
 /** where a load goes; `sea` = the far dock when it goes to a dock for a ship */
-export interface Ship { to: Dest; why: Why; d: number; /** a factory whose product an open order is waiting for */ feeds?: boolean; rush?: boolean; sea?: number; /** a second sea route: the far dock passes it on to this dock */ then?: number }
+export interface Ship { to: Dest; why: Why; d: number; /** steady buying paid in full (the town's order waits on the outer islands) */ full?: boolean; /** a factory whose product an open order is waiting for */ feeds?: boolean; rush?: boolean; sea?: number; /** a second sea route: the far dock passes it on to this dock */ then?: number }
 type Pair = { s: { b: Building; k: Good; sk: string }; b: Building; to: Dest; d: number; t?: Site; f?: Building };
 type Targets = (from: Building, k: Good, d0: number, dist: Int32Array, push: (p: Omit<Pair, 's' | 'b'>) => void) => void;
 /** The plan: building id → where its goods go; `docks` holds landed goods at docks, keyed `dockId/good`. */
@@ -114,7 +114,9 @@ export function shipPlan(g: Game, skip?: Train): Plan {
       if (p.f) r = (why === 'need') === feeds(p.f) ? factoryRoom(p.f, k) : 0;
       else if (why === 'need') r = (orderOf(g, p.t!)[k] ? townRoom(g, p.t!, k).order : 0) + tradeRoom(g, p.t!, k); // 🤝 a capital's trade order counts like its own order
       else r = p.t && steadyGoods(p.t, g).includes(k) ? Math.max(townRoom(g, p.t, k).steady, 1) : 0;
-      left.set(kk, r - (why === 'need' || p.f ? way.get(key(p.to, k)) ?? 0 : 0));
+      // goods already on their way count against the room, so loads spread over the towns that buy them instead of
+      // every train queuing at the nearest one
+      left.set(kk, r - (way.get(key(p.to, k)) ?? 0));
     }
     return left.get(kk)!;
   };
@@ -140,7 +142,7 @@ export function shipPlan(g: Game, skip?: Train): Plan {
     const pin = s.b.pin; if (!pin || isDock(s.b) || out.has(s.sk)) continue;
     const p = pairs.find(q => q.s === s && q.to.kind === pin.kind && q.to.id === pin.id); if (!p) continue;
     const why: Why = p.f ? 'factory' : room(p, 'need') > 0 ? 'order' : room(p, 'steady') > 0 ? 'steady' : 'extra';
-    out.set(s.sk, { to: p.to, why, d: p.d, ...(p.f && feeds(p.f) ? { feeds: true } : {}) });
+    out.set(s.sk, { to: p.to, why, d: p.d, ...(p.f && feeds(p.f) ? { feeds: true } : {}), ...(why === 'steady' && p.t && steadyFull(g, p.t, s.k) ? { full: true } : {}) });
     if (why === 'order' || why === 'factory') { const kk = key(p.to, s.k) + (p.f && !feeds(p.f) ? 'steady' : 'need'); room(p, p.f && !feeds(p.f) ? 'steady' : 'need'); left.set(kk, left.get(kk)! - trainCap(g, islandOfB(g, s.b))); }
   }
   // a maker that makes nothing (its fields all covered) and holds less than a train load can't fill an order: it
@@ -149,7 +151,7 @@ export function shipPlan(g: Game, skip?: Train): Plan {
   const take = (why: 'need' | 'steady') => {
     for (const p of pairs) {
       if (out.has(p.s.sk) || dead(p.s.b) || room(p, why) <= 0) continue;
-      out.set(p.s.sk, { to: p.to, why: p.f ? 'factory' : why === 'steady' ? 'steady' : 'order', d: p.d, ...(p.f && why === 'need' ? { feeds: true } : {}) });
+      out.set(p.s.sk, { to: p.to, why: p.f ? 'factory' : why === 'steady' ? 'steady' : 'order', d: p.d, ...(p.f && why === 'need' ? { feeds: true } : {}), ...(why === 'steady' && p.t && steadyFull(g, p.t, p.s.k) ? { full: true } : {}) });
       const kk = key(p.to, p.s.k) + why; left.set(kk, left.get(kk)! - trainCap(g, islandOfB(g, p.s.b)));
     }
   };

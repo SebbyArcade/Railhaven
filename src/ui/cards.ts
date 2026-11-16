@@ -6,7 +6,7 @@ import { aName, buildingSquares, farText, yardSquares, bufOf, growsTracks, strip
 import { factoryState } from '../economy/production.ts';
 import { hasProject, nextParkPrice, orderMul, PARK_PRICE, parkSpot, parksOf, payMul, projectsFor, projectsOf, rewardMul } from '../buildings/parks.ts';
 import { isCapital, islandOfSite, regions, tradeOf, tradeReward, tradeWhy } from '../economy/trade.ts';
-import { foundPrice, orderDone, orderOf, reward, sizeName, steadyGoods, stepOf, townLinked, upgradePrice } from '../economy/towns.ts';
+import { foundPrice, orderDone, orderOf, reward, sizeName, steadyFull, steadyGoods, stepOf, townLinked, upgradePrice, waitsAbroad } from '../economy/towns.ts';
 import { type Dest, destinationsOf, destName, type Ship, shipPlan, siteOf } from '../economy/shipping.ts';
 import { FERRY_FEE, ferryDock, fleetByIsland, islandOfTrain, shipNewWhy, trainIslands, trainPrice, trainRefund, trainStatus, trainToSell } from '../economy/dispatch.ts';
 import { JAM_AFTER } from '../economy/jams.ts';
@@ -89,6 +89,8 @@ function townCard(g: Game, t: Site, page?: string): string {
   if (linked) h += tradeHtml(g, t, plan);
   const st = steadyGoods(t, g);
   if (st.length) h += `<h3>🛒 Keeps buying</h3><div class="chips">${st.map(k => `<span class="chip2">${GOODS[k].icon} ${GOODS[k].name}</span>`).join('')}</div>`;
+  const abroad = linked ? waitsAbroad(g, t) : [];
+  if (abroad.length) h += `<div class="gift">💰 While its order waits for ${abroad.map(k => `${GOODS[k].icon} ${GOODS[k].name.toLowerCase()}`).join(' and ')} from the outer islands, it pays full price for its other order goods</div>`;
   const coming = g.s.trains.filter(x => x.job && sameDest(x.job.to, { kind: 'town', id: t.id })).length;
   if (coming) h += `<div class="note">🚂 ${coming} train${coming > 1 ? 's' : ''} bringing goods here</div>`;
   if (linked) h += mapBtn(g, t.x, t.y, MAP_R);
@@ -359,7 +361,8 @@ function buildingCard(g: Game, b: Building, page?: string): string {
   const ship = plan.get(b.id);
   // 'extra' to a town whose order still lists this good: the trains already on their way bring all the order needs
   const covered = (to?: Ship['to']) => { const t = to?.kind === 'town' ? g.s.sites.find(s => s.id === to.id) : undefined; return !!t && (orderOf(g, t)[k] ?? 0) > (t.got?.[k] ?? 0); };
-  const why = (w: Ship['why'], to?: Ship['to']) => w === 'order' ? '📋 For its order (full pay)' : w === 'factory' ? '🏭 To make into a product (half pay)' : w === 'steady' ? '🛒 It keeps buying this (part pay)' : covered(to) ? '🚂 Trains on the way already bring all its order needs: more is sold cheap' : '💸 No town needs it now: sold cheap';
+  const full = (to?: Ship['to']) => { const t = to?.kind === 'town' ? g.s.sites.find(s => s.id === to.id) : undefined; return !!t && steadyFull(g, t, k); };
+  const why = (w: Ship['why'], to?: Ship['to']) => w === 'order' ? '📋 For its order (full pay)' : w === 'factory' ? '🏭 To make into a product (half pay)' : w === 'steady' ? (full(to) ? '🛒 It keeps buying this (full pay while its order waits on the outer islands)' : '🛒 It keeps buying this (part pay)') : covered(to) ? '🚂 Trains on the way already bring all its order needs: more is sold cheap' : '💸 No town needs it now: sold cheap';
   const pinned = b.pin && ship && sameDest(ship.to, b.pin);
   if (page === 'pin') { // choose where its goods go
     h = `<div class="head"><b class="big">📌</b><div><h2>Where should the ${esc(d.name)} send ${G.icon} ${G.name.toLowerCase()}?</h2></div></div>`;

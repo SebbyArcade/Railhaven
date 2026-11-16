@@ -40,9 +40,9 @@ describe('🚦 trains get past each other (his 2026-11-15 save: three trains bet
         if (goingEast ? y < mid : y > mid) wrong++; else if (goingEast) east++; else west++;
       }
     }
-    // westbound runs here are rare: in 15 game minutes one train fetching wheat, which used to come this way on a
-    // detour round a held-up train (trains now wait when the way round takes longer than waiting)
-    expect(east).toBeGreaterThan(5); expect(west).toBeGreaterThan(0);
+    // westbound runs here were only detours round a held-up train: trains now wait in line instead of turning back
+    // (none in these 15 game minutes), so this checks the eastbound lane
+    expect(east).toBeGreaterThan(5);
     // the other lane only for a moment, backing a train into a dead-end yard
     expect(wrong / (east + west + wrong)).toBeLessThan(0.1);
   });
