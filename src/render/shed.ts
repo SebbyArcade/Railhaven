@@ -1,4 +1,5 @@
 import { DX, DY } from '../core/grid.ts';
+import { GANG, worker } from './art.ts';
 import type { Game } from '../state.ts';
 import type { Break } from '../track/breaks.ts';
 import { TILE } from '../world/terrain.ts';
@@ -42,14 +43,15 @@ export function drawBreak(ctx: CanvasRenderingContext2D, g: Game, b: Break, tm: 
   if (g.s.t < b.crewAt) { // warning flag until the crew arrives
     ctx.strokeStyle = '#3a2a1a'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(-10, 8); ctx.lineTo(-10, -6); ctx.stroke();
     ctx.fillStyle = Math.floor(tm * 2) % 2 ? '#e8503c' : '#ff7a5c'; ctx.beginPath(); ctx.moveTo(-10, -6); ctx.lineTo(-3, -4); ctx.lineTo(-10, -2); ctx.fill();
-  } else { // handcar and two workers swinging hammers, with sparks
+  } else { // the gang's handcar with a tool box, one worker driving spikes with a sledgehammer, one levering the rail
+    ctx.fillStyle = 'rgba(0,0,0,.25)'; ctx.fillRect(-14.4, 7, 8, 5);
     ctx.fillStyle = '#6b4a2e'; ctx.fillRect(-15, 6, 8, 5); ctx.fillStyle = '#2a211c'; ctx.fillRect(-14, 10.5, 2, 1.5); ctx.fillRect(-9, 10.5, 2, 1.5);
-    for (const [wx, ph] of [[-5, 0], [7, Math.PI]] as const) {
-      const sw = Math.sin(tm * 6 + ph);
-      ctx.fillStyle = '#f0a020'; ctx.beginPath(); ctx.arc(wx, 7, 1.8, 0, 7); ctx.fill(); // hi-vis worker from above
-      ctx.strokeStyle = '#3a2a1a'; ctx.lineWidth = 0.8; ctx.beginPath(); ctx.moveTo(wx, 7); ctx.lineTo(wx + sw * 3, 7 - 4); ctx.stroke();
-      if (sw > 0.9) { ctx.fillStyle = '#ffe27a'; for (let k = 0; k < 3; k++) ctx.fillRect(wx + 3 + k, 2 - k, 0.8, 0.8); }
-    }
+    ctx.fillStyle = '#b8402c'; ctx.fillRect(-14, 6.6, 3.4, 2); ctx.fillStyle = '#e8d0a0'; ctx.fillRect(-13.6, 7.2, 2.6, 0.4); // tool box
+    ctx.fillStyle = '#c8c0b0'; ctx.fillRect(-10, 7, 2.2, 1.6); // a new rail piece
+    const hit = (Math.sin(tm * 5) + 1) / 2, strike = Math.pow(hit, 3) * 2 - 1; // slow lift, fast strike
+    worker(ctx, -4.5, 6.5, GANG, 1, strike, 1.15);
+    if (strike > 0.85) { ctx.fillStyle = '#ffe27a'; for (let k = 0; k < 4; k++) ctx.fillRect(-0.6 + k * 0.9, 4.6 - k * 0.8 - (k % 2), 0.7, 0.7); }
+    worker(ctx, 7, 6, { ...GANG, hat: '#f2f2ee', tool: 'bar' }, -1, Math.sin(tm * 2.2) * 0.3 + 0.4, 1.15);
   }
   ctx.restore();
 }
