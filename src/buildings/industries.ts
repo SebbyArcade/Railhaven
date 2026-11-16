@@ -1,6 +1,6 @@
 import type { Game, Site } from '../state.ts';
 import { dockReachError, landingSeeds } from '../ships/docks.ts';
-import { isRevealed } from '../world/fog.ts';
+import { isRevealed, reveal } from '../world/fog.ts';
 import { T } from '../world/terrain.ts';
 import { isMountainFoot } from '../world/sites.ts';
 import { hallAt, hallsOf, stationLinkError } from './stations.ts';
@@ -365,7 +365,16 @@ export function build(g: Game, p: ReturnType<typeof placementsAt>[number]): Buil
     cur.links |= along; g.track.set(sq[k]!, cur);
   }
   joinYardEnds(g, b);
+  revealAround(g, b);
   return b;
+}
+
+/** A building uncovers the land around its yard, as far as track does, so the player can keep building on from it. */
+export const BUILDING_REVEAL = 3;
+export function revealAround(g: Game, b: Pick<Building, 'x' | 'y' | 'horizontal'> & { len?: number }): number {
+  const n = g.world.n; let k = 0;
+  for (const i of yardSquares(n, b)) k += reveal(g, i % n, (i / n) | 0, BUILDING_REVEAL);
+  return k;
 }
 
 /** A yard placed with an end against existing track joins it there (only at its ends, as everywhere). Returns how many ends joined. */

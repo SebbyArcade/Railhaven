@@ -28,6 +28,7 @@ describe('area maps and island surveys', () => {
 
   it('a landing crew marks iron and oil without clearing holes in the fog', () => {
     const g = load(), n = g.world.n, home = g.world.home;
+    trackChanged(g); // settle what loading uncovered first (buildings clear the land around their yards, which can find a landmark)
     // put the outer islands' iron and oil back in the fog, as before the landing crew came
     const deps = g.s.sites.filter(s => s.kind === 'dep' && (s.res === 'iron' || s.res === 'oil') && g.world.islandOf[s.y * n + s.x] !== home);
     expect(deps.length).toBeGreaterThan(0);

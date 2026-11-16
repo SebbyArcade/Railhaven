@@ -15,7 +15,7 @@ import { trackFromSave, trackToSave } from './track/state.ts';
 import type { TrackMap } from './track/types.ts';
 import { TrainSystem } from './trains/train.ts';
 import { placeShed, shedSiding } from './buildings/shed.ts';
-import { type Building, linkedSquares, tracksOf, yardLanes, yardSquares } from './buildings/industries.ts';
+import { type Building, linkedSquares, revealAround, tracksOf, yardLanes, yardSquares } from './buildings/industries.ts';
 import { blockedPieces } from './track/breaks.ts';
 import { networkKey, relocate, snapshot } from './trains/relocate.ts';
 
@@ -53,7 +53,7 @@ function makeNetwork(track: TrackMap, n: number, sites: Site[], buildings: Build
   return net;
 }
 
-function assemble(s: GameState): Game {
+export function assemble(s: GameState): Game {
   const world = buildWorld(s), track = trackFromSave(s.track ?? []);
   s.trains ??= []; s.nextId ??= 1;
   const g = { s, world, track } as Game;
@@ -91,6 +91,7 @@ export function newGame(seed = Math.floor(Math.random() * 1e6), mapV = MAP_VERSI
 
 export function loadGame(s: GameState): Game {
   const g = assemble(s);
+  for (const b of g.s.buildings ?? []) revealAround(g, b); // older saves: buildings placed before they uncovered land
   return g;
 }
 
