@@ -16,7 +16,7 @@ import { refundOf, removeBuilding } from '../economy/upgrades.ts';
 import { townLinked } from '../economy/towns.ts';
 import { hallOf } from '../buildings/stations.ts';
 import { placeName } from './orders.ts';
-import { buyMap, findsText, mapAt, mapCost, mapFinds, talkOf } from '../world/maps.ts';
+import { buyMap, findsText, mapAt, mapCost, mapFinds, mappedShare, rumours, talkOf } from '../world/maps.ts';
 
 type Placement = ReturnType<typeof placementsAt>[number];
 
@@ -30,7 +30,7 @@ export const MODE_HINT: Record<Mode, string> = {
   train: '🚂 Trains roll out of the engine shed and run themselves: each takes the best waiting load where it is needed.',
   build: '🏗 Drag the picture where you want it. Blue row = loading track: your rails join it in line, at either end (gold arrows). Tap a ⟳ corner to turn it, double-tap it to build. ↶ Undo takes it back.',
   scout: '🔭 Tap a glowing town (scouts on foot) or dock (a boat), then drag or tap to draw the route into the fog. A 🗺 map (on a town card) shows where to look.',
-  map: '🗺 Tap the map to move the circle. A map marks hidden towns and landmarks in it with ?. If it finds nothing, you get half back.',
+  map: '🗺 Tap the map to move the circle. A map marks hidden towns and landmarks in it with ?. Green circles are already mapped. If it finds nothing, you get half back.',
 };
 
 /** The build tools: what the player is doing, and the confirm bar it needs. */
@@ -380,8 +380,9 @@ export class Tools {
       return { text: `${this.scout.boat ? '⛵' : '🚶'} ${k} squares · ${fmtMoney(c)} · next square +${fmtMoney(scoutCost(k + 1, this.scout.boat) - c)}${out ? ` · ${out}/${MAX_SCOUTS} out` : ''}`, ok: '✓ Send', can: c <= g.s.money && out < MAX_SCOUTS };
     }
     if (this.mode === 'map' && this.mapPv) {
-      const m = this.mapPv, c = mapCost(g), k = mapFinds(g, m.x, m.y, m.r).length;
-      return { text: `🗺 Map of this circle near ${m.near} · 💬 Travellers say: ${talkOf(k)}`, ok: `✓ Buy · ${fmtMoney(c)}`, can: c <= g.s.money };
+      const m = this.mapPv, c = mapCost(g), have = new Set(rumours(g).map(f => f.y * g.world.n + f.x));
+      const k = mapFinds(g, m.x, m.y, m.r).filter(f => !have.has(f.y * g.world.n + f.x)).length, sh = Math.round(mappedShare(g, m.x, m.y, m.r) * 100);
+      return { text: `🗺 Map of this circle near ${m.near} · 💬 Travellers say: ${talkOf(k)}${sh >= 5 ? ` · ✅ ${sh}% already mapped` : ''}`, ok: `✓ Buy · ${fmtMoney(c)}`, can: c <= g.s.money };
     }
     if (this.mode === 'build' && this.preview && this.previewErr) {
       return { text: `⚠ ${this.previewErr}`, ok: '✓ Build', can: false, turn: true, near: !lockedText(g, this.preview.kind) };
