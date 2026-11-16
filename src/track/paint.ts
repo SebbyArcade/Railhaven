@@ -8,7 +8,7 @@ import type { TrackMap, TrackSquare } from './types.ts';
 import { reveal } from '../world/fog.ts';
 
 /** The track as it would be with this stroke laid (copies only what it touches). */
-function withPath(g: Game, path: number[]): TrackMap {
+export function withPath(g: Game, path: number[]): TrackMap {
   const t: TrackMap = new Map(g.track);
   for (const i of path) { const o = t.get(i); if (o) t.set(i, { ...o }); }
   layPath(t, g.world.n, path);

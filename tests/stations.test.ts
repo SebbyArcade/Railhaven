@@ -89,4 +89,20 @@ describe('station halls', () => {
     const bridge = LAND.slice(); bridge[sq(9, 10)] = 0; // a bridge straight into the town square, land beyond: as before
     expect(hallOf(t, N, town, bridge)!.squares).toEqual([sq(9, 10), sq(10, 10), sq(11, 10)]);
   });
+  it('a line running past the town keeps its station when it bends round a corner just past it (Pebbleford, Rookwell Haven)', () => {
+    // down the west side of the town, then turning east on the square diagonal to it
+    const t: TrackMap = new Map(); layPath(t, N, line([[9, 6], [9, 11], [13, 11]]));
+    const h = hallOf(t, N, town, LAND)!;
+    expect(h).not.toBeNull();
+    expect(h.squares.some(i => Math.abs(i % N - 10) + Math.abs(((i / N) | 0) - 10) === 1)).toBe(true); // still beside the town
+    expect(h.squares.every(i => t.get(i)!.links === 10 || t.get(i)!.links === 5)).toBe(true); // on a straight part only
+  });
+
+  it('track onto the empty town square is not "from the side" when the station already stands beside it (Pebbleford)', () => {
+    // dead-end station under the town; a line comes down past its west side and one more comes in from the north
+    const t: TrackMap = new Map(); layPath(t, N, line([[16, 11], [10, 11]])); layPath(t, N, line([[9, 6], [9, 10]]));
+    expect(hallOf(t, N, town, LAND)!.horizontal).toBe(true);
+    layPath(t, N, line([[10, 6], [10, 9]]));
+    expect(stationLinkError(t, N, [town], sq(10, 9), sq(10, 10), LAND)).toBe('');
+  });
 });

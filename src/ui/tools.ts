@@ -1,3 +1,4 @@
+import { stationsText } from '../track/joins.ts';
 import { restoreShed, type Shed } from '../buildings/shed.ts';
 import { shipPlace } from '../ships/ships.ts';
 import type { Game } from '../state.ts';
@@ -425,7 +426,7 @@ export class Tools {
     if (this.mode === 'rail' && this.plan && this.plan.path.length === 1) return { text: isAnchor(g, this.plan.path[0]!) ? '🛤 Line starts here: drag from it, or tap where it goes' : '🛤 Line starts at the building: run it on to your track', ok: '✓ Build', can: false };
     if (this.mode === 'rail' && this.plan && this.plan.path.length > 1) {
       const e = planError(g, this.plan), n = this.plan.path.filter(i => !g.track.has(i)).length, wet = this.plan.path.filter(i => !g.track.has(i) && g.world.terr[i] === 0).length;
-      return { text: e || `${n} new square${n === 1 ? '' : 's'} · ${fmtMoney(planCost(g, this.plan))}${wet ? ` · 🌉 then ${fmtMoney(wet * BRIDGE_UPKEEP)}/min upkeep` : ''}${harmText(harmOf(g, this.plan.path.filter(i => !g.track.has(i))))}`, ok: '✓ Build', can: !e };
+      return { text: e || `${n} new square${n === 1 ? '' : 's'} · ${fmtMoney(planCost(g, this.plan))}${wet ? ` · 🌉 then ${fmtMoney(wet * BRIDGE_UPKEEP)}/min upkeep` : ''}${harmText(harmOf(g, this.plan.path.filter(i => !g.track.has(i))))}${stationsText(g, this.plan.path)}`, ok: '✓ Build', can: !e };
     }
     if (this.mode === 'double' && this.dbl.size) {
       const add = [...this.dbl].filter(i => g.track.has(i) && !g.track.get(i)!.dbl && !g.net.twin?.has(i)), c = add.length * TRACK_COST.double;
