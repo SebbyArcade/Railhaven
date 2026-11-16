@@ -22,7 +22,7 @@ import { TerrainCache } from './terrainCache.ts';
 import { drawWaterLive } from './terrainArt.ts';
 import { drawTrack } from './track.ts';
 import { drawTrains } from './trains.ts';
-import { drawMishaps, drawStorm, stormFlash, stormInView } from './events.ts';
+import { drawLightning, drawMishaps, drawStorm } from './events.ts';
 import { drawSeaRoutes, drawShips } from './ships.ts';
 import { drawExplore, drawPoiZones, drawScouting, drawMaps } from './explore.ts';
 import { islandSpec, SPEC_TEXT } from '../world/specialty.ts';
@@ -111,6 +111,7 @@ export class Renderer {
     this.drawNoGo(ctx, tm, x0, y0, x1, y1);
     this.drawOverlay(ctx, tm);
     drawStorm(ctx, g, tm);
+    drawLightning(ctx, g, tm); // lightning lights only its storm cloud, under the fog
     drawFog(ctx, g, x0, y0, x1, y1, cam.z, tm);
     drawScouting(ctx, g, this.tools, tm, cam.z); // scout routes run into the fog: draw them over it
     drawPoiZones(ctx, g, this.tools, tm, (x, y) => x >= x0 - 12 && x <= x1 + 12 && y >= y0 - 12 && y <= y1 + 12, cam.z); // landmark take-over squares and reach, over the fog
@@ -118,10 +119,6 @@ export class Renderer {
     this.drawIslandNames(ctx, cam.z);
     ctx.restore();
     if (seasonOf(g.s.t) === 3) this.drawSnow(ctx, view, tm);
-    // lightning only when you can see the storm: its dark middle on screen and not hidden in the fog (he saw white
-    // flashes with no storm in sight: one just below the screen edge used to flash too)
-    const fl = stormInView(g, cam, view) ? stormFlash(g, tm) : 0;
-    if (fl) { ctx.fillStyle = `rgba(235,240,255,${fl})`; ctx.fillRect(0, 0, view.w, view.h); } // lightning
     const v = this.tools?.view; if (v) drawView(ctx, g, v, view, this.views.get(g, v, tm), tm, this.arrows);
   }
 
