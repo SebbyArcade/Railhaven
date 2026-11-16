@@ -16,7 +16,7 @@ export function gameReport(g: Game): string {
   const lines: string[] = [];
   lines.push(`RAILHAVEN GAME REPORT (rebuild) · seed ${s.seed} · ${Math.floor(min)} min played`);
   lines.push(`Money ${money(s.money)} · earned ${money(earned)} · running costs (trains and bridges) ${money(upkeep)} · average ${money(min > 0.5 ? (earned - upkeep) / min : 0)}/min`);
-  lines.push(`Railway level ${L} · ${o} orders filled${RLV[L + 1] !== undefined ? ` (next level at ${RLV[L + 1]})` : ' (top level)'}`);
+  lines.push(`Railway level ${L} · ${o} order${o === 1 ? '' : 's'} filled${RLV[L + 1] !== undefined ? ` (next level at ${RLV[L + 1]})` : ' (top level)'}`);
   const isl = reachedIslands(g);
   lines.push(`Islands reached: ${[...isl].map(j => g.world.islands[j]?.name ?? `island ${j}`).join(', ')}`);
   const idle = s.trains.filter(t => !t.job).length;

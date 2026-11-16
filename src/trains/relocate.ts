@@ -21,15 +21,19 @@ export function snapshot(net: Network, t: Train) {
  * then lay its body back along the track behind it. Returns false if no rail is there any more.
  */
 export function relocate(net: Network, t: Train, at: { x: number; y: number; tx: number; ty: number }): boolean {
-  const n = net.n, sq = Math.floor(at.y / 32) * n + Math.floor(at.x / 32);
+  const n = net.n, ids = new Set<number>();
+  // the pieces of the head's square, and of the square next door when the head sits on the edge between them
+  for (const dx of [-1, 0, 1]) for (const dy of [-1, 0, 1]) for (const id of net.bySquare.get(Math.floor((at.y + dy) / 32) * n + Math.floor((at.x + dx) / 32)) ?? []) ids.add(id);
   let best: { step: Step; s: number; d: number } | null = null;
-  for (const id of net.bySquare.get(sq) ?? []) {
+  for (const id of ids) {
     const p = net.pieces[id]!;
     for (let s = 0; s <= p.len; s += 0.5) {
       for (const dir of [1, -1] as const) {
         const q = stepPoint(net, { piece: id, dir }, dir === 1 ? s : p.len - s);
-        const d = Math.hypot(q.x - at.x, q.y - at.y);
-        if (q.tx * at.tx + q.ty * at.ty < 0.5 || d > 6) continue;
+        // a head standing right on a joint belongs to the piece it is leaving (s = len), not the one ahead (s = 0):
+        // putting it at the start of the next piece would claim that piece too, where an oncoming train may stand
+        const d = Math.hypot(q.x - at.x, q.y - at.y) + ((dir === 1 ? s : p.len - s) < 0.5 ? 0.25 : 0);
+        if (q.tx * at.tx + q.ty * at.ty < 0.5 || d > 6.25) continue;
         if (!best || d < best.d) best = { step: { piece: id, dir }, s: dir === 1 ? s : p.len - s, d };
       }
     }

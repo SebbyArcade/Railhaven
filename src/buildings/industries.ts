@@ -265,14 +265,14 @@ export function placeError(g: Game, b: Pick<Building, 'x' | 'y' | 'horizontal' |
   for (const i of footprint(n, b)) { const e = squareError(g, b, i); if (e) return e; }
   if (MINES.has(b.kind)) {
     const dep = depositUnder(g, b);
-    if (!dep) return `A ${info.name} must stand on ${info.needs}`;
+    if (!dep) return `${aName(info.name, true)} must stand on ${info.needs}`;
     if (!isMountainFoot(g.world, dep.x, dep.y) && (b.kind === 'stone' || b.kind === 'coal')) return 'This deposit is not at the foot of mountains';
   } else if (b.kind === 'dock') {
     return dockReachError(g, b);
   } else if (b.kind === 'wool' && buildingSquares(n, b).some(i => t[i] !== T.Grass)) {
     return 'A Sheep Farm stands on grassland: move it off the hills and woods onto open grass';
   } else if (shareAt(g, b) < 2 / 6) {
-    return `A ${info.name} needs ${info.needs}: there is too little here`;
+    return `${aName(info.name, true)} needs ${info.needs}: there is too little here`;
   }
   return '';
 }
@@ -427,6 +427,9 @@ function flood(g: Game, q: number[], out: Set<number>) {
   return out;
 }
 
+/** 'a Sawmill', 'an Iron Mine': the article that fits the name. */
+export const aName = (name: string, cap = false) => `${/^[AEIOU]/.test(name) ? 'an' : 'a'} ${name}`.replace(/^a/, m => cap ? m.toUpperCase() : m);
+
 export const isLinked = (g: Game, b: Building) => g.linked?.has(yardSquares(g.world.n, b)[0]!) ?? false;
 
 /**
@@ -454,7 +457,7 @@ export function nearestSpot(g: Game, kind: IndustryKind, cx: number, cy: number,
 /** Why there is nowhere to build this kind yet, and what to do. */
 export const noSpotText = (kind: IndustryKind) => MINES.has(kind)
   ? `No ${INDUSTRIES[kind].needs.replace(/^an? /, '').replace(/ at the foot of mountains| \((outer islands|far seas)\)/g, '')} found yet: it must be found first. Lay track toward the mountains or 🔭 Scout into the fog to uncover more land`
-  : `No room for a ${INDUSTRIES[kind].name} on uncovered land: it needs ${INDUSTRIES[kind].needs}`;
+  : `No room for ${aName(INDUSTRIES[kind].name)} on uncovered land: it needs ${INDUSTRIES[kind].needs}`;
 
 /** "Ashford's park" / "Ashford's Clock Tower", for refusals. */
 export function parkName(g: Game, p: { town: number; k: string }): string {

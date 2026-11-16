@@ -1,6 +1,6 @@
 import type { Game } from '../state.ts';
 import type { Train } from '../trains/train.ts';
-import { type Building, GOODS, type Good, growsTracks, INDUSTRIES, isFactory, isLinked, stripError, tracksOf, yardSquares } from '../buildings/industries.ts';
+import { aName, type Building, GOODS, type Good, growsTracks, INDUSTRIES, isFactory, isLinked, stripError, tracksOf, yardSquares } from '../buildings/industries.ts';
 import { type Dest, DF, PAY, siteOf, bldOf } from './shipping.ts';
 import { orderOf } from './towns.ts';
 
@@ -193,7 +193,7 @@ export function startRush(g: Game, to: Dest, k: Good): string {
   if (rushOf(g, to, k)) return '';
   if ((g.s.rush ?? []).length >= MAX_RUSH) return `At most ${MAX_RUSH} rushes at once: stop one first`;
   const n = rushNeed(g, to, k); if (n <= 0) return 'Nothing left to rush there';
-  if (!rushMakers(g, k)) { const m = Object.values(INDUSTRIES).find(d => d.makes === k); return `Nothing on your railway makes ${GOODS[k].name.toLowerCase()} yet${m ? `: build a ${m.name} first` : ''}`; }
+  if (!rushMakers(g, k)) { const m = Object.values(INDUSTRIES).find(d => d.makes === k); return `Nothing on your railway makes ${GOODS[k].name.toLowerCase()} yet${m ? `: build ${aName(m.name)} first` : ''}`; }
   const fee = rushFee(g, to, k);
   if (g.s.money < fee) return `This rush costs $${fee.toLocaleString('en-US')}: you need $${Math.ceil(fee - g.s.money).toLocaleString('en-US')} more`;
   g.s.money -= fee;
