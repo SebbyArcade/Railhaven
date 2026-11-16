@@ -24,7 +24,7 @@ import { attachInput } from './ui/input.ts';
 import { fmtMoney, toast, updateHud } from './ui/hud.ts';
 import { MODE_HINT, type Mode, Tools } from './ui/tools.ts';
 import { setClosed } from './buildings/closing.ts';
-import { GOODS, type Good, INDUSTRIES, info, inputsOf, type IndustryKind, isFactory, lockedText, priceOf } from './buildings/industries.ts';
+import { GOODS, type Good, INDUSTRIES, info, inputsOf, type IndustryKind, isFactory, lockedText, priceOf, yardSet } from './buildings/industries.ts';
 import { tickProduction } from './economy/production.ts';
 import type { Game } from './state.ts';
 import { footprint } from './buildings/industries.ts';
@@ -107,7 +107,7 @@ const opensCard = (i: number) => {
   if (!isRevealed(game, i)) return false;
   if (game.s.shed && game.s.shed.x === x && game.s.shed.y === y) return true;
   if (game.s.buildings?.some(b => footprint(n, b).includes(i))) return true;
-  if (hallAt(hallsOf(game.track, n, game.s.sites, game.world.terr), i)?.town) return true;
+  if (hallAt(hallsOf(game.track, n, game.s.sites, game.world.terr, yardSet(game)), i)?.town) return true;
   return game.s.sites.some(s => (s.kind === 'town' || s.kind === 'plot') && Math.abs(s.x - x) <= 1 && Math.abs(s.y - y) <= 1);
 };
 
@@ -127,7 +127,7 @@ attachInput(canvas, () => game.s.camera, () => view, () => game.world.n * 32, {
     const br = game.s.breaks?.find(b => b.square === i);
     if (br) { const s = Math.ceil(br.crewAt - game.s.t); toast(`${BREAK_TEXT[br.kind]}: trains go round or wait. ${s > 0 ? `Repair crew arrives in ${s} s` : `Repair crew at work, ${Math.ceil(br.doneAt - game.s.t)} s left`}`); return; }
     if (game.s.shed && game.s.shed.x === x && game.s.shed.y === y) { openCard({ kind: 'shed', id: 0 }); return; }
-    const site = hallAt(hallsOf(game.track, n, game.s.sites, game.world.terr), i)?.town ?? game.s.sites.find(s => Math.abs(s.x - x) <= 1 && Math.abs(s.y - y) <= 1);
+    const site = hallAt(hallsOf(game.track, n, game.s.sites, game.world.terr, yardSet(game)), i)?.town ?? game.s.sites.find(s => Math.abs(s.x - x) <= 1 && Math.abs(s.y - y) <= 1);
     const bld = game.s.buildings?.find(b => footprint(n, b).includes(i));
     if (bld) { openCard({ kind: 'bld', id: bld.id }); return; }
     if (site?.kind === 'town') { openCard({ kind: 'town', id: site.id }); return; }

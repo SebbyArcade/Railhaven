@@ -3,7 +3,7 @@ import { isRevealed } from '../world/fog.ts';
 import { T, TILE } from '../world/terrain.ts';
 import { labelAt } from '../render/stations.ts';
 import { hash } from '../core/rng.ts';
-import { takenSquares } from './industries.ts';
+import { takenSquares, yardSet } from './industries.ts';
 import { hallsOf } from './stations.ts';
 
 /**
@@ -74,7 +74,7 @@ export function parkFree(g: Game, x: number, y: number): boolean {
   if (g.world.terr[i] !== T.Grass || !isRevealed(g, i) || takenSquares(g).has(i) || parkAt(g, i)) return false;
   if (g.s.sites.some(s => s.x === x && s.y === y)) return false;
   // keep clear of station halls and the station building beside them
-  for (const h of hallsOf(g.track, n, g.s.sites, g.world.terr)) for (const q of h.squares) if (Math.abs(q % n - x) <= 1 && Math.abs(((q / n) | 0) - y) <= 1) return false;
+  for (const h of hallsOf(g.track, n, g.s.sites, g.world.terr, yardSet(g))) for (const q of h.squares) if (Math.abs(q % n - x) <= 1 && Math.abs(((q / n) | 0) - y) <= 1) return false;
   return true;
 }
 
@@ -85,7 +85,7 @@ export function parkSpot(g: Game, t: Site, clearLabel = false): { x: number; y: 
   let box: [number, number, number, number] | null = null;
   if (clearLabel) {
     const w = Math.max((t.name ?? '').length * 7.5 + 12, 150), Hb = 12 * 1.75 + 14;
-    const { LX, BT } = labelAt(g.s.seed, t, hallsOf(g.track, n, g.s.sites, g.world.terr).find(h => h.town === t), n, w, Hb);
+    const { LX, BT } = labelAt(g.s.seed, t, hallsOf(g.track, n, g.s.sites, g.world.terr, yardSet(g)).find(h => h.town === t), n, w, Hb);
     box = [LX - w / 2 - 4, BT - 8, LX + w / 2 + 4, BT + Hb + 16];
   }
   for (let dy = -4; dy <= 4; dy++) for (let dx = -4; dx <= 4; dx++) {

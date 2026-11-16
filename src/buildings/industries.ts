@@ -147,6 +147,17 @@ export function buildingSquares(n: number, b: Pick<Building, 'x' | 'y' | 'horizo
 }
 export const footprint = (n: number, b: Pick<Building, 'x' | 'y' | 'horizontal' | 'side'> & { tracks?: number; len?: number }) => [...yardSquares(n, b), ...buildingSquares(n, b), ...((b.tracks ?? 2) > 2 ? stripSquares(n, b) : [])];
 
+/** Every square a building or its loading tracks stand on: station halls never go there. */
+export function yardSet(g: Game): Set<number> {
+  const bs = g.s.buildings ?? [], c = g.yardSqs;
+  if (c && c.t === g.s.t && c.len === bs.length) return c.set; // same moment: nothing moved
+  let key = bs.length; // a cheap fingerprint of where every building stands (this runs very often)
+  for (const b of bs) key = (key * 31 + b.x * 7919 + b.y * 104729 + (b.horizontal ? 1 : 2) + b.side * 3 + (b.tracks ?? 2) * 5 + (b.len ?? 0) * 11) % 2147483647;
+  if (c?.key === key) { c.t = g.s.t; return c.set; }
+  const set = new Set<number>(); for (const b of bs) for (const i of footprint(g.world.n, b)) set.add(i);
+  g.yardSqs = { key, set, t: g.s.t, len: bs.length }; return set;
+}
+
 /** Kinds whose yards grow extra loading tracks with their levels (farms grow fields instead; docks reach farther). */
 export const growsTracks = (k: IndustryKind) => k !== 'farm' && k !== 'wool' && k !== 'dock';
 export const tracksOf = (b: { tracks?: number }) => b.tracks ?? 2;
@@ -305,7 +316,7 @@ function squareError(g: Game, b: Pick<Building, 'x' | 'y' | 'horizontal' | 'side
   const tr = g.track.get(i);
   if (tr) {
     if (inRow) return 'Your track runs under the green building row: slide the outline so only the blue row sits on your line';
-    if (hallAt(hallsOf(g.track, n, g.s.sites, g.world.terr), i)) return 'A station is in the way: move the outline off the platforms';
+    if (hallAt(hallsOf(g.track, n, g.s.sites, g.world.terr, yardSet(g)), i)) return 'A station is in the way: move the outline off the platforms';
     if (tr.links & ~alongMask(b.horizontal)) return 'Your track crosses the blue loading track: turn the outline so the blue row runs along your rails';
   }
   const s = g.s.sites.find(o => o.x === x && o.y === y);
@@ -384,7 +395,7 @@ export function joinYardEnds(g: Game, b: Building): number {
   let joined = 0;
   [[sq[0]!, sq[0]! - step, out[0]!], [sq.at(-1)!, sq.at(-1)! + step, out[1]!]].forEach(([end, next, d]) => {
     const o = g.track.get(next!); if (!o) return;
-    if (stationLinkError(g.track, n, g.s.sites, end!, next!, g.world.terr) || yardLinkError(g, end!, next!)) return;
+    if (stationLinkError(g.track, n, g.s.sites, end!, next!, g.world.terr, yardSet(g)) || yardLinkError(g, end!, next!)) return;
     g.track.get(end!)!.links |= 1 << d!; o.links |= 1 << ((d! + 2) % 4); joined++;
   });
   return joined;

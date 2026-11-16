@@ -2,7 +2,7 @@ import { DX, DY, type Dir } from '../core/grid.ts';
 import type { Game } from '../state.ts';
 import { isRevealed } from '../world/fog.ts';
 import { hallsOf } from './stations.ts';
-import { footprint } from './industries.ts';
+import { footprint, yardSet } from './industries.ts';
 
 /**
  * The engine shed: a building near Ashford joined to the line by its own short siding. The siding runs from a
@@ -69,7 +69,7 @@ function laySiding(g: Game) {
  */
 export function placeShed(g: Game): number[] {
   const n = g.world.n, a = g.s.sites[0]!, blocked = new Set<number>();
-  for (const h of hallsOf(g.track, n, g.s.sites, g.world.terr)) for (const i of [...h.squares, ...h.approaches]) blocked.add(i);
+  for (const h of hallsOf(g.track, n, g.s.sites, g.world.terr, yardSet(g))) for (const i of [...h.squares, ...h.approaches]) blocked.add(i);
   for (const b of g.s.buildings ?? []) for (const i of footprint(n, b)) blocked.add(i);
   for (const p of g.s.parks ?? []) blocked.add(p.y * n + p.x);
   const cur = g.s.shed;

@@ -153,6 +153,8 @@ export interface Game {
   coast?: Map<number, boolean>;
   /** squares sailed from each dock (cache) */
   seaCache?: Map<string, Int32Array>;
+  /** squares under buildings and their loading tracks (cache, keyed by where the buildings stand) */
+  yardSqs?: { key: number; set: Set<number>; t: number; len: number };
   /** squares already built on (cached; rebuilt when the network or buildings change) */
   taken?: { key: string; net: Network; set: Set<number> };
   /** things to tell the player (the UI shows and clears them) */
