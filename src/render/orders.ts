@@ -1,6 +1,6 @@
 import type { Game } from '../state.ts';
 import type { Building } from '../buildings/industries.ts';
-import { buildingSquares, GOODS, type Good, INDUSTRIES, isLinked, yardSquares } from '../buildings/industries.ts';
+import { buildingSquares, capOf, GOODS, type Good, INDUSTRIES, inputsOf, isFactory, isLinked, yardSquares } from '../buildings/industries.ts';
 import { orderDone, orderOf, townLinked } from '../economy/towns.ts';
 import { type Ship, siteOf } from '../economy/shipping.ts';
 import { TILE } from '../world/terrain.ts';
@@ -110,6 +110,29 @@ export function drawWaitBadges(ctx: CanvasRenderingContext2D, g: Game, ids: Set<
     ctx.strokeStyle = '#e8a33c'; ctx.lineWidth = 1.8; ctx.stroke();
     ctx.font = '11px system-ui'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('⏳', 0, 0.5);
     ctx.restore();
+  }
+}
+
+/** Zoomed out, a tag on each building on the railway saying what it makes: its good and how many a minute,
+ *  or "full" / what it is short of. The edge says how it is doing: green making, orange its goods wait for a
+ *  train, red stuck (its card says why). Tags that would cover one another move down. */
+export const MAKE_ZOOM = 0.7; // where the stock chips on buildings stop (render/buildings.ts)
+export function drawMakeTags(ctx: CanvasRenderingContext2D, g: Game, rates: Map<number, number>, alerts: Set<number>, waits: Set<number>, zoom: number, vis: (x: number, y: number) => boolean) {
+  const put: [number, number, number, number][] = [], h = 20 / zoom;
+  ctx.font = '700 11px system-ui';
+  for (const b of g.s.buildings ?? []) {
+    if (b.kind === 'dock' || !isLinked(g, b) || !vis(b.x, b.y)) continue;
+    const k = INDUSTRIES[b.kind].makes, ic = GOODS[k].icon, full = b.stock >= capOf(b) - 0.5;
+    const short = isFactory(b.kind) ? inputsOf(b.kind).filter(i => (b.inbuf?.[i] ?? 0) < 0.01) : [];
+    const rate = `${ic} +${Math.round((rates.get(b.id) ?? 0) * 60)}/min`;
+    const text = b.closed ? `${ic} closed` : full && zoom >= 0.3 ? `${rate} · full` : short.length ? `${ic} needs ${short.map(i => GOODS[i].icon).join('')}` : rate;
+    const edge = alerts.has(b.id) ? '#e0584a' : waits.has(b.id) || full ? '#e8a33c' : '#7fd36b';
+    let { X, Y } = centreOf(g, b);
+    const w = (ctx.measureText(text).width + 12) / zoom;
+    while (put.some(o => X - w / 2 < o[2] && X + w / 2 > o[0] && Y - h / 2 < o[3] && Y + h / 2 > o[1])) Y += h;
+    put.push([X - w / 2, Y - h / 2, X + w / 2, Y + h / 2]);
+    tag(ctx, X, Y, zoom, text, edge);
+    ctx.font = '700 11px system-ui';
   }
 }
 
