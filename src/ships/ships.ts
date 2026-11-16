@@ -1,6 +1,6 @@
 import type { Game } from '../state.ts';
 import { inStorm, STORM_SLOW } from '../world/events.ts';
-import { type Building, buildingSquares, type Good } from '../buildings/industries.ts';
+import { type Building, buildingSquares, type Good, yardSquares } from '../buildings/industries.ts';
 import { dockRange, isDock, islandOfB, linkedDocks, seaDist } from './docks.ts';
 import { lightMul, salvageAt } from '../world/explore.ts';
 
@@ -217,6 +217,9 @@ function farther(g: Game, ships: CargoShip[], s: CargoShip, at: Building, lanes:
 }
 
 /** Where a ship is drawn: square position and heading (radians). */
+/** How far out from the middle of the pier deck a moored ship lies, in squares: just past its edge, in the water. */
+export const BERTH_OUT = 0.62;
+
 export function shipPlace(g: Game, s: CargoShip): { x: number; y: number; a: number } {
   const n = g.world.n;
   if (s.to !== undefined && s.path && s.path.length > 1) {
@@ -227,5 +230,9 @@ export function shipPlace(g: Game, s: CargoShip): { x: number; y: number; a: num
   const d = dockOf(g, s.at); if (!d) return { x: 0, y: 0, a: 0 };
   const sea = pierSea(g, d), i = sea[Math.min(sea.length - 1, 1 + (g.s.ships!.filter(o => o.to === undefined && o.at === s.at).indexOf(s) % 3))] ?? buildingSquares(n, d)[1]!;
   const ang = d.horizontal ? 0 : Math.PI / 2;
-  return { x: i % n, y: (i / n) | 0, a: ang };
+  // alongside the pier, in the water: just past the deck edge on the side away from the loading track
+  const ys = yardSquares(n, d), y0 = ys.find(q => q === i - 1 || q === i + 1 || q === i - n || q === i + n);
+  const out = y0 !== undefined ? i + (i - y0) : -1, k = out >= 0 && out < n * n && !g.world.terr[out] ? BERTH_OUT : 0;
+  const dx = y0 === undefined ? 0 : (i % n) - (y0 % n), dy = y0 === undefined ? 0 : ((i / n) | 0) - ((y0 / n) | 0);
+  return { x: (i % n) + dx * k, y: ((i / n) | 0) + dy * k, a: ang };
 }
