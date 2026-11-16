@@ -33,7 +33,7 @@ export const MODE_HINT: Record<Mode, string> = {
   train: '🚂 Trains roll out of the engine shed and run themselves: each takes the best waiting load where it is needed.',
   build: '🏗 Drag the picture where you want it. Blue row = loading track: your rails join it in line, at either end (gold arrows). Tap a ⟳ corner to turn it, double-tap it to build. ↶ Undo takes it back.',
   scout: '🔭 Tap a glowing town (scouts on foot) or dock (a boat), then drag or tap to draw the route into the fog. A 🗺 map (on a town card) shows where to look.',
-  map: '🗺 Tap the map to move the circle. A map marks hidden towns and landmarks in it with ?. Green circles are already mapped. If it finds nothing, you get half back.',
+  map: '🗺 Tap open land, sea or fog to move the circle (a town or building opens its card). A map marks hidden towns and landmarks in it with ?. Green circles are already mapped. If it finds nothing, you get half back.',
 };
 
 /** The build tools: what the player is doing, and the confirm bar it needs. */

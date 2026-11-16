@@ -101,6 +101,16 @@ const squareAt = (sx: number, sy: number) => {
   return x < 0 || y < 0 || x >= n || y >= n ? -1 : y * n + x;
 };
 
+/** true when a tap on this square opens a card: a seen town, plot, building, station hall or the engine shed */
+const opensCard = (i: number) => {
+  const n = game.world.n, x = i % n, y = (i / n) | 0;
+  if (!isRevealed(game, i)) return false;
+  if (game.s.shed && game.s.shed.x === x && game.s.shed.y === y) return true;
+  if (game.s.buildings?.some(b => footprint(n, b).includes(i))) return true;
+  if (hallAt(hallsOf(game.track, n, game.s.sites, game.world.terr), i)?.town) return true;
+  return game.s.sites.some(s => (s.kind === 'town' || s.kind === 'plot') && Math.abs(s.x - x) <= 1 && Math.abs(s.y - y) <= 1);
+};
+
 attachInput(canvas, () => game.s.camera, () => view, () => game.world.n * 32, {
   dragStart(sx, sy) { const i = squareAt(sx, sy); return i >= 0 && tools.dragStart(i); },
   dragMove(sx, sy) { const i = squareAt(sx, sy); if (i >= 0) tools.dragOver(i); },
@@ -108,6 +118,7 @@ attachInput(canvas, () => game.s.camera, () => view, () => game.world.n * 32, {
     if (tools.view) { const a = renderer.arrows.find(o => Math.hypot(o.sx - sx, o.sy - sy) < 24); if (a) { game.s.camera.x = (a.m.x + 0.5) * 32; game.s.camera.y = (a.m.y + 0.5) * 32; return; } }
     const i = squareAt(sx, sy); if (i < 0) return;
     if (tools.mode === 'pan') { const [wx, wy] = toWorld(game.s.camera, view, sx, sy); if (tools.tapWorld(wx, wy)) { renderCard(); return; } }
+    if (tools.mode === 'map' && opensCard(i)) { tools.mapPv = null; tools.mode = 'pan'; tools.cancel(); } // a town or building opens its card, never moves the map circle (he tapped Gullhaven and got the map purchase)
     if (tools.tapSquare(i)) return;
     const n = game.world.n, x = i % n, y = (i / n) | 0;
     if (!isRevealed(game, i)) { toast('Unexplored fog: 🔭 Scout from a town or dock on your railway, or lay track toward it'); return; }
