@@ -23,6 +23,8 @@ export interface Scene {
   sea: number; forest: number; grass: number; hills: number;
   /** a storm over a washout on screen (0-1) */
   storm: number;
+  /** where the camera looks (world point and zoom), so sound can tell when the map is being panned */
+  cam?: { x: number; y: number; z: number };
 }
 
 /** Effects fade out between these zooms: zoomed right out you hear only the music. */
@@ -39,7 +41,7 @@ export function place(g: Game, v: View, wx: number, wy: number): { vol: number; 
 }
 
 export function hearScene(g: Game, v: View): Scene {
-  const near = nearness(g.s.camera.z), out: Scene = { near, sources: [], sea: 0, forest: 0, grass: 0, hills: 0, storm: 0 };
+  const near = nearness(g.s.camera.z), out: Scene = { near, sources: [], sea: 0, forest: 0, grass: 0, hills: 0, storm: 0, cam: { x: g.s.camera.x, y: g.s.camera.y, z: g.s.camera.z } };
   const n = g.world.n;
   // builders at work on a building just put up: the player's own work, so heard a little even zoomed out, and a
   // building site drowns out what the building itself does (it works from the start, only quietly)
