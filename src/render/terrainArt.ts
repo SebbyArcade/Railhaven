@@ -131,7 +131,8 @@ function drawMountain(c: C2D, a: ArtCtx, X: number, Y: number, x: number, y: num
 }
 
 /** Moving water: foam along the coast, ripples and glints. Drawn every frame when zoomed in. */
-export function drawWaterLive(c: CanvasRenderingContext2D, w: World, x: number, y: number, tm: number) {
+/** waves: when given, the swell line is added to it (stroked once for all squares, much faster) instead of stroked here */
+export function drawWaterLive(c: CanvasRenderingContext2D, w: World, x: number, y: number, tm: number, waves?: Path2D) {
   const n = w.n, X = x * TILE, Y = y * TILE, H = (p: number, q: number, s = 0) => hash(w.seed, p, q, s);
   const L = (p: number, q: number) => p >= 0 && q >= 0 && p < n && q < n && w.terr[q * n + p]! > 0;
   const f = 0.16 + 0.14 * Math.sin(tm * 2 + x * 1.3 + y * 0.7), o = 3 + Math.sin(tm * 1.6 + x + y) * 1.2;
@@ -143,7 +144,8 @@ export function drawWaterLive(c: CanvasRenderingContext2D, w: World, x: number, 
     if (L(x - 1, y)) c.fillRect(X + o, Y + u, 1.5, 6);
     if (L(x + 1, y)) c.fillRect(X + TILE - o - 1.5, Y + u, 1.5, 6);
   }
-  c.strokeStyle = 'rgba(255,255,255,.18)'; c.lineWidth = 1.5; c.beginPath();
-  const q = Math.sin(tm * 1.5 + x * 0.7 + y) * 3; c.moveTo(X + 6, Y + 14 + q); c.quadraticCurveTo(X + 16, Y + 10 + q, X + 26, Y + 14 + q); c.stroke();
+  const q = Math.sin(tm * 1.5 + x * 0.7 + y) * 3, P = waves ?? (c.beginPath(), c);
+  P.moveTo(X + 6, Y + 14 + q); P.quadraticCurveTo(X + 16, Y + 10 + q, X + 26, Y + 14 + q);
+  if (!waves) { c.strokeStyle = 'rgba(255,255,255,.18)'; c.lineWidth = 1.5; c.stroke(); }
   if (H(x, y, 13) < 0.35) { c.fillStyle = `rgba(255,255,255,${0.18 + 0.12 * Math.sin(tm * 2 + x + y)})`; c.beginPath(); c.arc(X + 8 + H(x, y, 14) * 16, Y + 8 + H(y, x, 14) * 16, 1.6, 0, 7); c.fill(); }
 }

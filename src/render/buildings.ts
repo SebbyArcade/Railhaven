@@ -117,6 +117,39 @@ export function drawBuilding(ctx: CanvasRenderingContext2D, g: Game, b: Building
   void n;
 }
 
+/**
+ * Far out (zoom under FAR_ZOOM) a building is a few pixels wide but still hundreds of little shapes: with seventy of
+ * them panning lagged. Each is drawn into a picture that is refreshed about four times a second (a few a frame, so no frame
+ * stutters; at once when its level or building work changes), and the picture is drawn each frame. Close up buildings are drawn live as before.
+ */
+export const FAR_ZOOM = 0.45;
+type Pic = { c: HTMLCanvasElement; x: number; y: number; s: number; key: string; stock: number; at: number; used: number };
+const pics = new Map<number, Pic>();
+let budget = { tm: -1, left: 0 };
+const SCALES = [0.25, 0.375, 0.5, 0.75, 1, 1.5, 2];
+export function drawBuildingFar(ctx: CanvasRenderingContext2D, g: Game, b: Building, tm: number, zoom: number) {
+  if (zoom >= FAR_ZOOM || b.id < 0 || typeof document === 'undefined') { drawBuilding(ctx, g, b, tm, zoom); return; }
+  const m = ctx.getTransform(), px = Math.hypot(m.a, m.b), sc = SCALES.find(k => k >= px) ?? SCALES.at(-1)!;
+  const up = buildingUp(g, b), key = `${b.kind}/${b.x},${b.y},${+b.horizontal},${b.side},${b.lvl},${b.len ?? ''},${b.tracks ?? ''},${b.closed ? 1 : 0},${up === null ? '' : Math.round(up * 40)},${sc}`;
+  let p = pics.get(b.id);
+  const slot = Math.floor(tm * 4 + (b.id % 7) / 7); // four times a second, not every building on the same frame
+  if (tm !== budget.tm) budget = { tm, left: 6 }; // at most a few timed refreshes a frame, so no frame stutters
+  if (!p || p.key !== key || ((p.at !== slot || p.stock !== b.stock) && budget.left-- > 0)) { // stock and smoke: within the budget
+    const n = g.world.n; let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const i of [...yardSquares(n, b), ...buildingSquares(n, b)]) { const x = i % n, y = (i / n) | 0; x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x + 1); y1 = Math.max(y1, y + 1); }
+    const P = 24; x0 = x0 * TILE - P; y0 = y0 * TILE - P * 2; x1 = x1 * TILE + P; y1 = y1 * TILE + P; // room for smoke, shadows and carts
+    const c = p?.c ?? document.createElement('canvas'), w = Math.ceil((x1 - x0) * sc), h = Math.ceil((y1 - y0) * sc);
+    if (c.width !== w || c.height !== h) { c.width = w; c.height = h; }
+    const cx = c.getContext('2d'); if (!cx) { drawBuilding(ctx, g, b, tm, zoom); return; }
+    cx.setTransform(1, 0, 0, 1, 0, 0); cx.clearRect(0, 0, w, h); cx.setTransform(sc, 0, 0, sc, -x0 * sc, -y0 * sc);
+    drawBuilding(cx, g, b, tm, zoom);
+    p = { c, x: x0, y: y0, s: sc, key, stock: b.stock, at: slot, used: 0 }; pics.set(b.id, p);
+  }
+  p.used = tm;
+  ctx.drawImage(p.c, p.x, p.y, p.c.width / p.s, p.c.height / p.s);
+  if (pics.size > 40 && Math.random() < 0.02) for (const [k, v] of pics) if (tm - v.used > 4) pics.delete(k); // let go of ones off screen
+}
+
 /** A building's name and stock, its warning signs: drawn after the trains so a train in the yard never hides them. */
 export function drawBuildingTags(ctx: CanvasRenderingContext2D, g: Game, b: Building, tm: number, zoom: number) {
   const T = TILE;

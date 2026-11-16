@@ -20,20 +20,24 @@ export function townSize(s: Site): string {
   return (s.pop ?? 0) <= 0 ? 'Ruins' : sizeName(stepOf(s));
 }
 
-function drawTown(ctx: CanvasRenderingContext2D, g: Game, s: Site, tm: number, zoom: number, hall?: Hall) {
-  const X = (s.x + 0.5) * TILE, Y = (s.y + 0.5) * TILE, pop = s.pop ?? 0, H = (a: number, b: number, k: number) => hash(g.s.seed, a, b, k);
-  const L = s.lvl ?? 0, ruin = pop <= 0;
-  // the town spreads as it climbs the ladder: up to 18 houses for a Town, then more for each step after (a Megacity
-  // of 100,000 people once looked like a village)
-  const houses = ruin ? 4 : Math.min(18 + Math.max(0, L - 2) * 7, 64, 4 + Math.floor(Math.sqrt(pop)));
-  const { roofs, walls } = looks.theme; // the town theme picked in Looks (red roofs by default)
-  type Spot = { hx: number; hy: number; w: number; d: number; k: number; tall?: boolean; kind?: 'church' | 'hall' };
+type Spot = { hx: number; hy: number; w: number; d: number; k: number; tall?: boolean; kind?: 'church' | 'hall' };
+/**
+ * Where each house of a town stands. Working this out checks every house against the rails, the buildings and the
+ * parks, which is slow with many towns on screen, so it is kept until the railway, the town or its station changes
+ * (a new rail network is made whenever track or a building changes).
+ */
+const spotCache = new WeakMap<object, Map<Site, { key: string; spots: Spot[] }>>();
+function townSpots(g: Game, s: Site, houses: number, L: number, ruin: boolean, hall: Hall | undefined, door: { x: number; y: number } | null): Spot[] {
+  const key = `${houses}/${L}/${+ruin}/${hall ? hall.squares.join(',') : ''}/${door ? door.x + ',' + door.y : ''}/${g.s.buildings?.length ?? 0}/${g.s.parks?.length ?? 0}/${g.s.seed}`;
+  let m = spotCache.get(g.net); if (!m) spotCache.set(g.net, m = new Map());
+  const c = m.get(s); if (c && c.key === key) return c.spots;
+  const spots = layTown(g, s, houses, L, ruin, hall, door); m.set(s, { key, spots }); return spots;
+}
+function layTown(g: Game, s: Site, houses: number, L: number, ruin: boolean, hall: Hall | undefined, door: { x: number; y: number } | null): Spot[] {
+  const X = (s.x + 0.5) * TILE, Y = (s.y + 0.5) * TILE, H = (a: number, b: number, k: number) => hash(g.s.seed, a, b, k);
   const spots: Spot[] = [];
-  // a station beside the town: the town gathers round the station's forecourt, like a real railway town
-  const door = hall && !hall.squares.includes(s.y * g.world.n + s.x) ? stationDoor(g.s.seed, hall) : null;
   const CX = door ? door.x : X, CY = door ? door.y : Y;
   const onLane = (hx: number, hy: number, w: number) => !!door && Math.abs(hx - door.x) < w / 2 + 12 && Math.abs(hy - door.y) < 14; // the forecourt stays clear
-  if (door) forecourt(ctx, hall!, door, ruin);
   const place = (k: number, w: number, d: number, r: number, a: number): Spot | null => {
     for (let tries = 0; tries < 8; tries++) { // houses keep off the rails, the station and each other
       const rr = r + tries * 12, hx = CX + Math.cos(a) * rr, hy = CY + Math.sin(a) * rr * 0.8;
@@ -55,8 +59,14 @@ function drawTown(ctx: CanvasRenderingContext2D, g: Game, s: Site, tm: number, z
     const p = place(k, w, d, r, a); if (p) spots.push(tall ? { ...p, tall } : p);
   }
   spots.sort((p, q) => p.hy - q.hy); // back to front
+  return spots;
+}
+
+/** The houses of a town, back to front (marks: the church and town hall too). */
+function drawHouses(ctx: CanvasRenderingContext2D, g: Game, s: Site, spots: Spot[], ruin: boolean, tm: number, zoom: number, marks: boolean) {
+  const H = (a: number, b: number, k: number) => hash(g.s.seed, a, b, k), { roofs, walls } = looks.theme; // the town theme picked in Looks (red roofs by default)
   for (const { hx, hy, w, d, k, tall, kind } of spots) {
-    if (kind) { landmark(ctx, kind, hx, hy, w, d, tm, zoom); continue; }
+    if (kind) { if (marks) landmark(ctx, kind, hx, hy, w, d, tm, zoom); continue; }
     const big = d > 10;
     if (ruin) { // tumbled walls, no roof, weeds
       ctx.fillStyle = 'rgba(0,0,0,.2)'; ctx.fillRect(hx - w / 2 + 1.5, hy - d / 2 + 1.5, w, d);
@@ -85,6 +95,54 @@ function drawTown(ctx: CanvasRenderingContext2D, g: Game, s: Site, tm: number, z
     });
     if (zoom > 1.4 && k % 4 === 1) person(ctx, hx + w / 2 + 2, hy + d / 2 + 3, ['#a8402e', '#3f5a7a', '#5a7a3a'][k % 3]!);
   }
+}
+
+/**
+ * Zoomed out, a town's houses are drawn once into a picture and the picture is drawn each frame: hundreds of tiny
+ * houses made panning slow on a big map. Up to zoom 1 houses have no gardens, smoke or people, so the picture looks
+ * the same; the church clock and the town hall flag move, so they are drawn live on top.
+ */
+type Sprite = { spots: Spot[]; theme: unknown; s: number; c: HTMLCanvasElement; x: number; y: number; used: number };
+const sprites = new Map<Site, Sprite>();
+const SCALES = [0.25, 0.375, 0.5, 0.75, 1, 1.5, 2, 3];
+function spriteTown(ctx: CanvasRenderingContext2D, g: Game, s: Site, spots: Spot[], ruin: boolean, tm: number, zoom: number): boolean {
+  if (typeof document === 'undefined' || !spots.length) return false;
+  const m = ctx.getTransform(), px = Math.hypot(m.a, m.b); // screen pixels per world unit
+  const sc = SCALES.find(k => k >= px) ?? SCALES.at(-1)!;
+  let sp = sprites.get(s);
+  if (!sp || sp.spots !== spots || sp.theme !== looks.theme || sp.s !== sc) {
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const o of spots) { x0 = Math.min(x0, o.hx - o.w / 2); x1 = Math.max(x1, o.hx + o.w / 2); y0 = Math.min(y0, o.hy - o.d / 2); y1 = Math.max(y1, o.hy + o.d / 2); }
+    x0 -= 16; x1 += 16; y0 -= 40; y1 += 16; // room for bushes, shadows, roofs and chimneys
+    const c = sp?.c ?? document.createElement('canvas');
+    c.width = Math.ceil((x1 - x0) * sc); c.height = Math.ceil((y1 - y0) * sc);
+    const cx = c.getContext('2d'); if (!cx) return false;
+    cx.setTransform(sc, 0, 0, sc, -x0 * sc, -y0 * sc);
+    drawHouses(cx, g, s, spots, ruin, tm, zoom, false);
+    sp = { spots, theme: looks.theme, s: sc, c, x: x0, y: y0, used: 0 }; sprites.set(s, sp);
+  }
+  sp.used = performance.now();
+  ctx.drawImage(sp.c, sp.x, sp.y, sp.c.width / sc, sp.c.height / sc);
+  for (const o of spots) if (o.kind) landmark(ctx, o.kind, o.hx, o.hy, o.w, o.d, tm, zoom);
+  return true;
+}
+/** Pictures of towns not drawn for a few seconds are let go (they take memory). */
+function dropSprites() {
+  const now = performance.now();
+  for (const [k, v] of sprites) if (now - v.used > 4000) sprites.delete(k);
+}
+
+function drawTown(ctx: CanvasRenderingContext2D, g: Game, s: Site, tm: number, zoom: number, hall?: Hall) {
+  const pop = s.pop ?? 0;
+  const L = s.lvl ?? 0, ruin = pop <= 0;
+  // the town spreads as it climbs the ladder: up to 18 houses for a Town, then more for each step after (a Megacity
+  // of 100,000 people once looked like a village)
+  const houses = ruin ? 4 : Math.min(18 + Math.max(0, L - 2) * 7, 64, 4 + Math.floor(Math.sqrt(pop)));
+  // a station beside the town: the town gathers round the station's forecourt, like a real railway town
+  const door = hall && !hall.squares.includes(s.y * g.world.n + s.x) ? stationDoor(g.s.seed, hall) : null;
+  if (door) forecourt(ctx, hall!, door, ruin);
+  const spots = townSpots(g, s, houses, L, ruin, hall, door);
+  if (zoom > 1 || !spriteTown(ctx, g, s, spots, ruin, tm, zoom)) drawHouses(ctx, g, s, spots, ruin, tm, zoom, true);
   // name board
   const fs = Math.max(11, 12 / Math.min(1, zoom));
   ctx.font = `700 ${fs}px Georgia,serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
@@ -198,4 +256,5 @@ export function drawSites(ctx: CanvasRenderingContext2D, g: Game, x0: number, y0
     else if (s.kind === 'plot') drawPlot(ctx, g, s);
     else if (!s.hidden) drawDeposit(ctx, s);
   }
+  dropSprites();
 }
