@@ -45,6 +45,8 @@ function builtOn(g: Game, i: number): boolean {
 /** Draws one frame. Reads the game, never changes it. */
 export class Renderer {
   readonly terrain: TerrainCache;
+  /** the station halls drawn last frame (screenshot checks find them here) */
+  halls: import("../buildings/stations.ts").Hall[] = [];
   private plan: Plan = Object.assign(new Map(), { docks: new Map() });
   private planAt = -9;
   private alerts = new Set<number>();
@@ -76,8 +78,8 @@ export class Renderer {
       let k = 0; for (const q of p.squares) if (!g.world.terr[q]) k = Math.max(k, landDistance(g, q));
       return Math.min(3, k);
     });
-    const halls = hallsOf(g.track, n, g.s.sites, g.world.terr);
-    for (const h of halls) if (vis(h.squares[1]) && isRevealed(g, h.squares[1])) drawHall(ctx, g.s.seed, h, cam.z);
+    const halls = hallsOf(g.track, n, g.s.sites, g.world.terr); this.halls = halls;
+    for (const h of halls) if (vis(h.squares[1]) && isRevealed(g, h.squares[1])) drawHall(ctx, g.s.seed, h, cam.z, tm);
     drawParks(ctx, g, x0, y0, x1, y1, cam.z, tm);
     drawSites(ctx, g, x0, y0, x1, y1, cam.z, tm, halls);
     for (const b of g.s.buildings ?? []) if (vis(b.y * n + b.x) && isRevealed(g, b.y * n + b.x)) drawFields(ctx, g, b, tm, cam.z);
