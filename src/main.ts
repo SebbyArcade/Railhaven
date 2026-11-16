@@ -27,7 +27,7 @@ import { MODE_HINT, type Mode, Tools } from './ui/tools.ts';
 import { setClosed } from './buildings/closing.ts';
 import { GOODS, type Good, INDUSTRIES, info, inputsOf, type IndustryKind, isFactory, lockedText, priceOf, yardSet } from './buildings/industries.ts';
 import { tickProduction } from './economy/production.ts';
-import type { Game } from './state.ts';
+import type { Game, Site } from './state.ts';
 import { footprint } from './buildings/industries.ts';
 import { type Card, cardHtml } from './ui/cards.ts';
 import { sendExpedition } from './world/expedition.ts';
@@ -50,6 +50,7 @@ import { gameHtml } from './ui/gamecard.ts';
 import { decodeLegacy, importLegacy, isLegacy } from './save/legacy.ts';
 import { LESSONS, lessonOn, lessonText, skipLessons } from './progress/lessons.ts';
 import { toScreen } from './render/camera.ts';
+import { townBadgeAt } from './render/orders.ts';
 import { yardSquares, isLinked } from './buildings/industries.ts';
 import { orderDone } from './economy/towns.ts';
 import { townLinked } from './economy/towns.ts';
@@ -112,6 +113,23 @@ const opensCard = (i: number) => {
   return game.s.sites.some(s => (s.kind === 'town' || s.kind === 'plot') && Math.abs(s.x - x) <= 1 && Math.abs(s.y - y) <= 1);
 };
 
+/**
+ * The town a tap at screen (sx, sy) means when its own square isn't hit: its badge (⬆ or order rings, drawn above the
+ * town and large when zoomed out), or, zoomed out, its square with a finger's room around it. Map mode zooms out so far
+ * that a square is a few pixels (he tapped an upgradable town and got the map purchase, 2026-11-16).
+ */
+const townTapAt = (sx: number, sy: number): { badge?: Site; near?: Site } => {
+  const c = game.s.camera, [wx, wy] = toWorld(c, view, sx, sy), n = game.world.n;
+  const badge = townBadgeAt(game, c.z, wx, wy, 10 / c.z), r = 22 / c.z;
+  if (r <= 48) return { badge }; // zoomed in, the town's 3x3 squares are already roomy
+  let near: Site | undefined, bd = r;
+  for (const t of game.s.sites) {
+    if (t.kind !== 'town' || !isRevealed(game, t.y * n + t.x)) continue;
+    const d = Math.hypot((t.x + 0.5) * 32 - wx, (t.y + 0.5) * 32 - wy); if (d < bd) { bd = d; near = t; }
+  }
+  return { badge, near };
+};
+
 attachInput(canvas, () => game.s.camera, () => view, () => game.world.n * 32, {
   dragStart(sx, sy) { const i = squareAt(sx, sy); return i >= 0 && tools.dragStart(i); },
   dragMove(sx, sy) { const i = squareAt(sx, sy); if (i >= 0) tools.dragOver(i); },
@@ -119,7 +137,8 @@ attachInput(canvas, () => game.s.camera, () => view, () => game.world.n * 32, {
     if (tools.view) { const a = renderer.arrows.find(o => Math.hypot(o.sx - sx, o.sy - sy) < 24); if (a) { game.s.camera.x = (a.m.x + 0.5) * 32; game.s.camera.y = (a.m.y + 0.5) * 32; return; } }
     const i = squareAt(sx, sy); if (i < 0) return;
     if (tools.mode === 'pan') { const [wx, wy] = toWorld(game.s.camera, view, sx, sy); if (tools.tapWorld(wx, wy)) { renderCard(); return; } }
-    if (tools.mode === 'map' && opensCard(i)) { tools.mapPv = null; tools.mode = 'pan'; tools.cancel(); } // a town or building opens its card, never moves the map circle (he tapped Gullhaven and got the map purchase)
+    const tt = tools.mode === 'pan' || tools.mode === 'map' ? townTapAt(sx, sy) : {};
+    if (tools.mode === 'map' && (opensCard(i) || tt.badge || tt.near)) { tools.mapPv = null; tools.mode = 'pan'; tools.cancel(); } // a town or building opens its card, never moves the map circle (he tapped Gullhaven and got the map purchase)
     if (tools.tapSquare(i)) return;
     const n = game.world.n, x = i % n, y = (i / n) | 0;
     if (!isRevealed(game, i)) { toast('Unexplored fog: 🔭 Scout from a town or dock on your railway, or lay track toward it'); return; }
@@ -128,7 +147,7 @@ attachInput(canvas, () => game.s.camera, () => view, () => game.world.n * 32, {
     const br = game.s.breaks?.find(b => b.square === i);
     if (br) { const s = Math.ceil(br.crewAt - game.s.t); toast(`${BREAK_TEXT[br.kind]}: trains go round or wait. ${s > 0 ? `Repair crew arrives in ${s} s` : `Repair crew at work, ${Math.ceil(br.doneAt - game.s.t)} s left`}`); return; }
     if (game.s.shed && game.s.shed.x === x && game.s.shed.y === y) { openCard({ kind: 'shed', id: 0 }); return; }
-    const site = hallAt(hallsOf(game.track, n, game.s.sites, game.world.terr, yardSet(game)), i)?.town ?? game.s.sites.find(s => Math.abs(s.x - x) <= 1 && Math.abs(s.y - y) <= 1);
+    const site = hallAt(hallsOf(game.track, n, game.s.sites, game.world.terr, yardSet(game)), i)?.town ?? tt.badge ?? game.s.sites.find(s => Math.abs(s.x - x) <= 1 && Math.abs(s.y - y) <= 1) ?? tt.near;
     const bld = game.s.buildings?.find(b => footprint(n, b).includes(i));
     if (bld) { openCard({ kind: 'bld', id: bld.id }); return; }
     if (site?.kind === 'town') { openCard({ kind: 'town', id: site.id }); return; }
@@ -633,6 +652,7 @@ function updateUi() {
   cb.classList.toggle('two', !!bar?.near);
   if (bar) { const h = $('hint'), r = h.style.display !== 'none' && h.offsetHeight ? h.getBoundingClientRect() : null; cb.style.bottom = r ? `${Math.round(innerHeight - r.top + 8)}px` : ''; } // sit just above the hint, however many lines it has
   if (bar) { $('ctext').textContent = bar.text; ($('ok') as HTMLButtonElement).disabled = !bar.can; $('ok').textContent = bar.ok; }
+  $('ok').classList.toggle('sure', !!bar?.sure);
 }
 
 let lastSeason = -1;
