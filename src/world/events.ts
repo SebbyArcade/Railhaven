@@ -1,9 +1,11 @@
 import type { Game } from '../state.ts';
 import type { Train } from '../trains/train.ts';
 import { bodyPoint } from '../trains/train.ts';
-import { buildingSquares, capOf, INDUSTRIES, isLinked, type Building } from '../buildings/industries.ts';
+import { buildingSquares, capOf, INDUSTRIES, isLinked, type Building, yardSquares } from '../buildings/industries.ts';
 import { townLinked } from '../economy/towns.ts';
 import { breakRail } from '../track/breaks.ts';
+import { hallOf } from '../buildings/stations.ts';
+import { backRun, type CrewRun, crewRun, railPath, runTime } from './crews.ts';
 import { hash } from '../core/rng.ts';
 import { TILE } from './terrain.ts';
 
@@ -89,16 +91,20 @@ export function tickEvents(g: Game, dt: number): boolean {
     }
   }
   // 🔥 fires: a working building stops until the fire crew from the nearest town on the railway puts it out
-  for (const b of s.buildings ?? []) if (b.fire && s.t >= b.fire.doneAt) { b.fire = undefined; news(`🚒 The fire at the ${INDUSTRIES[b.kind].name} ${nearName(g, b.x, b.y)} is out: it is working again`); }
+  for (const b of s.buildings ?? []) if (b.fire && s.t >= b.fire.doneAt) { if (b.fire.run) (s.crews ??= []).push(backRun(b.fire.run, s.t)); b.fire = undefined; news(`🚒 The fire at the ${INDUSTRIES[b.kind].name} ${nearName(g, b.x, b.y)} is out: it is working again`); }
   if (s.t >= ne.fire) {
     ne.fire = gap(g, 6, FIRE_GAP);
     const ok = (s.buildings ?? []).filter(b => b.kind !== 'dock' && isLinked(g, b) && b.stock < capOf(b) && !b.fire);
     if (ok.length && !(s.buildings ?? []).some(b => onFire(g, b))) {
       const b = ok[Math.floor(hash(s.seed, Math.floor(s.t), ok.length, 58) * ok.length)]!, n = g.world.n, m = buildingSquares(n, b)[1]!;
       const towns = s.sites.filter(t => t.kind === 'town' && townLinked(g, t)), x = m % n, y = (m / n) | 0;
-      const from = towns.sort((a, c) => Math.hypot(a.x - x, a.y - y) - Math.hypot(c.x - x, c.y - y))[0];
-      const crewAt = s.t + crewTime(g, x, y, from); b.fire = { crewAt, doneAt: crewAt + FIX_FIRE };
-      news(`🔥 Fire at the ${INDUSTRIES[b.kind].name} ${nearName(g, x, y)}! It stops working until the fire crew${from?.name ? ` from ${from.name}` : ''} puts it out`);
+      towns.sort((a, c) => Math.hypot(a.x - x, a.y - y) - Math.hypot(c.x - x, c.y - y)); const from = towns[0];
+      // the crew rides the rails from the nearest town's station that has a way there
+      let run: CrewRun | null = null, base = from;
+      for (const t of towns) { const h = hallOf(g.track, n, t, g.world.terr); run = h ? crewRun(g, 'fire', railPath(g, h.squares, yardSquares(n, b)), s.t) : null; if (run) { base = t; break; } }
+      const crewAt = run ? s.t + runTime(run) : s.t + crewTime(g, x, y, from);
+      b.fire = { crewAt, doneAt: crewAt + FIX_FIRE, ...(run ? { run } : {}), ...(base?.name ? { from: base.name } : {}) };
+      news(`🔥 Fire at the ${INDUSTRIES[b.kind].name} ${nearName(g, x, y)}! It stops working until the fire crew${base?.name ? ` from ${base.name}` : ''} ${run ? 'rides out along the rails and ' : ''}puts it out`);
     }
   }
   return railsBroke;

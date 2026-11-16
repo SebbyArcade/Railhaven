@@ -2,10 +2,19 @@ import { hash } from '../core/rng.ts';
 import type { Game } from '../state.ts';
 import { hallsOf } from '../buildings/stations.ts';
 import { closedPieces, tickClosures } from '../buildings/closing.ts';
+import { shedSiding } from '../buildings/shed.ts';
+import { backRun, crewRun, railPath, runTime, tickCrews } from '../world/crews.ts';
+
+/** Where the repair crew sets off: the engine shed's siding, else Ashford's station. */
+function crewBase(g: Game): number[] {
+  const sd = shedSiding(g); if (sd) return [sd.line];
+  const a = g.s.sites[0]!, h = hallsOf(g.track, g.world.n, [a], g.world.terr)[0];
+  return h ? h.squares : [a.y * g.world.n + a.x];
+}
 
 /**
  * Broken rails: now and then a busy stretch of line is blocked (a rockslide, washout, fallen tree or heat buckle).
- * A repair crew rides out on a handcar from the engine shed and fixes it; trains go round or wait.
+ * A repair crew rides out along the rails on a handcar from the engine shed, fixes it and rides back; trains go round or wait.
  */
 export interface Break {
   square: number;
@@ -13,6 +22,8 @@ export interface Break {
   /** game time the crew arrives, and when the rail is fixed */
   crewAt: number;
   doneAt: number;
+  /** the repair crew's ride along the rails from the engine shed */
+  run?: import('../world/crews.ts').CrewRun;
 }
 
 export const BREAKS_START = 15 * 60;
@@ -48,8 +59,9 @@ export function breakRail(g: Game, at?: number): Break | null {
   const kind = kinds[Math.floor(hash(g.s.seed, pick, Math.floor(g.s.t), 32) * 4)]!;
   // the crew rides out from the engine shed (or Ashford) at about a square a second
   const from = g.s.shed ?? g.s.sites[0]!, x = pick % n, y = (pick / n) | 0;
-  const crewAt = g.s.t + 5 + Math.hypot(x - from.x, y - from.y) * 0.8;
-  const b: Break = { square: pick, kind, crewAt, doneAt: crewAt + REPAIR_TIME };
+  const run = crewRun(g, 'repair', railPath(g, crewBase(g), [pick]), g.s.t);
+  const crewAt = run ? g.s.t + runTime(run) : g.s.t + 5 + Math.hypot(x - from.x, y - from.y) * 0.8;
+  const b: Break = { square: pick, kind, crewAt, doneAt: crewAt + REPAIR_TIME, ...(run ? { run } : {}) };
   (g.s.breaks ??= []).push(b);
   return b;
 }
@@ -62,7 +74,11 @@ export function tickBreaks(g: Game): boolean {
     s.nextBreak = s.t + GAP_MIN + hash(s.seed, Math.floor(s.t), 3, 34) * (GAP_MAX - GAP_MIN);
     if ((s.breaks?.length ?? 0) < MAX_ACTIVE && breakRail(g)) changed = true;
   }
-  if (s.breaks?.some(b => s.t >= b.doneAt)) { s.breaks = s.breaks.filter(b => s.t < b.doneAt); changed = true; }
+  if (s.breaks?.some(b => s.t >= b.doneAt)) {
+    for (const b of s.breaks) if (s.t >= b.doneAt && b.run) (s.crews ??= []).push(backRun(b.run, s.t)); // the crew rides home
+    s.breaks = s.breaks.filter(b => s.t < b.doneAt); changed = true;
+  }
+  tickCrews(g);
   if (tickClosures(g)) changed = true; // ⛔ a closed building's barriers went up or down
   return changed;
 }

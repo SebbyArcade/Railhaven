@@ -58,6 +58,8 @@ export interface GameState {
   shed?: Shed;
   /** broken rails being repaired, and when the next one may happen */
   breaks?: Break[];
+  /** crews riding back to base along the rails after a job (drawn only) */
+  crews?: import('./world/crews.ts').CrewRun[];
   nextBreak?: number;
   /** a storm drifting over the map, and when the next storm, breakdown and fire may come */
   storm?: import('./world/events.ts').Storm;
