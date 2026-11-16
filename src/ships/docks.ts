@@ -88,12 +88,15 @@ export function landingSeeds(g: Game, linked: Set<number>): number[] {
   return out;
 }
 
-/** A dock on the railway charts the sea it reaches: coasts and water within range come out of the fog. */
+/** A dock charts this share of the sea it can reach (the far part stays for ships and scouts to find). */
+export const CHART_SHARE = 0.75;
+
+/** A dock on the railway charts the nearer part of the sea it reaches: coasts and water there come out of the fog. */
 export function chartSea(g: Game, b: Building): number {
   const R = dockRange(b); if ((b.chart ?? 0) >= R) return 0;
   const d = seaDist(g, b), n = g.world.n, t = g.world.terr; let k = 0;
   for (let i = 0; i < n * n; i++) {
-    const v = d[i]!; if (v < 0 || v > R) continue;
+    const v = d[i]!; if (v < 0 || v > R * CHART_SHARE) continue;
     k += reveal(g, i % n, (i / n) | 0, t[i] ? 0 : 1); // water and the shore beside it
   }
   for (const i of yardSquares(n, b)) k += reveal(g, i % n, (i / n) | 0, 4);
