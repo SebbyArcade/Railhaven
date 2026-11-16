@@ -336,7 +336,9 @@ function buildingCard(g: Game, b: Building, page?: string): string {
   }
   h += `<div class="row"><b class="ico">📦</b><div class="grow"><div class="line"><span>${G.name} ready</span><span>${Math.floor(b.stock)} / ${cap}</span></div>${bar(b.stock / cap, b.stock >= cap ? '#e0584a' : '#5cc46a')}${b.stock >= cap ? '<small>Full: it stops making more until a train collects</small>' : ''}</div></div>`;
   const ship = plan.get(b.id);
-  const why = (w: Ship['why']) => w === 'order' ? '📋 For its order (full pay)' : w === 'factory' ? '🏭 To make into a product (half pay)' : w === 'steady' ? '🛒 It keeps buying this (part pay)' : '💸 No town needs it now: sold cheap';
+  // 'extra' to a town whose order still lists this good: the trains already on their way bring all the order needs
+  const covered = (to?: Ship['to']) => { const t = to?.kind === 'town' ? g.s.sites.find(s => s.id === to.id) : undefined; return !!t && (orderOf(g, t)[k] ?? 0) > (t.got?.[k] ?? 0); };
+  const why = (w: Ship['why'], to?: Ship['to']) => w === 'order' ? '📋 For its order (full pay)' : w === 'factory' ? '🏭 To make into a product (half pay)' : w === 'steady' ? '🛒 It keeps buying this (part pay)' : covered(to) ? '🚂 Trains on the way already bring all its order needs: more is sold cheap' : '💸 No town needs it now: sold cheap';
   const pinned = b.pin && ship && sameDest(ship.to, b.pin);
   if (page === 'pin') { // choose where its goods go
     h = `<div class="head"><b class="big">📌</b><div><h2>Where should the ${esc(d.name)} send ${G.icon} ${G.name.toLowerCase()}?</h2></div></div>`;
@@ -345,11 +347,11 @@ function buildingCard(g: Game, b: Building, page?: string): string {
     if (!ds.length) h += `<div class="note">No town or factory on its railway yet</div>`;
     for (const x of ds.slice(0, 12)) {
       const on = !!b.pin && sameDest(b.pin, x.to);
-      h += `<div class="row${on ? ' ok' : ''}"><b class="ico">${x.to.kind === 'town' ? '🏘' : '🏭'}</b><div class="grow"><div class="line"><span>${esc(x.to.kind === 'bld' ? 'the ' + placeName(g, g.s.buildings!.find(o => o.id === x.to.id)!) : destName(g, x.to))}</span><span>${x.d} squares</span></div><small>${why(x.why)}</small></div><button class="mini${on ? ' on' : ''}" data-act="pin" data-id="${b.id}" data-kind="${x.to.kind}" data-to="${x.to.id}">${on ? '📌 Pinned' : '📌 Send here'}</button></div>`;
+      h += `<div class="row${on ? ' ok' : ''}"><b class="ico">${x.to.kind === 'town' ? '🏘' : '🏭'}</b><div class="grow"><div class="line"><span>${esc(x.to.kind === 'bld' ? 'the ' + placeName(g, g.s.buildings!.find(o => o.id === x.to.id)!) : destName(g, x.to))}</span><span>${x.d} squares</span></div><small>${why(x.why, x.to)}</small></div><button class="mini${on ? ' on' : ''}" data-act="pin" data-id="${b.id}" data-kind="${x.to.kind}" data-to="${x.to.id}">${on ? '📌 Pinned' : '📌 Send here'}</button></div>`;
     }
     return h + `<small class="why">A pinned building keeps sending there, even when somewhere else needs it more.</small><button class="act back" data-act="page" data-page="">‹ Back</button>`;
   }
-  if (ship) h += `<div class="row"><b class="ico">${pinned ? '📌' : '➡'}</b><div class="grow"><div class="line"><span>Sends to <b>${esc(destName(g, ship.to))}</b></span><span>${ship.d} squares</span></div><small>${why(ship.why)}${pinned ? ' · 📌 you chose this' : ''}</small></div><button class="mini" data-act="page" data-page="pin">📌 Choose</button></div>`;
+  if (ship) h += `<div class="row"><b class="ico">${pinned ? '📌' : '➡'}</b><div class="grow"><div class="line"><span>Sends to <b>${esc(destName(g, ship.to))}</b></span><span>${ship.d} squares</span></div><small>${why(ship.why, ship.to)}${pinned ? ' · 📌 you chose this' : ''}</small></div><button class="mini" data-act="page" data-page="pin">📌 Choose</button></div>`;
   else if (linked && !b.closed) h += `<div class="warn">🏘 No town on the railway yet to take it</div>`;
   if (b.pin && !pinned) h += `<div class="warn">📌 It is pinned to ${esc(destName(g, b.pin as Dest))}, which its trains can't reach now: it sends automatically meanwhile</div>`;
   const tr = g.s.trains.filter(t => t.job?.src === b.id || (t.job && sameDest(t.job.to, { kind: 'bld', id: b.id })));
