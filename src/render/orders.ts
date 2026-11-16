@@ -1,18 +1,24 @@
-import type { Game } from '../state.ts';
+import type { Game, Site } from '../state.ts';
 import type { Building } from '../buildings/industries.ts';
 import { buildingSquares, capOf, GOODS, type Good, INDUSTRIES, inputsOf, isFactory, isLinked, yardSquares } from '../buildings/industries.ts';
 import { orderDone, orderOf, townLinked } from '../economy/towns.ts';
 import { type Ship, siteOf } from '../economy/shipping.ts';
 import { TILE } from '../world/terrain.ts';
+import { isRevealed } from '../world/fog.ts';
+import { joinGap } from '../track/joins.ts';
 
 /**
  * Above each town on the railway: its open order goods, each with a gold ring that fills as goods arrive and a
  * red dot when no building ships it there. A bouncing ⬆ when the order is filled and the town can grow.
+ * For each town you've found but not linked, when your track already comes within a few squares: those missing
+ * squares outlined in gold, so a near miss is plain to see.
  */
 export function drawTownBadges(ctx: CanvasRenderingContext2D, g: Game, plan: Map<number, Ship>, zoom: number, tm: number) {
   const s = Math.max(1, 1 / zoom * 1.4);
+  const n = g.world.n;
   for (const t of g.s.sites) {
-    if (t.kind !== 'town' || !townLinked(g, t)) continue;
+    if (t.kind !== 'town') continue;
+    if (!townLinked(g, t)) { if (isRevealed(g, t.y * n + t.x)) drawUnlinked(ctx, g, t, tm); continue; }
     const X = (t.x + 0.5) * TILE, Y = (t.y - 1.1) * TILE;
     if (orderDone(g, t)) {
       const b = Math.sin(tm * 4) * 3;
@@ -32,6 +38,27 @@ export function drawTownBadges(ctx: CanvasRenderingContext2D, g: Game, plan: Map
       const fed = (g.s.buildings ?? []).some(b => INDUSTRIES[b.kind].makes === k && plan.get(b.id)?.to.kind === 'town' && plan.get(b.id)?.to.id === t.id);
       if (!fed) { ctx.fillStyle = '#e0584a'; ctx.beginPath(); ctx.arc(x + r * 0.75, Y - r * 0.75, 2.4 * s, 0, 7); ctx.fill(); }
     });
+  }
+}
+
+/** For a town not on the railway (its name board shows 🔌): the squares of track still missing when your line comes close. */
+function drawUnlinked(ctx: CanvasRenderingContext2D, g: Game, t: Site, tm: number) {
+  const n = g.world.n, p = 0.5 + 0.5 * Math.sin(tm * 3);
+  const gap = joinGap(g, t);
+  if (gap) {
+    ctx.save(); ctx.lineWidth = 2; ctx.setLineDash([5, 4]); ctx.lineDashOffset = -tm * 8;
+    for (const i of gap.squares) {
+      const x = (i % n) * TILE, y = ((i / n) | 0) * TILE;
+      ctx.fillStyle = `rgba(255,214,120,${0.14 + 0.12 * p})`; ctx.fillRect(x + 3, y + 3, TILE - 6, TILE - 6);
+      ctx.strokeStyle = `rgba(255,214,120,${0.65 + 0.35 * p})`; ctx.strokeRect(x + 3, y + 3, TILE - 6, TILE - 6);
+    }
+    ctx.setLineDash([]);
+    // a gold arrow from the railway square where the new track starts into the first missing square
+    const a = gap.from, b = gap.squares[0]!, ang = Math.atan2(((b / n) | 0) - ((a / n) | 0), b % n - a % n);
+    ctx.translate((a % n + 0.5) * TILE + Math.cos(ang) * TILE * 0.5, (((a / n) | 0) + 0.5) * TILE + Math.sin(ang) * TILE * 0.5); ctx.rotate(ang);
+    ctx.fillStyle = `rgba(255,214,120,${0.75 + 0.25 * p})`; ctx.strokeStyle = 'rgba(40,28,10,.8)'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(7, 0); ctx.lineTo(-5, -6); ctx.lineTo(-2, 0); ctx.lineTo(-5, 6); ctx.closePath(); ctx.fill(); ctx.stroke();
+    ctx.restore();
   }
 }
 

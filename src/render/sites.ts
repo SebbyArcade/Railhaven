@@ -1,5 +1,5 @@
 import { foundPrice } from '../economy/towns.ts';
-import { sizeName, stepOf } from '../economy/towns.ts';
+import { sizeName, stepOf, townLinked } from '../economy/towns.ts';
 import { isCapital, tradeOf } from '../economy/trade.ts';
 import { GOODS } from '../buildings/industries.ts';
 import { looks } from './looks.ts';
@@ -89,19 +89,21 @@ function drawTown(ctx: CanvasRenderingContext2D, g: Game, s: Site, tm: number, z
   ctx.font = `700 ${fs}px Georgia,serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   // 👑 region capitals, once there is more than one region
   const cap = !!g.s.caps && Object.keys(g.s.caps).length > 0 && isCapital(g, s);
-  const label = (cap ? '👑 ' : '') + (s.name ?? ''), tw = ctx.measureText(label).width + 12;
+  const off = !townLinked(g, s); // found but not on the railway: a 🔌 and a dashed orange edge on its board
+  const label = (off ? '🔌 ' : cap ? '👑 ' : '') + (s.name ?? ''), tw = ctx.measureText(label).width + 12;
   // the board sits in the middle of the town: below the town square, or among the houses round a station beside it
   const Hb = fs * 1.75 + 14;
   const { LX, BT } = labelAt(g.s.seed, s, hall, g.world.n, tw, Hb);
   ctx.fillStyle = 'rgba(58,40,24,.92)'; ctx.fillRect(LX - tw / 2, BT, tw, fs + 6);
-  ctx.strokeStyle = '#c99a5b'; ctx.lineWidth = 1; ctx.strokeRect(LX - tw / 2, BT, tw, fs + 6);
+  if (off) { ctx.strokeStyle = '#f08c3c'; ctx.lineWidth = 1.6; ctx.setLineDash([4, 3]); ctx.strokeRect(LX - tw / 2, BT, tw, fs + 6); ctx.setLineDash([]); }
+  else { ctx.strokeStyle = '#c99a5b'; ctx.lineWidth = 1; ctx.strokeRect(LX - tw / 2, BT, tw, fs + 6); }
   ctx.fillStyle = '#ffe9c4'; ctx.fillText(label, LX, BT + (fs + 6) / 2 + 1);
   if (zoom >= 1.15) {
     ctx.font = `600 ${fs * 0.75}px system-ui`; ctx.fillStyle = 'rgba(20,18,14,.75)';
     const tr = tradeOf(g, s);
-    const sz = townSize(s) + (pop > 0 ? ' · 👥 ' + Math.floor(pop) : '') + (tr ? ` · 🤝 ${GOODS[tr.good].icon} ${tr.got}/${tr.need}` : ''), sw = ctx.measureText(sz).width + 10;
+    const sz = townSize(s) + (off ? ' · not on the railway' : (pop > 0 ? ' · 👥 ' + Math.floor(pop) : '') + (tr ? ` · 🤝 ${GOODS[tr.good].icon} ${tr.got}/${tr.need}` : '')), sw = ctx.measureText(sz).width + 10;
     ctx.fillRect(LX - sw / 2, BT + fs + 8, sw, fs * 0.75 + 5);
-    ctx.fillStyle = '#f3e6c8'; ctx.fillText(sz, LX, BT + fs + 8 + (fs * 0.75 + 5) / 2 + 1);
+    ctx.fillStyle = off ? '#ffb070' : '#f3e6c8'; ctx.fillText(sz, LX, BT + fs + 8 + (fs * 0.75 + 5) / 2 + 1);
   }
 }
 

@@ -306,6 +306,9 @@ cardEl.onclick = e => {
     const to = { kind: b.dataset.kind as 'town' | 'bld', id: +b.dataset.id! }, k = b.dataset.good as Good, d = +b.dataset.d!, r = rushMore(game, to, k, d);
     toast(typeof r === 'string' ? r : r >= 0 ? `⭐ ${d} more · ${fmtMoney(r)}` : `⭐ ${-d} fewer · ${fmtMoney(-r)} back`); renderCard(); return;
   }
+  if (b.dataset.act === 'railtown') { // 🔌 on a town card: Rails mode there, its join squares and arrows showing
+    closeCard(); lookAt(+b.dataset.x!, +b.dataset.y!); tools.setMode('rail'); toast('🛤 Drag track from your line to the gold squares or arrows'); return;
+  }
   if (b.dataset.act === 'railto') { // 🔌 from the Orders board: Rails mode at a building that isn't joined yet
     closeCard(); lookAt(+b.dataset.x!, +b.dataset.y!); tools.setMode('rail'); toast('🛤 Drag track from your line to one end of its yard'); return;
   }

@@ -18,6 +18,7 @@ import { buildingSquares, footprint, type IndustryKind, isLinked, outputOf, yard
 import { buildNoGo, railNoGo } from '../buildings/nogo.ts';
 import { turnSquares } from '../ui/tools.ts';
 import { townLinked } from '../economy/towns.ts';
+import { joinGap } from '../track/joins.ts';
 import { TerrainCache } from './terrainCache.ts';
 import { drawWaterLive } from './terrainArt.ts';
 import { drawTrack } from './track.ts';
@@ -309,6 +310,12 @@ export class Renderer {
       if (h) { // a station already stands there: join one of its ends
         for (const [e, inner] of [[h.approaches[0], h.squares[0]], [h.approaches[1], h.squares[2]]] as const) if (open(e) || g.track.has(e)) { glow(e); arrow(e, inner); }
         pill((s.x + 0.5) * TILE, (s.y - 1.4) * TILE, `🛤 Join ${s.name ?? 'the town'}'s station at an arrow`, '#ffd27a');
+        continue;
+      }
+      const gap = joinGap(g, s);
+      if (gap) { // your track comes close: the gold squares (drawn with the town badges) are the way in, nothing else
+        const top = Math.min(s.y, ...gap.squares.map(i => (i / n) | 0));
+        pill((s.x + 0.5) * TILE, (top - 0.45) * TILE, `🛤 Join ${s.name ?? 'the town'}: lay track over the gold squares`, '#ffd27a');
         continue;
       }
       glow(c);

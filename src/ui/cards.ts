@@ -2,6 +2,7 @@ import { hallOf } from '../buildings/stations.ts';
 import type { Game, Site } from '../state.ts';
 import { fallsMul, POI, POI_RARITY, poisOf, RARITY } from '../world/explore.ts';
 import { isleCard, reportsHtml, scoutCard } from './discover.ts';
+import { joinGap } from '../track/joins.ts';
 import { aName, buildingSquares, farText, yardSquares, bufOf, growsTracks, stripError, tracksOf, type Building, capOf, GOODS, type Good, INDUSTRIES, type IndustryKind, inputsOf, isFactory, isLinked, lockedText, outputOf, shareAt, forestOf, stumpsOf } from '../buildings/industries.ts';
 import { factoryState } from '../economy/production.ts';
 import { hasProject, nextParkPrice, orderMul, PARK_PRICE, parkSpot, parksOf, payMul, projectsFor, projectsOf, rewardMul } from '../buildings/parks.ts';
@@ -73,7 +74,11 @@ function townCard(g: Game, t: Site, page?: string): string {
   const L = stepOf(t), o = orderOf(g, t), linked = townLinked(g, t), plan = shipPlan(g);
   let h = `<div class="head"><b class="big">🏘</b><div><h2>${esc(t.name ?? 'Town')}</h2><span class="chip2">${sizeName(L)}</span> <span class="chip2">👥 ${Math.floor(t.pop ?? 0)}</span>${linked && isCapital(g, t) && g.s.caps && Object.keys(g.s.caps).length ? ` <span class="chip2">👑 Capital of ${esc(islandName(g, islandOfSite(g, t)))}</span>` : ''}</div></div>`;
   if (page === 'parks' || page === 'projects') return h + townPage(g, t, page);
-  if (!linked) h += `<div class="warn">🔌 Not on the railway yet: ${hallOf(g.track, g.world.n, t, g.world.terr) ? 'join your line to either end of its station' : 'lay track straight across its square, past it beside it, or ending right beside it'} (🛤 Rails shows where with arrows)</div>`;
+  if (!linked) {
+    const gap = joinGap(g, t)?.squares, go = `<button class="mini" data-act="railtown" data-x="${t.x}" data-y="${t.y}">🛤 Lay track ›</button>`;
+    h += gap ? `<div class="warn">🔌 Not on the railway yet: your track is only ${gap.length === 1 ? '1 square' : `${gap.length} squares`} short. Lay track from the gold arrow over the dashed ${gap.length === 1 ? 'square' : 'squares'} to link it ${go}</div>`
+      : `<div class="warn">🔌 Not on the railway yet: ${hallOf(g.track, g.world.n, t, g.world.terr) ? 'join your line to either end of its station' : 'lay track straight across its square, past it beside it, or ending right beside it'} (🛤 Rails shows where with arrows) ${go}</div>`;
+  }
   const done = orderDone(g, t);
   h += `<h3>📋 ${done ? 'Order filled!' : `Wants these to grow into a ${sizeName(L + 1)}`}</h3>`;
   for (const k of Object.keys(o) as Good[]) {
