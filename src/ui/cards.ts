@@ -283,7 +283,7 @@ function dockCard(g: Game, b: Building, page?: string): string {
   if (page === 'trains') {
     const p = trainPrice(g) + FERRY_FEE, mine = g.s.trains.filter(t => islandOfTrain(g, t) === islandOfB(g, b));
     const idle = mine.filter(t => !t.job).length;
-    h += `<div class="note">🚂 ${mine.length} trains on ${esc(isl)}${idle ? ` · 💤 ${idle} waiting for work` : ''}. Trains stay on their island unless shipped.</div>`;
+    h += `<div class="note">🚂 ${mine.length} train${mine.length === 1 ? '' : 's'} on ${esc(isl)}${idle ? ` · 💤 ${idle} waiting for work` : ''}. Trains stay on their island unless shipped.</div>`;
     // ⛴ bring one from any other island: a free one sails now, a busy one after it has delivered its load
     const coming = g.s.trains.filter(t => t.moveTo === b.id);
     for (const t of coming) h += `<div class="row"><b class="ico">⛴</b><div class="grow"><b>Train ${t.id} is coming from ${esc(islandName(g, islandOfTrain(g, t)))}</b><small>${t.cargo ? 'It sails as soon as it has delivered its load' : t.broke ? 'It sails once the repair crew has fixed it' : 'It sails in a moment'}</small></div><button class="mini" data-act="unmove" data-id="${b.id}" data-to="${t.id}">✕ Cancel</button></div>`;

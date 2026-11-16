@@ -114,7 +114,7 @@ export function bottlenecks(g: Game, plan = shipPlan(g)): { good: Good; towns: S
 /** The 📋 Orders board: Railway level, what needs you, then every town's order on the railway, nearest to done first. */
 export function ordersHtml(g: Game): string {
   const L = g.s.rlv ?? 0, o = g.s.orders ?? 0, next = RLV[L + 1], prev = RLV[L] ?? 0;
-  let h = `<div class="head"><b class="big">📋</b><div><h2>Orders</h2><span class="chip2">⭐ Railway level ${L}</span> <span class="chip2">${o} orders filled</span></div></div>`;
+  let h = `<div class="head"><b class="big">📋</b><div><h2>Orders</h2><span class="chip2">⭐ Railway level ${L}</span> <span class="chip2">${o} order${o === 1 ? '' : 's'} filled</span></div></div>`;
   if (next !== undefined) {
     h += `<div class="row"><b class="ico">⭐</b><div class="grow"><div class="line"><span>Level ${L + 1}</span><span>${o} / ${next}</span></div>${bar((o - prev) / (next - prev), '#ffd27a')}`
       + `<small>${UNLOCKS[L + 1] ? `Unlocks ${UNLOCKS[L + 1]}` : 'Every order filled counts'}</small></div></div>`;

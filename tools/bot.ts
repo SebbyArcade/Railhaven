@@ -1,5 +1,7 @@
 // A simple bot player: builds what open orders need, lays track to it, buys trains, grows towns, links and founds
-// towns, upgrades buildings and the fleet. No screen. Usage: npx vite-node tools/bot.ts [seed] [minutes]
+// towns, upgrades buildings and the fleet; docks, landings, ships, island trains, landmarks and expeditions; follows
+// the 🚦 advice (doubles held-up track). No screen. Usage: npx vite-node tools/bot.ts [seed] [minutes]
+// PLAYTEST=1 adds a problem watcher (tools/playtest-watch.ts): money pace, idle/stuck/overlapping trains, broken card text.
 import { newGame, trackChanged } from '../src/game.ts';
 import { outputOf, bestPlacement, build, type Building, info, isFactory, isLinked, lockedText, priceOf, yardSquares, type IndustryKind, INDUSTRIES, type Good } from '../src/buildings/industries.ts';
 import { buildPlan, extendPlan, startPlan } from '../src/track/paint.ts';
