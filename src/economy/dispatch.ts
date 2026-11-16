@@ -18,6 +18,7 @@ import { GRAND_LOAD, hasGrandStation, payMul, rewardMul } from '../buildings/par
 import { BRIDGE_UPKEEP, bridgeSquares } from '../track/rules.ts';
 import { tickTrade, tradeDelivered, tradeRoom } from './trade.ts';
 import { deliverToTown, orderDone, reward, sizeName, steadyFull, stepOf } from './towns.ts';
+import { type NewsGo, say } from '../core/news.ts';
 
 export const LOAD_TIME = 4;
 /** Loading or unloading time for this train: 🚉 the Grand Station makes it 25% shorter on Ashford Isle. */
@@ -58,7 +59,7 @@ export function trainPrice(g: Game): number {
 /** Trains you own: on the rails, plus any aboard a boat to another island. */
 export const fleetSize = (g: Game) => g.s.trains.length + (g.s.ferries?.length ?? 0);
 
-const news = (g: Game, s: string) => (g.news ??= []).push(s);
+const news = (g: Game, s: string, go?: NewsGo) => say(g, s, go);
 const endJob = (t: Train) => { t.job = undefined; };
 
 /** Buy a train: it rolls out of the engine shed onto the line. Returns the train or why not. */
@@ -161,7 +162,7 @@ export const ferryDock = (g: Game, t: Train): Building | null => {
 /** ⛴ The crossing can't happen: the train stays where it is and looks for work there; the crossing is paid back. */
 function ferryOff(g: Game, t: Train, why: string) {
   delete t.ferry; g.s.money += FERRY_FEE;
-  news(g, `⛴ Train ${t.id} stays on ${railIsleName(g, islandOfTrain(g, t))}: ${why}. The crossing fee was paid back`);
+  news(g, `⛴ Train ${t.id} stays on ${railIsleName(g, islandOfTrain(g, t))}: ${why}. The crossing fee was paid back`, { kind: 'train', id: t.id });
 }
 
 /** Where a ferry ties up: its landing, or another landing on the same island if that one went. */
@@ -204,7 +205,7 @@ function tickFerries(g: Game, dt: number) {
     if (!land) { all.splice(all.indexOf(f), 1); g.s.money += f.paid; news(g, `⛴ The boat with Train ${f.train} found no landing to tie up at, so the train was paid back ($${f.paid.toLocaleString('en-US')})`); continue; }
     const t = onYard(g, land, f.train); if (!t) continue;
     all.splice(all.indexOf(f), 1); g.s.trains.push(t); g.sys.rebuildHolds();
-    news(g, `🚂 Train ${t.id} landed on ${islandName(g, islandOfB(g, land))} and is looking for a load`);
+    news(g, `🚂 Train ${t.id} landed on ${islandName(g, islandOfB(g, land))} and is looking for a load`, { kind: 'train', id: t.id });
   }
 }
 
@@ -287,7 +288,7 @@ function tickMoves(g: Game) {
     const dock = (g.s.buildings ?? []).find(b => b.id === t.moveTo);
     if (!dock || !isLinked(g, dock) || islandOfTrain(g, t) === railIsleOfB(g, dock)) { cancelMove(g, t); continue; }
     const n = crossNow(g, dock, t);
-    if (n) news(g, `⛴ Train ${n.id} crossed by boat to ${islandName(g, islandOfB(g, dock))} and is looking for a load`);
+    if (n) news(g, `⛴ Train ${n.id} crossed by boat to ${islandName(g, islandOfB(g, dock))} and is looking for a load`, { kind: 'train', id: n.id });
   }
 }
 
@@ -404,7 +405,7 @@ function unload(g: Game, t: Train) {
   if (j.to.kind === 'bld') {
     const f = bldOf(g, j.to.id)!, n = Math.min(c.n, Math.floor(factoryRoom(f, k)));
     (f.inbuf ??= {})[k] = (f.inbuf[k] ?? 0) + n;
-    const v = payFor(k, n, c.d, 'factory'); pay(g, v); if (rushDelivered(g, j.to, k, n)) news(g, `⭐ Rush done: the ${INDUSTRIES[f.kind].name} got its ${GOODS[k].name.toLowerCase()}`);
+    const v = payFor(k, n, c.d, 'factory'); pay(g, v); if (rushDelivered(g, j.to, k, n)) news(g, `⭐ Rush done: the ${INDUSTRIES[f.kind].name} got its ${GOODS[k].name.toLowerCase()}`, { kind: 'bld', id: f.id });
     t.lastPay = { pay: Math.round(v), at: g.s.t, n, good: k, to: j.to }; tripDone(t, v);
     c.n -= n;
     if (c.n > 0) { j.to = nearestTown(g, t) ?? j.to; j.phase = 'toDrop'; sendLoaded(g, t); return; }
@@ -414,20 +415,20 @@ function unload(g: Game, t: Train) {
   const p = deliverToTown(g, town, k, c.n, tradeRoom(g, town, k));
   // 🏛 town projects pay more; while its order waits on goods from the outer islands, the rest of the order pays in full
   const v = (payFor(k, p.order + p.trade, c.d, 'order') + payFor(k, p.steady, c.d, steadyFull(g, town, k) ? 'order' : 'steady') + payFor(k, p.surplus, c.d, 'extra')) * payMul(g, town);
-  pay(g, v); if (rushDelivered(g, j.to, k, p.order)) news(g, `⭐ Rush done: ${town.name} got its ${GOODS[k].name.toLowerCase()}`);
+  pay(g, v); if (rushDelivered(g, j.to, k, p.order)) news(g, `⭐ Rush done: ${town.name} got its ${GOODS[k].name.toLowerCase()}`, { kind: 'town', id: town.id });
   t.lastPay = { pay: Math.round(v), at: g.s.t, n: c.n, good: k, to: j.to }; tripDone(t, v);
   if (!town.filled && orderDone(g, town)) {
     town.filled = true;
     const r = Math.round(reward(stepOf(town)) * fallsMul(g, town.x, town.y) * rewardMul(g)); pay(g, r); // ⛪ Cathedral +5%
     g.s.orders = (g.s.orders ?? 0) + 1;
-    news(g, `✅ ${town.name}'s order is filled! +$${r.toLocaleString('en-US')} · tap ⬆ to grow it into a ${sizeName(stepOf(town) + 1)}`);
+    news(g, `✅ ${town.name}'s order is filled! +$${r.toLocaleString('en-US')} · tap ⬆ to grow it into a ${sizeName(stepOf(town) + 1)}`, { kind: 'town', id: town.id });
     checkLevel(g);
   }
   const tr = tradeDelivered(g, town, p.trade);
   if (tr) { // 🤝 a trade order filled: it counts as a filled order too
     const o = g.s.trade![g.world.islandOf[town.y * g.world.n + town.x]!]!, r = Math.round(tr * rewardMul(g)); pay(g, r);
     g.s.orders = (g.s.orders ?? 0) + 1; g.s.tradeDone = (g.s.tradeDone ?? 0) + 1;
-    news(g, `🤝 ${town.name}'s trade order is filled: ${o.need} ${GOODS[o.good].icon} from ${islandName(g, o.from)}! +$${r.toLocaleString('en-US')}`);
+    news(g, `🤝 ${town.name}'s trade order is filled: ${o.need} ${GOODS[o.good].icon} from ${islandName(g, o.from)}! +$${r.toLocaleString('en-US')}`, { kind: 'town', id: town.id });
     checkLevel(g);
   }
   t.cargo = undefined; endJob(t);

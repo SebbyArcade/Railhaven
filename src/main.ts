@@ -22,6 +22,7 @@ import { isRevealed } from './world/fog.ts';
 import { TERRAIN_NAMES } from './world/terrain.ts';
 import { attachInput } from './ui/input.ts';
 import { fmtMoney, toast, updateHud } from './ui/hud.ts';
+import { type NewsGo, newsPlace } from './core/news.ts';
 import { MODE_HINT, type Mode, Tools } from './ui/tools.ts';
 import { setClosed } from './buildings/closing.ts';
 import { GOODS, type Good, INDUSTRIES, info, inputsOf, type IndustryKind, isFactory, lockedText, priceOf, yardSet } from './buildings/industries.ts';
@@ -354,6 +355,27 @@ pill.onclick = e => {
   if (tools.card?.kind === 'story') closeCard(); else openCard({ kind: 'story', id: 0 });
 };
 const lookAt = (x: number, y: number) => { const c = game.s.camera; c.x = (x + 0.5) * 32; c.y = (y + 0.5) * 32; };
+/** Centre a spot in the part of the screen the card leaves free (beside the side sheet, or above the bottom card). */
+function lookBeside(wx: number, wy: number) {
+  const c = game.s.camera; c.x = wx; c.y = wy;
+  if (view.w >= 700) c.x += 190 / c.z;
+  else c.y += (view.h / 2 - ((view.h * 0.48 - 56) / 2 + 30)) / c.z;
+}
+/**
+ * Go › on a note about a place (a fire, a breakdown, a filled order...): the map moves there and its card opens.
+ * While track or a building is being planned, it only moves the map, so nothing being drawn is lost.
+ */
+function goPlace(go: NewsGo) {
+  const calm = tools.mode === 'pan' && !menuOpen;
+  const show = (x: number, y: number, c: Card) => { if (!calm) { game.s.camera.x = x; game.s.camera.y = y; return; } openCard(c); lookBeside(x, y); };
+  if (go.kind === 'sq') { lookAt(go.x, go.y); return; }
+  if (go.kind === 'bld') { const b = game.s.buildings?.find(q => q.id === go.id); if (!b) { toast('That building is no longer there'); return; } show((b.x + 0.5) * 32, (b.y + 0.5) * 32, { kind: 'bld', id: b.id }); return; }
+  if (go.kind === 'town') { const t = game.s.sites.find(q => q.id === go.id); if (t) show((t.x + 0.5) * 32, (t.y + 0.5) * 32, { kind: 'town', id: t.id }); return; }
+  if (go.kind === 'isle') { const i = game.world.islands[go.id]; if (i) show((i.cx + 0.5) * 32, (i.cy + 0.5) * 32, { kind: 'isle', id: go.id }); return; }
+  const t = game.s.trains.find(q => q.id === go.id), p = t?.trail.length ? bodyPoint(game.net, t, 0) : null;
+  if (!t) { toast(`Train ${go.id} can't be shown right now`); return; }
+  if (p) show(p.x, p.y, { kind: 'train', id: t.id }); else if (calm) openCard({ kind: 'train', id: t.id });
+}
 
 // 💡 Money tips: when money runs low, why and one thing to do (Settings switches them off)
 const tipEl = $('tip');
@@ -636,7 +658,10 @@ function frame(now: number) {
     soundT = now; sound.update(hearScene(game, view));
     if (cueOf !== game || !memo) { cueOf = game; memo = cueMemo(game); } else sound.cue(cues(game, view, memo)); // a new or loaded game starts quiet
   }
-  if (game.news?.length && now > newsAt && !(tools.card?.kind === 'story' && tools.card.page === 'act')) { toast(game.news.shift()!, 4000); newsAt = now + 4200; }
+  if (game.news?.length && now > newsAt && !(tools.card?.kind === 'story' && tools.card.page === 'act')) {
+    const m = game.news.shift()!, go = newsPlace(game, m), ms = go ? 6000 : 4000; // a note about a place stays a little longer, with Go ›
+    toast(m, ms, go ? () => goPlace(go) : undefined); newsAt = now + ms + 200;
+  }
   if (Math.floor(now / 1000) !== lastCard) {
     lastCard = Math.floor(now / 1000);
     checkArrivals(game); // islands just reached queue their arrival card

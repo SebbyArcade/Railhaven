@@ -159,6 +159,8 @@ export interface Game {
   taken?: { key: string; net: Network; set: Set<number> };
   /** things to tell the player (the UI shows and clears them) */
   news?: string[];
+  /** the place each note is about, for its Go › button (not saved) */
+  newsGo?: Map<string, import('./core/news.ts').NewsGo>;
   /** [time, earned minus running costs] every few seconds, for the last few minutes (not saved) */
   netLog?: [number, number][];
   /** when the 💡 money tip last came up (not saved) */

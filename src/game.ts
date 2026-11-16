@@ -18,6 +18,7 @@ import { placeShed, shedSiding } from './buildings/shed.ts';
 import { type Building, footprint, linkedSquares, revealAround, tracksOf, yardLanes, yardSet, yardSquares } from './buildings/industries.ts';
 import { blockedPieces } from './track/breaks.ts';
 import { networkKey, relocate, snapshot } from './trains/relocate.ts';
+import { say } from './core/news.ts';
 
 export const START_MONEY = 12000;
 export const START_REVEAL = 9;
@@ -112,7 +113,7 @@ function surveyLandings(g: Game) {
     const found = g.s.sites.filter(s => s.kind === 'dep' && s.hidden && g.world.islandOf[s.y * n + s.x] === k);
     for (const s of found) s.hidden = false; // marked over the fog (render/explore.ts), not cleared round each: he found the holes random
 
-    if (found.length) (g.news ??= []).push(`🔎 The landing crew surveyed ${g.world.islands[k!]?.name ?? 'the island'}: ${[...new Set(found.map(s => s.res === 'iron' ? '🧲 iron' : s.res === 'oil' ? '🛢 oil' : s.res))].join(' and ')} found`);
+    if (found.length) say(g, `🔎 The landing crew surveyed ${g.world.islands[k!]?.name ?? 'the island'}: ${[...new Set(found.map(s => s.res === 'iron' ? '🧲 iron' : s.res === 'oil' ? '🛢 oil' : s.res))].join(' and ')} found`, { kind: 'isle', id: k! });
   }
 }
 
@@ -125,7 +126,7 @@ export function trackChanged(g: Game) {
   g.net = makeNetwork(g.track, g.world.n, g.s.sites, g.s.buildings ?? [], g.world.terr, shedSiding(g));
   g.dist = new Map();
   g.sys.setNetwork(g.net);
-  for (const b of linkedDocks(g)) if (chartSea(g, b)) { (g.news ??= []).push(`⚓ The ${isHomeDock(g, b) ? 'dock' : 'landing'} charts the sea around it: new shores are out of the fog`); }
+  for (const b of linkedDocks(g)) if (chartSea(g, b)) say(g, `⚓ The ${isHomeDock(g, b) ? 'dock' : 'landing'} charts the sea around it: new shores are out of the fog`, { kind: 'bld', id: b.id });
   surveyLandings(g);
   checkPois(g);
   g.s.trains.forEach((t, k) => { relocate(g.net, t, where[k]!); });

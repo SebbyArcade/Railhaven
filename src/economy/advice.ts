@@ -3,6 +3,7 @@ import { aName, type Building, GOODS, type Good, INDUSTRIES, type IndustryKind, 
 import { orderOf, townLinked } from './towns.ts';
 import { sellOffer } from './upgrades.ts';
 import { trainRefund } from './dispatch.ts';
+import { say } from '../core/news.ts';
 import type { Train } from '../trains/train.ts';
 
 /**
@@ -94,7 +95,7 @@ export function checkGrant(g: Game): number {
   const m = minutesTo(g, step.price, 180); if (m === null || m <= FAR_MIN) return 0;
   const add = Math.ceil((step.price - g.s.money) / 100) * 100;
   g.s.money += add; g.s.grantAt = g.s.t; g.s.grantFor = step.kind;
-  (g.news ??= []).push(`🆘 The railway board gives you $${add.toLocaleString('en-US')} for ${aName(INDUSTRIES[step.kind].name)}, so ${step.town.name} can get ${GOODS[step.good].name.toLowerCase()}. It's a gift, not a loan`);
+  say(g, `🆘 The railway board gives you $${add.toLocaleString('en-US')} for ${aName(INDUSTRIES[step.kind].name)}, so ${step.town.name} can get ${GOODS[step.good].name.toLowerCase()}. It's a gift, not a loan`, { kind: 'town', id: step.town.id });
   return add;
 }
 
