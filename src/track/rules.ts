@@ -103,8 +103,9 @@ export function straitCoasts(g: Game): StraitCoast[] {
   straitCache.set(w.islandOf, out); return out;
 }
 
-/** The name of the island a bridge would reach: the one in the set that none of the built track stands on yet. */
-export function otherIslandName(g: Game, islands: Set<number>): string {
+/** The name of the island a bridge would reach: the one the drag ends on, else the one in the set that none of the built track stands on yet. */
+export function otherIslandName(g: Game, islands: Set<number>, across?: number): string {
+  if (across !== undefined && islands.has(across) && g.world.islands[across]) return g.world.islands[across]!.name ?? 'a small island';
   const on = new Set<number>();
   for (const i of g.track.keys()) { const k = g.world.islandOf[i]!; if (islands.has(k)) on.add(k); if (on.size === islands.size) break; }
   const ks = [...islands], k = ks.find(k => !on.has(k)) ?? ks.find(k => k !== g.world.home) ?? ks[0]!;
@@ -115,11 +116,11 @@ export function otherIslandName(g: Game, islands: Set<number>): string {
  * Bridges may cross rivers, lakes and inlets. Joining two islands takes the 🌉 Bridge Works and a short strait
  * (at most STRAIT_MAX squares of water); anything wider needs a dock and ships. Returns the reason if this layout breaks a rule.
  */
-export function bridgeJoinsIslands(g: Game, water: Iterable<number>, isTrack: (i: number) => boolean): string {
+export function bridgeJoinsIslands(g: Game, water: Iterable<number>, isTrack: (i: number) => boolean, across?: number): string {
   for (const { squares, islands } of bridgeSpans(g, water, isTrack)) {
     if (islands.size > 2) return 'A bridge can join at most two islands';
     if (islands.size === 2) {
-      if (!hasBridgeWorks(g)) return `The land across is ${otherIslandName(g, islands)}, another island: joining islands needs the 🌉 Bridge Works (Ashford, Railway level 6), or a dock and ships`;
+      if (!hasBridgeWorks(g)) return `The land across is ${otherIslandName(g, islands, across)}, another island: joining islands needs the 🌉 Bridge Works (Ashford, Railway level 6), or a dock and ships`;
       if (squares.length > STRAIT_MAX) return `A strait bridge between islands can cross at most ${STRAIT_MAX} squares of water (this one is ${squares.length}): for wider seas use a dock and ships`;
     }
     if (squares.length > BRIDGE_MAX_LEN) return `A bridge can be at most ${BRIDGE_MAX_LEN} squares long (this one is ${squares.length})`;
