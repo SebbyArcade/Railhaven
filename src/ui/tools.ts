@@ -435,7 +435,7 @@ export class Tools {
     }
     if (this.mode === 'build' && this.preview) {
       const k = this.preview.kind, price = priceOf(g, k, islandAtYard(g, this.preview)), out = Math.round(INDUSTRIES[k].rate * shareAt(g, this.preview) * 60);
-      return { text: `${INDUSTRIES[k].icon} ${INDUSTRIES[k].name} · ${fmtMoney(price)} · makes ${out}/min${harmText(harmOf(g, footprint(g.world.n, this.preview)))}`, ok: '✓ Build', can: price <= g.s.money, turn: true };
+      return { text: `${INDUSTRIES[k].icon} ${INDUSTRIES[k].name} · ${fmtMoney(price)} · ${k === 'dock' ? 'ships goods by sea' : `makes ${out}/min`}${harmText(harmOf(g, footprint(g.world.n, this.preview)))}`, ok: '✓ Build', can: price <= g.s.money, turn: true };
     }
     return null;
   }

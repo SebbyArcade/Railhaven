@@ -238,7 +238,7 @@ export class Renderer {
         const ex = P.horizontal ? TILE / 2 : 0, ey = P.horizontal ? 0 : TILE / 2, ox = P.horizontal ? 0 : 4, oy = P.horizontal ? 4 : 0;
         for (const o of [-1, 1]) { ctx.beginPath(); ctx.moveTo(ax - ex + ox * o, ay - ey + oy * o); ctx.lineTo(bx + ex + ox * o, by + ey + oy * o); ctx.stroke(); }
         ctx.lineWidth = 1.2; for (let k = 0; k <= 16; k++) { const f = k / 16, x = ax - ex + (bx + ex - ax + ex) * f, y = ay - ey + (by + ey - ay + ey) * f; ctx.beginPath(); ctx.moveTo(x - ox * 1.6, y - oy * 1.6); ctx.lineTo(x + ox * 1.6, y + oy * 1.6); ctx.stroke(); }
-        ctx.globalAlpha = 0.5; drawBuilding(ctx, this.g, { id: -1, kind: this.tools!.buildKind ?? 'wood', x: P.x, y: P.y, horizontal: P.horizontal, side: P.side, lvl: 1, stock: 0 }, tm, this.g.s.camera.z);
+        ctx.globalAlpha = 0.5; drawBuilding(ctx, this.g, { id: -1, kind: this.tools!.buildKind ?? 'wood', x: P.x, y: P.y, horizontal: P.horizontal, side: P.side, lvl: 1, stock: 0, ...(P.len ? { len: P.len } : {}) }, tm, this.g.s.camera.z);
         ctx.restore();
         // where the railway joins: in line with the loading track, at either end
         const pulse = 0.55 + 0.45 * Math.sin(tm * 4), z = this.g.s.camera.z, f = 1.6 / z;
