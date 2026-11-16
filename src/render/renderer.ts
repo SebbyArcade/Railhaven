@@ -13,7 +13,7 @@ import { drawBuilding, drawBuildingTags } from './buildings.ts';
 import { drawFields } from './fields.ts';
 import { shedSquare } from '../buildings/shed.ts';
 import { hallsOf } from '../buildings/stations.ts';
-import { landDistance } from '../track/rules.ts';
+import { landDistance, straitCoasts } from '../track/rules.ts';
 import { buildingSquares, footprint, type IndustryKind, isLinked, yardSquares } from '../buildings/industries.ts';
 import { buildNoGo, railNoGo } from '../buildings/nogo.ts';
 import { turnSquares } from '../ui/tools.ts';
@@ -109,6 +109,7 @@ export class Renderer {
     drawTownBadges(ctx, g, this.plan, cam.z, tm);
     if (!this.tools?.view) { drawAlerts(ctx, g, this.alerts, cam.z, tm); drawWaitBadges(ctx, g, this.waits, cam.z); drawDockTags(ctx, g, cam.z); drawRushTags(ctx, g, cam.z, tm); }
     this.drawNoGo(ctx, tm, x0, y0, x1, y1);
+    this.drawStraits(ctx, tm, x0, y0, x1, y1);
     this.drawOverlay(ctx, tm);
     drawStorm(ctx, g, tm);
     drawFog(ctx, g, x0, y0, x1, y1, cam.z, tm);
@@ -158,6 +159,36 @@ export class Renderer {
         ctx.fillStyle = '#8a8276'; ctx.fillRect(-4, -half - 3, 1.6, half * 2 + 6);                       // the parapet edge
         ctx.restore();
       }
+    }
+  }
+
+  private railed = { size: -1, set: new Set<number>() };
+  /** Rails mode: a dashed red-orange line on coasts that face another island across a narrow gap, named once per island in view. */
+  private drawStraits(ctx: CanvasRenderingContext2D, tm: number, x0: number, y0: number, x1: number, y1: number) {
+    const t = this.tools, g = this.g, n = g.world.n;
+    if (t?.mode !== 'rail' && t?.mode !== 'double') return;
+    const k = Math.max(1, 1 / g.s.camera.z), labels = new Map<number, { x: number; y: number; c: number }>();
+    if (this.railed.size !== g.track.size) { const s = new Set<number>(); for (const i of g.track.keys()) s.add(g.world.islandOf[i]!); this.railed = { size: g.track.size, set: s }; }
+    const railed = this.railed.set;
+    ctx.save(); ctx.strokeStyle = `rgba(255,120,80,${0.65 + 0.2 * Math.sin(tm * 3)})`; ctx.lineWidth = 2.2 * k; ctx.setLineDash([5 * k, 4 * k]); ctx.lineCap = 'round';
+    ctx.beginPath();
+    for (const e of straitCoasts(g)) {
+      const x = e.i % n, y = (e.i / n) | 0;
+      if (x < x0 || x > x1 || y < y0 || y > y1 || !isRevealed(g, e.i)) continue;
+      const X = x * TILE, Y = y * TILE;
+      if (e.d === 0) { ctx.moveTo(X + TILE, Y); ctx.lineTo(X + TILE, Y + TILE); }
+      else if (e.d === 1) { ctx.moveTo(X, Y + TILE); ctx.lineTo(X + TILE, Y + TILE); }
+      else if (e.d === 2) { ctx.moveTo(X, Y); ctx.lineTo(X, Y + TILE); }
+      else { ctx.moveTo(X, Y); ctx.lineTo(X + TILE, Y); }
+      if (railed.has(e.isl)) continue; // name only the islands the railway hasn't reached
+      const l = labels.get(e.isl) ?? { x: 0, y: 0, c: 0 }; l.x += x; l.y += y; l.c++; labels.set(e.isl, l);
+    }
+    ctx.stroke(); ctx.restore();
+    ctx.font = `700 ${11 * k}px system-ui`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    for (const [isl, l] of labels) {
+      const name = g.world.islands[isl]?.name ?? 'Small island', X = (l.x / l.c + 0.5) * TILE, Y = (l.y / l.c + 0.5) * TILE;
+      const text = `🏝 ${name}`, w = ctx.measureText(text).width + 12 * k, h = 17 * k;
+      ctx.fillStyle = 'rgba(20,16,12,.8)'; ctx.beginPath(); ctx.roundRect(X - w / 2, Y - h / 2, w, h, 7 * k); ctx.fill(); ctx.fillStyle = '#ffb08a'; ctx.fillText(text, X, Y + 0.5 * k);
     }
   }
 

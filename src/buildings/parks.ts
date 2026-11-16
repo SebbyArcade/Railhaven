@@ -24,7 +24,7 @@ export const PROJECTS: Project[] = [
   // the old game's Ashford landmark: it casts the iron for tunnel linings, so track can cross mountains
   { k: 'foundry', icon: '⛰', name: 'Foundry', price: 6000, size: 0, ashford: true, rlv: 2, text: 'Tunnels: track can cross mountains ($250 a square)' },
   // the old game's 🌉 Bridge Works: here it builds strait bridges, so sister islands a few squares apart can be joined by rail
-  { k: 'bridgeworks', icon: '🌉', name: 'Bridge Works', price: 18000, size: 0, ashford: true, rlv: 6, text: 'Strait bridges: track may cross up to 3 squares of sea to a nearby island ($4,000 a square)' },
+  { k: 'bridgeworks', icon: '🌉', name: 'Bridge Works', price: 18000, size: 0, ashford: true, rlv: 6, text: 'Strait bridges anywhere on the map: track may cross up to 3 squares of sea between two islands ($4,000 a square)' },
   // 🏛 Grand Ashford: late-game landmarks that turn spare money into lasting help (and one medal for show)
   { k: 'grandstation', icon: '🚉', name: 'Grand Station', price: 50000, size: 3, ashford: true, rlv: 6, text: 'Trains load and unload 25% faster everywhere on Ashford Isle' },
   { k: 'cathedral', icon: '⛪', name: 'Cathedral', price: 100000, size: 4, ashford: true, rlv: 7, text: 'Every town order pays a 5% bigger reward' },
