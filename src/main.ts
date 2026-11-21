@@ -18,7 +18,7 @@ import { canFull, isFull, showFullBtn, toggleFull } from './ui/fullscreen.ts';
 import { checkMedals, loadProfile, saveProfile } from './progress/achievements.ts';
 import { lookOpen, PAINTS, setLooks, THEMES } from './render/looks.ts';
 import { xpOf } from './progress/achievements.ts';
-import { isRevealed } from './world/fog.ts';
+import { isRevealed, islandKnown } from './world/fog.ts';
 import { TERRAIN_NAMES } from './world/terrain.ts';
 import { attachInput } from './ui/input.ts';
 import { fmtMoney, toast, updateHud } from './ui/hud.ts';
@@ -44,7 +44,7 @@ import { buyShip, buyShipUp, SHIP_UP, type ShipUpKey, seaLanes, shipPlace, shipU
 import { CLAIM_TEXT, POI, poisOf, poiTapAt } from './world/explore.ts';
 import { buyFishing, FISHING } from './economy/upgrades.ts';
 import { checkStuck } from './economy/nofail.ts';
-import { ashford, missionsOf, msOf, recommendedBuild, swapMission } from './progress/missions.ts';
+import { ashford, compass, missionsOf, msOf, recommendedBuild, swapMission } from './progress/missions.ts';
 import { missionPill } from './ui/story.ts';
 import { gameHtml } from './ui/gamecard.ts';
 import { decodeLegacy, importLegacy, isLegacy } from './save/legacy.ts';
@@ -54,7 +54,6 @@ import { townBadgeAt } from './render/orders.ts';
 import { yardSquares, isLinked } from './buildings/industries.ts';
 import { orderDone } from './economy/towns.ts';
 import { townLinked } from './economy/towns.ts';
-import { islandOfB } from './ships/docks.ts';
 
 const canvas = document.getElementById('c') as HTMLCanvasElement;
 const ctx = canvas.getContext('2d')!;
@@ -439,7 +438,7 @@ function startBuild(k: IndustryKind, go = false) {
 function goMission(i: number) {
   const m = missionsOf(game)[i]; if (!m) return;
   closeCard(); menuOpen = false; tools.mode = 'pan'; tools.cancel();
-  const site = m.site !== undefined ? game.s.sites.find(s => s.id === m.site) : undefined, n = game.world.n;
+  const site = m.site !== undefined ? game.s.sites.find(s => s.id === m.site) : undefined;
   if (m.ty === 'build') { startBuild(m.k!, true); return; }
   if (m.ty === 'find') {
     const from = game.s.sites.filter(t => t.kind === 'town' && townLinked(game, t)).sort((p, q) => Math.hypot(p.x - site!.x, p.y - site!.y) - Math.hypot(q.x - site!.x, q.y - site!.y))[0] ?? ashford(game);
@@ -448,10 +447,12 @@ function goMission(i: number) {
   }
   if (m.ty === 'reach') {
     const isl = game.world.islands[m.isl!]!;
-    if (isRevealed(game, isl.cy * n + isl.cx)) { lookAt(isl.cx, isl.cy); startBuild('dock', true); return; }
-    const d = (game.s.buildings ?? []).find(b => b.kind === 'dock' && islandOfB(game, b) === game.world.home);
+    if (islandKnown(game, m.isl!)) { lookAt(Math.round(isl.cx), Math.round(isl.cy)); startBuild('dock', true); return; }
+    // still in the fog: never show where it is (Sébastien). Go to your dock nearest it and only say which way to sail.
+    const d = (game.s.buildings ?? []).filter(b => b.kind === 'dock').sort((p, q) => Math.hypot(p.x - isl.cx, p.y - isl.cy) - Math.hypot(q.x - isl.cx, q.y - isl.cy))[0];
     if (d) { lookAt(d.x, d.y); openCard({ kind: 'bld', id: d.id, page: 'isl' }); }
-    toast(`🌫 ${isl.name} is still in the fog: send a scout boat from your dock to find its shore`); return;
+    const from = d ?? ashford(game), dir = compass(isl.cx - from.x, isl.cy - from.y);
+    toast(`🌫 ${isl.name} is still in the fog, somewhere ${dir} of ${d ? 'this dock' : 'Ashford'}: ${d ? 'send a scout boat from here' : 'build a ⚓ Dock, then send a scout boat'} to find its shore`, 6000); return;
   }
   if (m.ty === 'fish') { const b = game.s.buildings?.find(x => x.id === m.bld); if (b) { lookAt(b.x, b.y); openCard({ kind: 'bld', id: b.id, page: 'fish' }); } return; }
   if (site) { lookAt(site.x, site.y); if (m.ty === 'order') openCard({ kind: 'town', id: site.id }); else toast(`🛤 ${m.how}`); }
