@@ -102,15 +102,18 @@ function drawHouses(ctx: CanvasRenderingContext2D, g: Game, s: Site, spots: Spot
  * houses made panning slow on a big map. Up to zoom 1 houses have no gardens, smoke or people, so the picture looks
  * the same; the church clock and the town hall flag move, so they are drawn live on top.
  */
-type Sprite = { spots: Spot[]; theme: unknown; s: number; c: HTMLCanvasElement; x: number; y: number; used: number };
+type Sprite = { spots: Spot[]; theme: unknown; s: number; marks: boolean; c: HTMLCanvasElement; x: number; y: number; used: number };
+/** Below this zoom the church clock and the hall flag are a pixel or two: they go into the picture too (drawing them live
+ * for 40+ big towns each frame made zooming out lag on a phone, bug report 20). */
+const MARKS_LIVE = 0.6;
 const sprites = new Map<Site, Sprite>();
 const SCALES = [0.25, 0.375, 0.5, 0.75, 1, 1.5, 2, 3];
 function spriteTown(ctx: CanvasRenderingContext2D, g: Game, s: Site, spots: Spot[], ruin: boolean, tm: number, zoom: number): boolean {
   if (typeof document === 'undefined' || !spots.length) return false;
   const m = ctx.getTransform(), px = Math.hypot(m.a, m.b); // screen pixels per world unit
-  const sc = SCALES.find(k => k >= px) ?? SCALES.at(-1)!;
+  const sc = SCALES.find(k => k >= px) ?? SCALES.at(-1)!, marks = zoom < MARKS_LIVE;
   let sp = sprites.get(s);
-  if (!sp || sp.spots !== spots || sp.theme !== looks.theme || sp.s !== sc) {
+  if (!sp || sp.spots !== spots || sp.theme !== looks.theme || sp.s !== sc || sp.marks !== marks) {
     let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
     for (const o of spots) { x0 = Math.min(x0, o.hx - o.w / 2); x1 = Math.max(x1, o.hx + o.w / 2); y0 = Math.min(y0, o.hy - o.d / 2); y1 = Math.max(y1, o.hy + o.d / 2); }
     x0 -= 16; x1 += 16; y0 -= 40; y1 += 16; // room for bushes, shadows, roofs and chimneys
@@ -118,12 +121,12 @@ function spriteTown(ctx: CanvasRenderingContext2D, g: Game, s: Site, spots: Spot
     c.width = Math.ceil((x1 - x0) * sc); c.height = Math.ceil((y1 - y0) * sc);
     const cx = c.getContext('2d'); if (!cx) return false;
     cx.setTransform(sc, 0, 0, sc, -x0 * sc, -y0 * sc);
-    drawHouses(cx, g, s, spots, ruin, tm, zoom, false);
-    sp = { spots, theme: looks.theme, s: sc, c, x: x0, y: y0, used: 0 }; sprites.set(s, sp);
+    drawHouses(cx, g, s, spots, ruin, tm, zoom, marks);
+    sp = { spots, theme: looks.theme, s: sc, marks, c, x: x0, y: y0, used: 0 }; sprites.set(s, sp);
   }
   sp.used = performance.now();
   ctx.drawImage(sp.c, sp.x, sp.y, sp.c.width / sc, sp.c.height / sc);
-  for (const o of spots) if (o.kind) landmark(ctx, o.kind, o.hx, o.hy, o.w, o.d, tm, zoom);
+  if (!marks) for (const o of spots) if (o.kind) landmark(ctx, o.kind, o.hx, o.hy, o.w, o.d, tm, zoom);
   return true;
 }
 /** Pictures of towns not drawn for a few seconds are let go (they take memory). */
