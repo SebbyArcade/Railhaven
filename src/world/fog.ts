@@ -2,6 +2,13 @@ import type { Game } from '../state.ts';
 
 export const isRevealed = (g: Game, i: number) => (g.s.fog[i >> 3]! >> (i & 7)) & 1;
 
+/** Has the player uncovered this island's middle? (Island centres are fractional: round them, or the check lands on some other square.) */
+export const islandKnown = (g: Game, k: number) => {
+  const o = g.world.islands[k], n = g.world.n; if (!o) return false;
+  const x = Math.round(o.cx), y = Math.round(o.cy);
+  return x >= 0 && y >= 0 && x < n && y < n && !!isRevealed(g, y * n + x);
+};
+
 /** Reveal a disc of squares. Returns how many were new. */
 export function reveal(g: Game, x: number, y: number, r: number): number {
   const n = g.world.n; let fresh = 0;

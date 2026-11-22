@@ -44,6 +44,8 @@ export function labelAt(seed: number, s: { x: number; y: number }, hall: Hall | 
  * with its roof seen from above and its front wall showing, like the houses. Drawn in the hall's own frame: u runs
  * along the line, v across it. (Drawn under the trains, so nothing covers the tracks.)
  */
+/** Below this zoom a station's smallest details are under a pixel. */
+const FINE_ZOOM = 0.5;
 export function drawHall(ctx: CanvasRenderingContext2D, seed: number, h: Hall, zoom: number, tm = 0) {
   const T = TILE, n = h.town, lv = stationLevel(n.pop ?? 0), side = buildingSide(seed, h);
   const H = (k: number) => hash(seed, n.x, n.y, 300 + k);
@@ -63,6 +65,9 @@ export function drawHall(ctx: CanvasRenderingContext2D, seed: number, h: Hall, z
   }
   // canopies on posts over each platform from Town size up: a valanced wooden roof, glazed with iron columns for
   // the biggest; posts along the back of the platform so the tracks stay clear
+  // zoomed far out, the bits under a pixel (glazing bars, scallops, posts, lamps, benches, people) are left out:
+  // with 40+ stations they made zooming out lag (bug report 20)
+  const fine = zoom >= FINE_ZOOM;
   if (lv >= 2) for (const s of [-1, 1]) {
     const v0 = s > 0 ? 12.4 : -17.2, cw = L - (lv >= 4 ? 8 : 18), cv = 4.8;
     ctx.fillStyle = 'rgba(0,0,0,.2)'; ctx.fillRect(-cw / 2 + 1.2, v0 + 1.4, cw, cv);
@@ -70,14 +75,15 @@ export function drawHall(ctx: CanvasRenderingContext2D, seed: number, h: Hall, z
       ctx.fillStyle = 'rgba(200,225,235,.85)'; ctx.fillRect(-cw / 2, v0, cw, cv);
       ctx.fillStyle = 'rgba(255,255,255,.45)'; ctx.fillRect(-cw / 2, v0 + 0.4, cw, 1); // glint
       ctx.strokeStyle = '#4a5560'; ctx.lineWidth = 0.4;
-      for (let u = -cw / 2; u <= cw / 2 + 0.1; u += 4) { ctx.beginPath(); ctx.moveTo(u, v0); ctx.lineTo(u, v0 + cv); ctx.stroke(); } // glazing bars
+      if (fine) for (let u = -cw / 2; u <= cw / 2 + 0.1; u += 4) { ctx.beginPath(); ctx.moveTo(u, v0); ctx.lineTo(u, v0 + cv); ctx.stroke(); } // glazing bars
       ctx.strokeRect(-cw / 2, v0, cw, cv);
     } else {
       ctx.fillStyle = lv >= 3 ? '#7a6a5c' : '#8a4a3a'; ctx.fillRect(-cw / 2, v0, cw, cv);
       ctx.fillStyle = 'rgba(255,255,255,.18)'; ctx.fillRect(-cw / 2, v0, cw, cv * 0.45);
       ctx.strokeStyle = 'rgba(0,0,0,.18)'; ctx.lineWidth = 0.3;
-      for (let u = -cw / 2 + 1.5; u < cw / 2; u += 1.5) { ctx.beginPath(); ctx.moveTo(u, v0); ctx.lineTo(u, v0 + cv); ctx.stroke(); } // corrugation
+      if (fine) for (let u = -cw / 2 + 1.5; u < cw / 2; u += 1.5) { ctx.beginPath(); ctx.moveTo(u, v0); ctx.lineTo(u, v0 + cv); ctx.stroke(); } // corrugation
     }
+    if (!fine) continue;
     // valance: a scalloped edge on the track side
     const ev = s > 0 ? v0 : v0 + cv;
     ctx.fillStyle = lv >= 4 ? '#3c4650' : '#efe3c8';
@@ -87,7 +93,7 @@ export function drawHall(ctx: CanvasRenderingContext2D, seed: number, h: Hall, z
     for (let u = -cw / 2 + 3; u < cw / 2 - 1; u += 9) { ctx.beginPath(); ctx.arc(u, s > 0 ? v0 + cv - 1 : v0 + 1, 0.7, 0, 7); ctx.fill(); }
   }
   // benches, lamps and a few people waiting (below the canopies, so seen from above only at the ends)
-  for (const s of [-1, 1]) {
+  if (fine) for (const s of [-1, 1]) {
     const v0 = s > 0 ? 14.6 : -14.6;
     for (const u of lv >= 2 ? [-L / 2 + 4, L / 2 - 4] : [-L / 2 + 6, 0, L / 2 - 6]) lampPost(ctx, u, v0, tm);
     if (lv < 2) { bench(ctx, -L / 4, v0); if (lv >= 1) bench(ctx, L / 4, v0); }

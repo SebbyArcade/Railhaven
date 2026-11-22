@@ -1,7 +1,7 @@
 import type { Game } from '../state.ts';
 import { ACTS, actOf, ashford, compass, type Mission, msOf, progress, reachedIslands, rumourOf, SWAP_SHARE } from '../progress/missions.ts';
 import { islandSpec, SPEC_TEXT } from '../world/specialty.ts';
-import { isRevealed } from '../world/fog.ts';
+import { islandKnown } from '../world/fog.ts';
 import { fmtMoney } from './hud.ts';
 
 const esc = (s: string) => s.replace(/[&<>"]/g, c => `&#${c.charCodeAt(0)};`);
@@ -37,12 +37,12 @@ export function storyHtml(g: Game, page?: string): string {
     return h + back;
   }
   if (page === 'isl') {
-    const reached = reachedIslands(g), n = g.world.n, a = ashford(g);
+    const reached = reachedIslands(g), a = ashford(g);
     h += `<h3>🏝 Islands</h3>`;
     let hidden = 0;
     g.world.islands.forEach((isl, k) => {
       if (!isl.name) return;
-      if (k !== g.world.home && !reached.has(k) && !isRevealed(g, isl.cy * n + isl.cx)) { hidden++; return; }
+      if (k !== g.world.home && !reached.has(k) && !islandKnown(g, k)) { hidden++; return; }
       const sp = islandSpec(g, k), home = k === g.world.home;
       const what = home ? 'Your home island' : reached.has(k) ? `⚓ Reached${sp ? ' · ' + SPEC_TEXT[sp] : ''}` : `${compass(isl.cx - a.x, isl.cy - a.y)} of Ashford · ${rumourOf(g, k)}`;
       h += `<div class="row${reached.has(k) ? ' ok' : ''}"><b class="ico">${reached.has(k) ? '🏝' : '❔'}</b><div class="grow"><div class="line"><span>${esc(home ? 'Ashford Isle' : isl.name)}</span></div><small>${esc(what)}</small></div>${reached.has(k) && !home ? `<button class="mini" data-act="isle" data-id="${k}">Open ›</button>` : ''}</div>`;
