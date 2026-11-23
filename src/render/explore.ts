@@ -6,6 +6,7 @@ import type { Tools } from '../ui/tools.ts';
 import { CLAIM_R, poisOf, POI, POI_REACH, type Poi, scoutPlace, scoutStarts } from '../world/explore.ts';
 import { drawLandmark } from './landmarks.ts';
 import { rumours } from '../world/maps.ts';
+import { crewSpots } from '../world/landfall.ts';
 
 /** Landmarks and wrecks that are out of the fog, scouts on their way, and in Scout mode the start rings and the route. */
 export function drawExplore(ctx: CanvasRenderingContext2D, g: Game, _t: Tools | undefined, tm: number, vis: (x: number, y: number) => boolean, z: number) {
@@ -63,6 +64,11 @@ export function drawScouting(ctx: CanvasRenderingContext2D, g: Game, t: Tools | 
     ctx.stroke(); ctx.setLineDash([]);
     const p = scoutPlace(g, s), X = (p.x + 0.5) * TILE, Y = (p.y + 0.5) * TILE;
     marker(ctx, X, Y, s.boat ? '⛵' : '🚶', s.boat ? '#2f6f9a' : '#c07a2a', z);
+  }
+  // 🏕 landing crews mapping an island: their camp where they came ashore and walkers on the edge of the mapped land
+  for (const s of g.s.sweeps ?? []) {
+    marker(ctx, (s.x + 0.5) * TILE, (s.y + 0.5) * TILE, '🏕', '#3c7a3a', z);
+    for (const p of crewSpots(g, s)) marker(ctx, (p.x + 0.5) * TILE, (p.y + 0.5) * TILE, '🚶', '#c07a2a', z);
   }
   if (t?.mode !== 'scout') return;
   const pulse = 0.5 + 0.5 * Math.sin(tm * 4);

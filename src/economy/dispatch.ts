@@ -10,6 +10,7 @@ import { isDock, islandName, islandOfB, linkedDocks, railIsleName, railIsleOfB }
 import { railIsle, railIsleAt, sameRail } from '../track/isles.ts';
 import { type Ferry, freeSlot, seaBetween, seaPath, shipSpeed, tickShips } from '../ships/ships.ts';
 import { tickScouts } from '../world/explore.ts';
+import { tickSweeps } from '../world/landfall.ts';
 import { reachedIslands, tickMissions } from '../progress/missions.ts';
 import { capOf, expressMul, fleetIsl, fleetMulOf, FLEET, minLoad, rushDelivered } from './upgrades.ts';
 import { V_MAX } from '../trains/train.ts';
@@ -447,7 +448,7 @@ function nearestTown(g: Game, t: Train): { kind: 'town'; id: number } | null {
 
 /** Goods trains run themselves: each idle train collects the best waiting load and takes it where the plan says. */
 export function tickTrains(g: Game, dt: number) {
-  tickShips(g, dt); tickScouts(g, dt);
+  tickShips(g, dt); tickScouts(g, dt); tickSweeps(g, dt);
   if (Math.floor(g.s.t) !== Math.floor(g.s.t - dt)) { tickMissions(g); if (Math.floor(g.s.t) % 5 === 0) { checkLevel(g); tickTrade(g); } } // reaching an island can let a held level through
   let plan: Plan | null = null;
   const P = () => (plan ??= shipPlan(g));

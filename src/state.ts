@@ -97,6 +97,8 @@ export interface GameState {
   maps?: import('./world/maps.ts').AreaMap[];
   /** scouts out exploring */
   scouts?: import('./world/explore.ts').Scout[];
+  /** 🏕 landing crews mapping an island the railway just reached */
+  sweeps?: import('./world/landfall.ts').Sweep[];
   /** 🧭 scout reports, the last few (newest last) */
   reports?: import('./world/explore.ts').ScoutReport[];
   /** islands whose arrival card was shown (missing: an older game, filled in quietly with the islands already reached) */
