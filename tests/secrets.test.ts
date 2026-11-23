@@ -44,7 +44,7 @@ describe('🗝 island secrets', () => {
     expect(s.clues.some(c => c.got)).toBe(false); // the second clue waits for the first
     lay(s.clues[0]!.x + CLUE_R, s.clues[0]!.y); tickSecrets(g);
     expect(s.clues.map(c => !!c.got)).toEqual([true, true, false]); // track already at the 2nd reads it right after
-    expect(secretHint(g, s)).toMatch(/^From the last clue, head /);
+    expect(secretHint(g, s)).toMatch(/^From clue 2 \(the glowing 📜2 on the map\), head /);
     expect(g.secretCards?.at(-1)).toEqual({ id: s.id, ev: 'clue' });
     expect(secretCardHtml(g, s.id, 'clue')).toMatch(/Clue 2 of 3 read/);
     expect(secretTapAt(g, s.clues[1]!.y * n + s.clues[1]!.x)?.id).toBe(s.id); expect(secretTapAt(g, s.clues[2]!.y * n + s.clues[2]!.x)).toBeUndefined();

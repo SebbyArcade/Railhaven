@@ -145,7 +145,7 @@ export function tickSecrets(g: Game) {
 const DIRS = ['east', 'south-east', 'south', 'south-west', 'west', 'north-west', 'north', 'north-east'];
 /** Where a hint starts: the last clue read, else the town on the island nearest the first clue. */
 export function hintFrom(g: Game, s: Secret): { x: number; y: number; name: string } {
-  const read = s.clues.filter(c => c.got).at(-1); if (read) return { ...read, name: 'the last clue' };
+  const got = s.clues.filter(c => c.got), read = got.at(-1); if (read) return { ...read, name: `clue ${got.length} (the glowing 📜${got.length} on the map)` };
   const k = islOf(g, s.x, s.y), c = s.clues[0]!;
   const t = g.s.sites.filter(o => o.kind === 'town' && islOf(g, o.x, o.y) === k).sort((a, b) => Math.hypot(a.x - c.x, a.y - c.y) - Math.hypot(b.x - c.x, b.y - c.y))[0];
   return t ? { x: t.x, y: t.y, name: t.name ?? 'the town' } : { x: c.x, y: c.y, name: 'the shore' };
@@ -171,7 +171,7 @@ export function secretHint(g: Game, s: Secret): string {
 
 /** For the map: clues already read (as faded ticks) and found secrets. Nothing shows where the next step is. */
 export function secretMarks(g: Game) {
-  const out: { read: { x: number; y: number }[]; found?: { x: number; y: number; icon: string } }[] = [];
+  const out: { read: { x: number; y: number; got?: boolean }[]; found?: { x: number; y: number; icon: string } }[] = [];
   for (const s of g.s.secrets ?? []) out.push(s.found !== undefined ? { read: [], found: { x: s.x, y: s.y, icon: SECRET_INFO[s.kind].icon } } : { read: s.clues.filter(c => c.got) });
   return out;
 }
@@ -204,7 +204,7 @@ export function secretCardHtml(g: Game, id: number, ev?: string): string | null 
   h += `<div class="gift">${got >= 3 ? '🗝' : '📜'} <i>${esc(secretHint(g, s))}</i></div>`;
   h += `<div class="note">${chip(got >= 1, '📜')} ${chip(got >= 2, '📜')} ${chip(got >= 3, '📜')} ${chip(false, '🗝')} · 🎁 ${s.kind === 'treasure' ? `a chest of old coins (${fmt(treasureCash(g))} now)` : I.perk}</div>`;
   const o = secretNext(g, s);
-  return h + `<button class="act" data-act="lookxy" data-x="${o.x}" data-y="${o.y}">📍 Show ${got ? 'the last clue' : esc(hintFrom(g, s).name)}</button>`;
+  return h + `<button class="act" data-act="lookxy" data-x="${o.x}" data-y="${o.y}">📍 Show ${got ? `clue ${got}` : esc(hintFrom(g, s).name)}</button>`;
 }
 
 /** The trail you're on: the secret with the most clues read (at least one), not found yet. */
@@ -218,5 +218,5 @@ export function secretPill(g: Game): string {
   const s = activeSecret(g); if (!s) return '';
   const t = trailNext(s)!, o = hintFrom(g, s), a = Math.atan2(t.y - o.y, t.x - o.x), d = Math.max(5, Math.round(Math.hypot(t.x - o.x, t.y - o.y) / 5) * 5);
   const dir = DIRS[((Math.round(a / (Math.PI / 4)) % 8) + 8) % 8]!;
-  return `<span class="mtext">${t.spot ? '🗝 Dig' : `📜 Clue ${s.clues.filter(c => c.got).length + 1}`}: ${dir}, ~${d} squares from the last 📜</span><button>Hint ›</button>`;
+  return `<span class="mtext">${t.spot ? '🗝 Dig' : `📜 Clue ${s.clues.filter(c => c.got).length + 1}`}: ${dir}, ~${d} squares from 📜${s.clues.filter(c => c.got).length}</span><button>Hint ›</button>`;
 }
