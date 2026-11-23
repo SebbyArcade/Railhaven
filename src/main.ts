@@ -42,7 +42,7 @@ import { buyTrainAt, buyTrainFor, fleetByIsland, bringTrainFrom, cancelMove, sel
 import { moneyTip, type Tip } from './economy/advice.ts';
 import { buyShip, buyShipUp, SHIP_UP, type ShipUpKey, seaLanes, shipPlace, shipUpLvl } from './ships/ships.ts';
 import { CLAIM_TEXT, POI, poisOf, poiTapAt } from './world/explore.ts';
-import { secretTapAt } from './world/secrets.ts';
+import { activeSecret, secretPill, secretTapAt } from './world/secrets.ts';
 import { buyFishing, FISHING } from './economy/upgrades.ts';
 import { checkStuck } from './economy/nofail.ts';
 import { ashford, compass, missionsOf, msOf, recommendedBuild, swapMission } from './progress/missions.ts';
@@ -361,6 +361,9 @@ cardEl.onclick = e => {
 
 // Missions: the pill under the top bar opens the story card; Go › shows where to act
 const pill = $('mission');
+// 🗝 the secret trail you're following: its hint stays in view; tap for the card
+const trail = $('trail');
+trail.onclick = () => { const s = activeSecret(game); if (s) openCard({ kind: 'secret', id: s.id }); };
 let skipArmed = 0;
 pill.onclick = e => {
   const b = (e.target as HTMLElement).closest('button');
@@ -710,6 +713,7 @@ function frame(now: number) {
       openCard({ kind: 'find', id: id!, more: rest.length });
     }
     renderCard();
+    { const th = lessonOn(game) || onHome() ? '' : secretPill(game); if (trail.innerHTML !== th) trail.innerHTML = th; trail.style.display = th ? 'flex' : 'none'; }
     if (!lessonOn(game)) { const ph = missionPill(game); if (pill.innerHTML !== ph) pill.innerHTML = ph; pill.style.display = ph ? 'flex' : 'none'; }
     updateTip();
   }

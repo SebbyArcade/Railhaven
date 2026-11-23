@@ -122,7 +122,7 @@ export function tickSecrets(g: Game) {
     if (!s) { (g.s.noSecret ??= []).push(k); continue; }
     readTrail(g, s); fresh.push(s); // track already there reads its clues quietly
   }
-  if (fresh.length > 2) say(g, `🗝 ${fresh.length} islands on your railway hide secrets: follow the 📜 trails on the map, or open Story → Secrets`);
+  if (fresh.length > 2) say(g, `🗝 ${fresh.length} islands on your railway hide secrets: each starts with a hint in Story → 🗝 Secrets`);
   else for (const s of fresh) (g.secretCards ??= []).push({ id: s.id, ev: 'new' }); // its card explains it
   for (const s of g.s.secrets ?? []) {
     if (s.found !== undefined) continue;
@@ -191,7 +191,7 @@ export function secretNext(g: Game, s: Secret): { x: number; y: number } {
 export function secretCardHtml(g: Game, id: number, ev?: string): string | null {
   const s = (g.s.secrets ?? []).find(o => o.id === id); if (!s) return null;
   const I = SECRET_INFO[s.kind], k = islOf(g, s.x, s.y), nm = islName(g, k), got = s.clues.filter(c => c.got).length;
-  const head = s.found !== undefined ? ['🗝', `Secret found on ${nm}!`] : ev === 'clue' ? ['📜', got < 3 ? `Clue ${got} of 3 read!` : 'The last clue!'] : ev === 'new' ? ['🗝', `${nm} hides a secret`] : ['📜', `${got} of 3 clues read`];
+  const head = s.found !== undefined ? ['🗝', `Secret found on ${nm}!`] : ev === 'clue' ? ['📜', got < 3 ? `Clue ${got} of 3 read!` : 'All 3 clues found! Now dig'] : got >= 3 ? ['🗝', 'Now dig for the secret'] : ev === 'new' ? ['🗝', `${nm} hides a secret`] : ['📜', `${got} of 3 clues read`];
   let h = `<div class="find"><span class="rar" style="border-color:#e8a33c;color:#e8a33c">🗝 ISLAND SECRET</span><small>on ${nm}</small><b class="fbig">${head[0]}</b><h2>${head[1]}</h2></div>`;
   if (s.found !== undefined) {
     h += `<div class="gift">${I.icon} <b>${I.name}</b>: ${s.kind === 'treasure' ? 'a chest of old coins, paid into your money' : I.perk}</div>`;
@@ -200,8 +200,23 @@ export function secretCardHtml(g: Game, id: number, ev?: string): string | null 
   if (ev === 'clue') h += `<div class="note">📜 Your track passed ${CLUE_TEXT[(s.id + got) % CLUE_TEXT.length]}. Scratched on it is a hint to ${got < 3 ? 'the next clue' : 'where the secret is buried'}.</div>`;
   else if (ev === 'new' || !got) h += `<div class="note">Sailors say ${I.rumour}. A trail of 3 hidden clues leads to it: nothing marks them on the map, only the hints.</div>`;
   const chip = (ok: boolean, t: string) => `<span class="chip2" style="${ok ? 'background:#2f7a34;color:#fff' : ''}">${ok ? '✅' : '⬜'} ${t}</span>`;
-  h += `<div class="gift">📜 <i>${esc(secretHint(g, s))}</i></div>`;
+  if (got >= 3) h += `<div class="note"><b>Last step:</b> the clues lead to where the secret is buried. Follow this hint and lay track there: when your track comes within ${SPOT_R} squares, it is dug up by itself and the reward is yours.</div>`;
+  h += `<div class="gift">${got >= 3 ? '🗝' : '📜'} <i>${esc(secretHint(g, s))}</i></div>`;
   h += `<div class="note">${chip(got >= 1, '📜')} ${chip(got >= 2, '📜')} ${chip(got >= 3, '📜')} ${chip(false, '🗝')} · 🎁 ${s.kind === 'treasure' ? `a chest of old coins (${fmt(treasureCash(g))} now)` : I.perk}</div>`;
   const o = secretNext(g, s);
   return h + `<button class="act" data-act="lookxy" data-x="${o.x}" data-y="${o.y}">📍 Show ${got ? 'the last clue' : esc(hintFrom(g, s).name)}</button>`;
+}
+
+/** The trail you're on: the secret with the most clues read (at least one), not found yet. */
+export function activeSecret(g: Game): Secret | undefined {
+  let best: Secret | undefined, bn = 0;
+  for (const s of g.s.secrets ?? []) { if (s.found !== undefined) continue; const n = s.clues.filter(c => c.got).length; if (n > bn) { bn = n; best = s; } }
+  return best;
+}
+/** The pill under the mission: where the trail goes next, in short, so the hint never gets lost. */
+export function secretPill(g: Game): string {
+  const s = activeSecret(g); if (!s) return '';
+  const t = trailNext(s)!, o = hintFrom(g, s), a = Math.atan2(t.y - o.y, t.x - o.x), d = Math.max(5, Math.round(Math.hypot(t.x - o.x, t.y - o.y) / 5) * 5);
+  const dir = DIRS[((Math.round(a / (Math.PI / 4)) % 8) + 8) % 8]!;
+  return `<span class="mtext">${t.spot ? '🗝 Dig' : `📜 Clue ${s.clues.filter(c => c.got).length + 1}`}: ${dir}, ~${d} squares from the last 📜</span><button>Hint ›</button>`;
 }
