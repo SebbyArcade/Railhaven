@@ -1,3 +1,4 @@
+import { perks } from '../progress/prizes.ts';
 import type { Game } from '../state.ts';
 import type { Train } from '../trains/train.ts';
 import { aName, type Building, GOODS, type Good, growsTracks, INDUSTRIES, isFactory, isLinked, stripError, tracksOf, yardSquares } from '../buildings/industries.ts';
@@ -13,7 +14,8 @@ export const maxLvlOf = (g: Game, b: Building) => b.kind === 'dock' ? MAX_LVL : 
 /** the Railway level that lets a building grow past this level, or 0 if none does */
 export const lvlUnlockAt = (b: Building) => b.kind === 'dock' ? 0 : b.lvl === 3 ? 4 : b.lvl === 4 ? 6 : 0;
 /** Express engines (Railway levels 5 and 8): every train 15% faster each time. */
-export const expressMul = (g: Game) => ((g.s.rlv ?? 0) >= 5 ? 1.15 : 1) * ((g.s.rlv ?? 0) >= 8 ? 1.15 : 1);
+/** Express speed: Railway levels 5 and 8, and 🌟 prize engines. */
+export const expressMul = (g: Game) => ((g.s.rlv ?? 0) >= 5 ? 1.15 : 1) * ((g.s.rlv ?? 0) >= 8 ? 1.15 : 1) * perks(g).spd;
 
 /** Price to take a building up one level: industries 1.5×, 3×, 6×, 12× their base price, factories $3,000, $7,500, $18,000, $40,000. */
 export function levelPrice(b: Building): number {
@@ -115,7 +117,7 @@ export function fleetIsl(g: Game, t: Train): number {
 }
 
 /** How many units one train carries on an island. Longer trains (Railway level 7): +20% cargo on every train. */
-export const trainCap = (g: Game, isl = g.world.home) => Math.round(20 * fleetMulOf(g, 'wag', isl) * ((g.s.rlv ?? 0) >= 7 ? 1.2 : 1));
+export const trainCap = (g: Game, isl = g.world.home) => Math.round(20 * fleetMulOf(g, 'wag', isl) * ((g.s.rlv ?? 0) >= 7 ? 1.2 : 1) * perks(g).cap);
 /** What this train carries (its island's wagons). */
 export const capOf = (g: Game, t: Train) => trainCap(g, fleetIsl(g, t));
 /** A train sets off when this many are ready (three quarters of a load). */

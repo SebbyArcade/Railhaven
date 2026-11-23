@@ -2,6 +2,8 @@ import { hallOf } from '../buildings/stations.ts';
 import type { Game, Site } from '../state.ts';
 import { fallsMul, POI, POI_RARITY, poisOf, RARITY } from '../world/explore.ts';
 import { isleCard, reportsHtml, scoutCard } from './discover.ts';
+import { starCardHtml } from './atlas.ts';
+import { freeOf } from '../progress/prizes.ts';
 import { joinGap } from '../track/joins.ts';
 import { aName, buildingSquares, farText, yardSquares, bufOf, growsTracks, stripError, tracksOf, type Building, capOf, GOODS, type Good, INDUSTRIES, type IndustryKind, inputsOf, isFactory, isLinked, lockedText, outputOf, shareAt, forestOf, stumpsOf, yardSet } from '../buildings/industries.ts';
 import { factoryState } from '../economy/production.ts';
@@ -27,7 +29,7 @@ import { ordersHtml, placeName, waitingForTrain } from './orders.ts';
 import { mapHtml, type MapView } from './mapviews.ts';
 import { mapCost, MAP_R, MAP_R_SEA } from '../world/maps.ts';
 
-export type Card = { kind: 'shed'; id: 0; page?: string } | { kind: 'fleet'; id: 0; page?: string } | { kind: 'plot'; id: number } | { kind: 'town'; id: number; page?: string } | { kind: 'bld'; id: number; page?: string } | { kind: 'train'; id: number } | { kind: 'story'; id: 0; page?: string } | { kind: 'game'; id: number; page?: string } | { kind: 'orders'; id: 0 } | { kind: 'map'; id: 0 } | { kind: 'ship'; id: number } | { kind: 'ships'; id: 0 } | { kind: 'find'; id: number; more?: number } | { kind: 'scout'; id: number } | { kind: 'isle'; id: number; fresh?: boolean };
+export type Card = { kind: 'shed'; id: 0; page?: string } | { kind: 'fleet'; id: 0; page?: string } | { kind: 'plot'; id: number } | { kind: 'town'; id: number; page?: string } | { kind: 'bld'; id: number; page?: string } | { kind: 'train'; id: number } | { kind: 'story'; id: 0; page?: string } | { kind: 'game'; id: number; page?: string } | { kind: 'orders'; id: 0 } | { kind: 'map'; id: 0 } | { kind: 'ship'; id: number } | { kind: 'ships'; id: 0 } | { kind: 'find'; id: number; more?: number } | { kind: 'scout'; id: number } | { kind: 'isle'; id: number; fresh?: boolean } | { kind: 'star'; id: 0 };
 
 /** the kind that makes each good */
 const makerOf = (k: Good) => (Object.keys(INDUSTRIES) as IndustryKind[]).find(m => INDUSTRIES[m].makes === k);
@@ -65,6 +67,7 @@ export function cardHtml(g: Game, c: Card, view?: MapView | null): string | null
   if (c.kind === 'find') return findCard(g, c.id, c.more ?? 0);
   if (c.kind === 'scout') return c.id ? scoutCard(g, c.id) : reportsHtml(g);
   if (c.kind === 'isle') return isleCard(g, c.id, !!c.fresh);
+  if (c.kind === 'star') return g.starNow ? starCardHtml(g, g.starNow) : null;
   if (c.kind === 'town') { const t = siteOf(g, c.id); return t?.kind === 'town' ? townCard(g, t, c.page) : null; }
   if (c.kind === 'bld') { const b = g.s.buildings?.find(x => x.id === c.id); return b ? buildingCard(g, b, c.page) : null; }
   const t = g.s.trains.find(x => x.id === c.id); return t ? trainCard(g, t) : null;
@@ -159,9 +162,10 @@ function townPage(g: Game, t: Site, page: string): string {
   for (const P of projectsFor(g, t)) {
     if (P.size >= 3 && P.ashford && !grand) { grand = true; h += `<h3>👑 Grand Ashford</h3><div class="note">Landmarks for a rich railway: they help the whole network.</div>`; }
     if (!P.ashford && grand) { grand = false; h += `<h3>🏘 For Ashford's streets</h3>`; }
-    const has = hasProject(g, t, P.k), rl = !!P.rlv && (g.s.rlv ?? 0) < P.rlv, lock = stepOf(t) < P.size || rl;
-    h += `<div class="row${has ? ' done' : ''}"><b class="ico">${P.icon}</b><div class="grow"><div class="line"><span>${P.name}</span><span>${has ? '✅ Built' : rl ? `🔒 Railway level ${P.rlv}` : lock ? `🔒 ${sizeName(P.size)}` : fmtMoney(P.price)}</span></div><small>${P.text}</small>`;
-    if (!has && !lock) h += room ? `<button class="mini" data-act="project" data-id="${t.id}" data-k="${P.k}" ${g.s.money >= P.price ? '' : 'disabled'}>🏗 Build · ${fmtMoney(P.price)}</button>` : `<small class="why">No free grass near ${name} for it</small>`;
+    const has = hasProject(g, t, P.k), rl = !!P.rlv && (g.s.rlv ?? 0) < P.rlv, lock = stepOf(t) < P.size || rl, free = freeOf(g, P.k) > 0;
+    if (P.prize && !has && !free) { h += `<div class="row"><b class="ico">${P.icon}</b><div class="grow"><div class="line"><span>${P.name}</span><span>🌟 Prize</span></div><small>${P.text}</small><small class="why">Can't be bought: win one with island stars (🌟 Atlas in the story card)</small></div></div>`; continue; }
+    h += `<div class="row${has ? ' done' : ''}"><b class="ico">${P.icon}</b><div class="grow"><div class="line"><span>${P.name}</span><span>${has ? '✅ Built' : rl ? `🔒 Railway level ${P.rlv}` : lock ? `🔒 ${sizeName(P.size)}` : free ? '🎁 Free' : fmtMoney(P.price)}</span></div><small>${P.text}</small>`;
+    if (!has && !lock) h += room ? `<button class="mini" data-act="project" data-id="${t.id}" data-k="${P.k}" ${free || g.s.money >= P.price ? '' : 'disabled'}>🏗 Build · ${free ? '🎁 free (prize)' : fmtMoney(P.price)}</button>` : `<small class="why">No free grass near ${name} for it</small>`;
     else if (rl) h += `<small class="why">Unlocks at Railway level ${P.rlv}: fill more town orders</small>`;
     else if (lock) h += `<small class="why">Unlocks when ${name} grows into a ${sizeName(P.size)}</small>`;
     h += `</div></div>`;

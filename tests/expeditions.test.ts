@@ -30,6 +30,9 @@ describe('🗺 expeditions grow the map by a ring of new islands', () => {
     const d = linkedDocks(g)[0]!; d.lvl = 2; g.s.money = 500000;
     expect(expeditionError(g, d)).toContain('level 3 dock');
     d.lvl = 3; expect(expeditionPrice(g)).toBe(60000);
+    // 🌟 the next ring's charts need island stars: 15 for the first ring, 30 for the second
+    expect(expeditionError(g, d)).toContain('15 island stars');
+    g.s.stars = Object.fromEntries(Array.from({ length: 10 }, (_, i) => ['isle' + i, 7])); expect(expeditionError(g, d)).toBe('');
     const sites = g.s.sites.length, n0 = g.world.n, ashford = { ...g.s.sites[0]! };
     const heads = g.s.trains.map(t => stepPoint(g.net, t.trail.at(-1)!, t.headS));
     const bld = g.s.buildings!.map(b => [b.id, b.x, b.y] as const);

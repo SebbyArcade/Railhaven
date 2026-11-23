@@ -1,3 +1,5 @@
+import { perks } from '../progress/prizes.ts';
+import { tickStars } from '../progress/stars.ts';
 import type { Game, Site } from '../state.ts';
 import { fallsMul } from '../world/explore.ts';
 import type { Train } from '../trains/train.ts';
@@ -25,8 +27,9 @@ import { type NewsGo, say } from '../core/news.ts';
 export const LOAD_TIME = 4;
 /** Loading or unloading time for this train: 🚉 the Grand Station makes it 25% shorter on Ashford Isle. */
 export function loadTime(g: Game, t: Train): number {
-  if (!hasGrandStation(g)) return LOAD_TIME;
-  const a = g.s.sites[0]; return a && g.world.islandOf[headSquare(g, t)] === g.world.islandOf[a.y * g.world.n + a.x] ? LOAD_TIME * GRAND_LOAD : LOAD_TIME;
+  const L = LOAD_TIME * perks(g).load; // 🌟 prize engines
+  if (!hasGrandStation(g)) return L;
+  const a = g.s.sites[0]; return a && g.world.islandOf[headSquare(g, t)] === g.world.islandOf[a.y * g.world.n + a.x] ? L * GRAND_LOAD : L;
 }
 /** upkeep per second while a train moves (parked trains cost nothing), +3% per train beyond six */
 export const UPKEEP = 0.6;
@@ -317,7 +320,7 @@ export const topEng = (g: Game) => Math.max(1, ...Object.values(g.s.fleetI ?? {}
 /** A train's speed against the fastest island's: its own island's engines. */
 export const engShare = (g: Game, t: Train) => fleetMulOf(g, 'eng', fleetIsl(g, t)) / topEng(g);
 
-export const tripCost = (g: Game, squares: number, isl = g.world.home) => UPKEEP * fleetMul(g.s.trains.length) * fleetMulOf(g, 'rep', isl) * (squares * 32 / (V_MAX * fleetMulOf(g, 'eng', isl) * expressMul(g)) * 3 + 10);
+export const tripCost = (g: Game, squares: number, isl = g.world.home) => UPKEEP * fleetMul(g.s.trains.length) * fleetMulOf(g, 'rep', isl) * perks(g).run * (squares * 32 / (V_MAX * fleetMulOf(g, 'eng', isl) * expressMul(g)) * 3 + 10);
 
 /** trips remembered per train, and seconds a train waiting for better work waits before it forgets its oldest trip */
 export const NET_TRIPS = 3, NET_FORGET = 300;
@@ -450,10 +453,10 @@ function nearestTown(g: Game, t: Train): { kind: 'town'; id: number } | null {
 /** Goods trains run themselves: each idle train collects the best waiting load and takes it where the plan says. */
 export function tickTrains(g: Game, dt: number) {
   tickShips(g, dt); tickScouts(g, dt); tickSweeps(g, dt);
-  if (Math.floor(g.s.t) !== Math.floor(g.s.t - dt)) { tickMissions(g); tickBooms(g); if (Math.floor(g.s.t) % 5 === 0) { checkLevel(g); tickTrade(g); } } // reaching an island can let a held level through
+  if (Math.floor(g.s.t) !== Math.floor(g.s.t - dt)) { tickMissions(g); tickBooms(g); if (Math.floor(g.s.t) % 2 === 0) tickStars(g); if (Math.floor(g.s.t) % 5 === 0) { checkLevel(g); tickTrade(g); } } // reaching an island can let a held level through
   let plan: Plan | null = null;
   const P = () => (plan ??= shipPlan(g));
-  const fm = fleetMul(g.s.trains.length);
+  const fm = fleetMul(g.s.trains.length) * perks(g).run; // 🌟 prize engines run cheaper
   // each island has its own engines: vmax is the fastest, slower islands' trains run at their share of it (speedOf)
   g.sys.vmax = V_MAX * topEng(g) * expressMul(g);
   // bridges cost a little to keep up, every minute, like trains on the move (counted with running costs); never while

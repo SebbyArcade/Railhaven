@@ -32,6 +32,7 @@ describe('new goods: two-input factories at home, one new chain per expedition',
   it('on his save, each ring brings its own deposits and a mine fits on them', async () => {
     let { g } = importLegacy(await decodeLegacy(fs.readFileSync('tests/saves/save-seb-2026-11-14.json', 'utf8'))) as { g: Game };
     const d = linkedDocks(g)[0]!; d.lvl = 3;
+    g.s.stars = Object.fromEntries(Array.from({ length: 20 }, (_, i) => ['isle' + i, 7])); // 🌟 60 stars: charts for three rings
     const want: Record<number, string[]> = { 1: ['gold', 'gems'], 2: ['cocoa'], 3: ['rubber'] };
     for (let ring = 1; ring <= 3; ring++) {
       g.s.money = 1e7;
