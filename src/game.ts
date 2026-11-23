@@ -9,7 +9,7 @@ const isHomeDock = (g: Game, b: import('./buildings/industries.ts').Building) =>
 import { doubleSquares, hallsOf } from './buildings/stations.ts';
 import { generateWorld, MAP_N, MAP_VERSION, refreshIslands, refreshWater, TILE } from './world/terrain.ts';
 import { generateSites } from './world/sites.ts';
-import { emptyFog, reveal } from './world/fog.ts';
+import { clearPockets, emptyFog, reveal } from './world/fog.ts';
 import { buildNetwork, type Network } from './track/network.ts';
 import { trackFromSave, trackToSave } from './track/state.ts';
 import type { TrackMap } from './track/types.ts';
@@ -95,6 +95,7 @@ export function loadGame(s: GameState): Game {
   const g = assemble(s);
   for (const b of g.s.buildings ?? []) revealAround(g, b); // older saves: buildings placed before they uncovered land
   for (const b of linkedDocks(g)) chartSea(g, b); // older saves: docks that charted only part of their reach chart the rest
+  clearPockets(g); // older saves: fog pockets inside track loops
   startSweeps(g, true); // older saves: islands reached before landing crews mapped them get mapped now
   return g;
 }
@@ -131,6 +132,7 @@ export function trackChanged(g: Game) {
   for (const b of linkedDocks(g)) if (chartSea(g, b)) say(g, `⚓ The ${isHomeDock(g, b) ? 'dock' : 'landing'} charts the sea around it: new shores are out of the fog`, { kind: 'bld', id: b.id });
   surveyLandings(g);
   startSweeps(g);
+  clearPockets(g);
   checkPois(g);
   g.s.trains.forEach((t, k) => { relocate(g.net, t, where[k]!); });
   g.s.breaks = g.s.breaks?.filter(b => g.track.has(b.square));
