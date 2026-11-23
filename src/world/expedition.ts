@@ -44,8 +44,6 @@ export function growState(s: GameState, n0: number, d: number) {
   s.track = s.track.map(([i, l, b]) => [sq(i), l, b]);
   for (const o of [...s.sites, ...(s.buildings ?? []), ...(s.parks ?? []), ...(s.pois ?? []), ...(s.maps ?? [])]) xy(o);
   xy(s.shed); xy(s.storm);
-  for (const sc of s.secrets ?? []) { xy(sc); sc.clues.forEach(xy); if (sc.cx !== undefined) { sc.cx += d; sc.cy! += d; } }
-  s.noSecret = [];
   s.sweeps = []; // island numbers change with the new ring: crews start again from the next track change
   s.camera.x += P; s.camera.y += P;
   for (const b of s.breaks ?? []) b.square = sq(b.square);

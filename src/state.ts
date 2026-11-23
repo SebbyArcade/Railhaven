@@ -101,8 +101,6 @@ export interface GameState {
   sweeps?: import('./world/landfall.ts').Sweep[];
   /** 🔥 boom towns: rushes running, how many started, when the next one starts, how many the railway reached in time */
   booms?: import('./world/booms.ts').Boom[]; boomN?: number; nextBoom?: number; boomsWon?: number;
-  /** 🗝 island secrets placed so far, how many, and islands too small to hold one */
-  secrets?: import('./world/secrets.ts').Secret[]; secretN?: number; noSecret?: number[];
   /** 🧭 scout reports, the last few (newest last) */
   reports?: import('./world/explore.ts').ScoutReport[];
   /** islands whose arrival card was shown (missing: an older game, filled in quietly with the islands already reached) */
@@ -175,8 +173,6 @@ export interface Game {
   mineOk?: Map<string, { at: number; ok: boolean }>;
   /** landmarks just spotted, waiting for their discovery card (not saved) */
   found?: number[];
-  /** 🗝 secret cards waiting to open: a secret just heard of, a clue read, a secret found (not saved) */
-  secretCards?: { id: number; ev: 'new' | 'clue' | 'found' }[];
   /** scout reports just filed, waiting for their card (not saved) */
   reported?: number[];
   /** islands just reached, waiting for their arrival card (not saved) */

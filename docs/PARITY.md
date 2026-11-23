@@ -69,4 +69,3 @@ that makes sense. Details for each line: `legacy/CHANGES.md` (search the version
 ## New in the rebuild (not in the old game)
 - [x] 🏕 Landing crews: the first time the railway reaches an island, a crew maps the whole island with its shore (Sébastien, 2026-11-22)
 - [x] 🔥 Boom towns: gold, oil, timber or fish struck at an unlinked town or site; link it before the countdown ends for a bonus and double pay there for 10 minutes; missing one costs nothing
-- [x] 🗝 Island secrets: every island reached hides one; 3 📜 clues narrow a search circle, track to the ✖ finds it (💰 coins, 🗿 +20% pay on the island, 🌾 +20% output on the island); Story → Secrets

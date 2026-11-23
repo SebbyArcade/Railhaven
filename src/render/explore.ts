@@ -8,7 +8,6 @@ import { drawLandmark } from './landmarks.ts';
 import { rumours } from '../world/maps.ts';
 import { crewSpots } from '../world/landfall.ts';
 import { boomLabel } from '../world/booms.ts';
-import { secretMarks } from '../world/secrets.ts';
 
 /** Landmarks and wrecks that are out of the fog, scouts on their way, and in Scout mode the start rings and the route. */
 export function drawExplore(ctx: CanvasRenderingContext2D, g: Game, _t: Tools | undefined, tm: number, vis: (x: number, y: number) => boolean, z: number) {
@@ -71,16 +70,6 @@ export function drawScouting(ctx: CanvasRenderingContext2D, g: Game, t: Tools | 
   for (const s of g.s.sweeps ?? []) {
     marker(ctx, (s.x + 0.5) * TILE, (s.y + 0.5) * TILE, '🏕', '#3c7a3a', z);
     for (const p of crewSpots(g, s)) marker(ctx, (p.x + 0.5) * TILE, (p.y + 0.5) * TILE, '🚶', '#c07a2a', z);
-  }
-  // 🗝 island secrets: only clues already read (faded ticks, tap for the hint) and found ones; the next step is never marked
-  for (const m of secretMarks(g)) {
-    m.read.forEach((c, k) => {
-      const X = (c.x + 0.5) * TILE, Y = (c.y + 0.5) * TILE, last = k === m.read.length - 1;
-      if (last) { const p = 0.5 + 0.5 * Math.sin(tm * 4); ctx.strokeStyle = `rgba(255,210,80,${0.5 + 0.5 * p})`; ctx.lineWidth = 3 / Math.max(0.4, z); ctx.beginPath(); ctx.arc(X, Y, TILE * (1.1 + 0.3 * p), 0, 7); ctx.stroke(); }
-      marker(ctx, X, Y, '📜', last ? '#b8861c' : '#6b5a3a', z);
-      pill(ctx, X, Y - TILE * 1.4, `${k + 1}`, last ? 'rgba(184,134,28,.95)' : 'rgba(107,90,58,.9)', z); // the clue's number: hints start from the latest
-    });
-    if (m.found) marker(ctx, (m.found.x + 0.5) * TILE, (m.found.y + 0.5) * TILE, m.found.icon, '#7a5a12', z);
   }
   // 🔥 boom towns: a flare ring over the town and the countdown
   for (const b of g.s.booms ?? []) {

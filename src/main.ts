@@ -42,7 +42,6 @@ import { buyTrainAt, buyTrainFor, fleetByIsland, bringTrainFrom, cancelMove, sel
 import { moneyTip, type Tip } from './economy/advice.ts';
 import { buyShip, buyShipUp, SHIP_UP, type ShipUpKey, seaLanes, shipPlace, shipUpLvl } from './ships/ships.ts';
 import { CLAIM_TEXT, POI, poisOf, poiTapAt } from './world/explore.ts';
-import { activeSecret, secretPill, secretTapAt } from './world/secrets.ts';
 import { buyFishing, FISHING } from './economy/upgrades.ts';
 import { checkStuck } from './economy/nofail.ts';
 import { ashford, compass, missionsOf, msOf, recommendedBuild, swapMission } from './progress/missions.ts';
@@ -142,7 +141,6 @@ attachInput(canvas, () => game.s.camera, () => view, () => game.world.n * 32, {
     if (tools.tapSquare(i)) return;
     const n = game.world.n, x = i % n, y = (i / n) | 0;
     if (!isRevealed(game, i)) { toast('Unexplored fog: 🔭 Scout from a town or dock on your railway, or lay track toward it'); return; }
-    const sec = secretTapAt(game, i); if (sec) { openCard({ kind: 'secret', id: sec.id }); return; } // 📜 a clue or the ✖: what it is and what to do
     const poi = poiTapAt(game, i); // a building on this square wins: its card opens below
     if (poi) { tools.poiSel = { id: poi.id, until: performance.now() + 5000 }; toast(`${POI[poi.kind].icon} ${POI[poi.kind].name}: ${poi.got ? 'yours · ' : poi.kind === 'wreck' ? '' : `${CLAIM_TEXT} to take it over · `}${POI[poi.kind].perk}`); return; }
     const br = game.s.breaks?.find(b => b.square === i);
@@ -236,7 +234,6 @@ cardEl.onclick = e => {
   if (b.dataset.act === 'lookxy') { const x = +b.dataset.x!, y = +b.dataset.y!; closeCard(); lookAt(x, y); tools.flash = { square: y * game.world.n + x, until: performance.now() + 2500 }; return; }
   if (b.dataset.act === 'report') { openCard({ kind: 'scout', id: +b.dataset.id! }); return; }
   if (b.dataset.act === 'reports') { openCard({ kind: 'scout', id: 0 }); return; }
-  if (b.dataset.act === 'secrets') { openCard({ kind: 'story', id: 0, page: 'secrets' }); return; }
   if (b.dataset.act === 'isle') { openCard({ kind: 'isle', id: +b.dataset.id! }); return; }
   if (b.dataset.act === 'lookpoi') { const p = poisOf(game).find(x => x.id === +b.dataset.id!); closeCard(); if (p) { lookAt(p.x, p.y); tools.flash = { square: p.y * game.world.n + p.x, until: performance.now() + 2500 }; } return; }
   if (b.dataset.act === 'areamap') { const why = tools.openMap(+b.dataset.x!, +b.dataset.y!); if (why) { toast(why); return; } closeCard(); const c = game.s.camera; c.x = (+b.dataset.x! + 0.5) * 32; c.y = (+b.dataset.y! + 0.5) * 32; c.z = Math.max(0.1, Math.min(c.z, 0.9 * Math.min(view.w, view.h) / (2 * (tools.mapPv?.r ?? 45) * 32))); return; }
@@ -361,9 +358,6 @@ cardEl.onclick = e => {
 
 // Missions: the pill under the top bar opens the story card; Go › shows where to act
 const pill = $('mission');
-// 🗝 the secret trail you're following: its hint stays in view; tap for the card
-const trail = $('trail');
-trail.onclick = () => { const s = activeSecret(game); if (s) openCard({ kind: 'secret', id: s.id }); };
 let skipArmed = 0;
 pill.onclick = e => {
   const b = (e.target as HTMLElement).closest('button');
@@ -704,7 +698,6 @@ function frame(now: number) {
       game.news = (game.news ?? []).filter(m => !/is back: the map is drawn/.test(m));
       openCard({ kind: 'scout', id });
     }
-    else if (game.secretCards?.length && !tools.card && tools.mode === 'pan' && !menuOpen && !tools.againOn() && !lessonOn(game) && !onHome()) { const c = game.secretCards.shift()!; openCard({ kind: 'secret', id: c.id, ev: c.ev }); } // 🗝 a clue read, a secret heard of or found
     else if (game.found?.length && (lessonOn(game) || onHome())) game.found = []; // no discovery cards during the lessons
     else if (game.found?.length && !tools.card && tools.mode === 'pan' && !menuOpen && !tools.againOn()) { // a landmark just spotted: its discovery card
       const [id, ...rest] = game.found; game.found = [];
@@ -713,7 +706,6 @@ function frame(now: number) {
       openCard({ kind: 'find', id: id!, more: rest.length });
     }
     renderCard();
-    { const th = lessonOn(game) || onHome() ? '' : secretPill(game); if (trail.innerHTML !== th) trail.innerHTML = th; trail.style.display = th ? 'flex' : 'none'; }
     if (!lessonOn(game)) { const ph = missionPill(game); if (pill.innerHTML !== ph) pill.innerHTML = ph; pill.style.display = ph ? 'flex' : 'none'; }
     updateTip();
   }
