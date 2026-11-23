@@ -1,29 +1,32 @@
 import type { Game, Site } from '../state.ts';
+const esc = (t: string) => t.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]!));
 import { say } from '../core/news.ts';
 import { hash } from '../core/rng.ts';
-import { isRevealed } from './fog.ts';
+
 import { reachedIslands } from '../progress/missions.ts';
 
 /**
  * 🗝 Island secrets (Sébastien chose them with boom towns, 2026-11-22): every island the railway reaches hides one
- * secret, Ashford Isle too. Three 📜 clues lie inland; run your railway past one (within CLUE_R squares) to read it,
- * and a 🗝 search circle on the map shrinks round the secret. After the third clue the spot is marked ✖: lay track
- * to it and the secret is yours, each with something you can't get anywhere else.
+ * secret, Ashford Isle too, at the end of a trail of three 📜 clues. Nothing on the map shows where they are: each
+ * step comes with a written hint (a direction, a rough distance and what the land is like there), starting from a
+ * town. Run your railway within CLUE_R squares of a clue to read it and get the next hint; the third leads to the
+ * secret itself (within SPOT_R). Sébastien asked for hints, not markers (2026-11-22).
  */
 export type SecretKind = 'treasure' | 'stones' | 'valley';
 export interface Secret {
   id: number; kind: SecretKind;
   x: number; y: number;
   clues: { x: number; y: number; got?: boolean }[];
-  /** search circle shown after the first clue: middle and radius (0 = the exact spot) */
+  /** old saves of the preview: a search circle (no longer used) */
   cx?: number; cy?: number; r?: number;
   /** found at this game minute */
   found?: number;
 }
 
-export const CLUE_R = 2, SPOT_R = 1;
-/** Search circle radius after 1, 2 and 3 clues. */
-export const SEARCH_R = [10, 5, 0];
+/** Track this close reads a clue / digs up the secret (both hidden on the map: only the hints say where). */
+export const CLUE_R = 3, SPOT_R = 2;
+/** Each leg of the trail: this many squares from the last clue (the first from your railway). */
+export const LEG_MIN = 6, LEG_MAX = 14;
 /** Bonuses: deliveries to towns on a 🗿 standing-stones island, output of buildings in a 🌾 hidden-valley island. */
 export const STONES_PAY = 1.2, VALLEY_MADE = 1.2;
 /** Islands smaller than this keep no secret (no room for clues). */
@@ -55,7 +58,7 @@ export function secretMade(g: Game, k: number): number {
   const s = secretOn(g, k); return s?.found !== undefined && s.kind === 'valley' ? VALLEY_MADE : 1;
 }
 
-/** Place a secret and its clues on an island (seeded: the same map hides the same secrets). Null if it's too small. */
+/** Place a secret and its trail on an island (seeded: the same map and railway hide the same secrets). Null if too small. */
 export function placeSecret(g: Game, k: number): Secret | null {
   const n = g.world.n, isl = g.world.islands[k]; if (!isl || isl.size < SECRET_MIN_SIZE) return null;
   const near = (x: number, y: number, r: number) => g.s.sites.some(s => Math.hypot(s.x - x, s.y - y) < r);
@@ -63,31 +66,33 @@ export function placeSecret(g: Game, k: number): Secret | null {
   for (let i = 0; i < n * n; i++) {
     if (g.world.islandOf[i] !== k) continue;
     const v = g.world.terr[i]; if (v === 4 || v === 0) continue; // no mountains: track must reach it without a tunnel
-    const x = i % n, y = (i / n) | 0;
-    if (k === g.world.home && Math.hypot(x - g.world.cx, y - g.world.cy) < 10) continue; // not in Ashford's back yard
-    if (!near(x, y, 3) && !g.track.has(i)) cand.push(i);
+    if (!near(i % n, (i / n) | 0, 3) && !g.track.has(i)) cand.push(i);
   }
   if (cand.length < 12) return null;
+  const rail: [number, number][] = []; let m = 0;
+  for (const i of g.linked ?? []) if (g.world.islandOf[i] === k && (m++ & 3) === 0) rail.push([i % n, (i / n) | 0]);
+  const railD = (x: number, y: number) => rail.reduce((a, [rx, ry]) => Math.min(a, Math.hypot(rx - x, ry - y)), Infinity);
   const id = (g.s.secretN ?? 0) + 1, r = (j: number) => hash(g.s.seed % 983 + k * 31, j, 7717);
   const pick = (j: number, ok: (x: number, y: number) => boolean) => {
-    for (let a = 0; a < 60; a++) { const i = cand[Math.floor(r(j * 100 + a) * cand.length) % cand.length]!, x = i % n, y = (i / n) | 0; if (ok(x, y)) return { x, y }; }
-    const i = cand[Math.floor(r(j * 100 + 99) * cand.length) % cand.length]!; return { x: i % n, y: (i / n) | 0 };
+    for (let a = 0; a < 200; a++) { const i = cand[Math.floor(r(j * 1000 + a) * cand.length) % cand.length]!, x = i % n, y = (i / n) | 0; if (ok(x, y)) return { x, y }; }
+    return null;
   };
-  const spot = pick(1, () => true), clues: { x: number; y: number }[] = [];
-  for (let c = 0; c < 3; c++) clues.push(pick(2 + c, (x, y) => Math.hypot(x - spot.x, y - spot.y) >= 6 && clues.every(o => Math.hypot(o.x - x, o.y - y) >= 6)));
+  const leg = (p: { x: number; y: number }, used: { x: number; y: number }[]) => (x: number, y: number) => { const d = Math.hypot(x - p.x, y - p.y); return d >= LEG_MIN && d <= LEG_MAX && used.every(o => Math.hypot(o.x - x, o.y - y) >= LEG_MIN) && railD(x, y) > CLUE_R + 1; };
+  const pts: { x: number; y: number }[] = [];
+  const first = pick(1, (x, y) => { const d = railD(x, y); return rail.length ? d > CLUE_R + 1 && d <= LEG_MAX : true; }) ?? pick(2, () => true);
+  if (!first) return null; pts.push(first);
+  const apart = (x: number, y: number) => pts.every(o => Math.hypot(o.x - x, o.y - y) >= LEG_MIN);
+  for (let c = 1; c < 4; c++) { const p = pick(2 + c, leg(pts[c - 1]!, pts)) ?? pick(10 + c, (x, y) => apart(x, y) && railD(x, y) > CLUE_R + 1) ?? pick(20 + c, apart); if (!p) return null; pts.push(p); }
   const kind = k === g.world.home ? 'treasure' : KINDS[Math.floor(r(9) * KINDS.length) % KINDS.length]!;
-  const s: Secret = { id, kind, x: spot.x, y: spot.y, clues };
+  const s: Secret = { id, kind, x: pts[3]!.x, y: pts[3]!.y, clues: pts.slice(0, 3) };
   (g.s.secrets ??= []).push(s); g.s.secretN = id;
   return s;
 }
 
-/** Shrink the search circle after a clue: a smaller circle that still holds the secret. */
-function narrow(s: Secret) {
-  const got = s.clues.filter(c => c.got).length; if (!got) return;
-  const R = SEARCH_R[Math.min(got, 3) - 1]!;
-  if (!R) { s.cx = s.x; s.cy = s.y; s.r = 0; return; }
-  const a = hash(s.id, got, 9091) * Math.PI * 2, off = hash(s.id, got, 9092) * R * 0.6;
-  s.cx = s.x + Math.cos(a) * off; s.cy = s.y + Math.sin(a) * off; s.r = R;
+/** The next step of a secret's trail: the first clue not read yet, else the ✖ (null once found). */
+export function trailNext(s: Secret): { x: number; y: number; spot: boolean } | null {
+  if (s.found !== undefined) return null;
+  const c = s.clues.find(o => !o.got); return c ? { x: c.x, y: c.y, spot: false } : { x: s.x, y: s.y, spot: true };
 }
 
 /** Is any square within r of (x, y) on the railway? */
@@ -100,7 +105,14 @@ function railNear(g: Game, x: number, y: number, r: number): boolean {
   return false;
 }
 
-/** Once a second: hide secrets on islands just reached, read clues the railway passes, and find secrets. */
+/** Read every clue in order that the railway now passes; the next step comes out of the fog. Returns how many. */
+function readTrail(g: Game, s: Secret): number {
+  let k = 0;
+  for (let t = trailNext(s); t && !t.spot && railNear(g, t.x, t.y, CLUE_R); t = trailNext(s)) { s.clues.find(o => !o.got)!.got = true; k++; }
+  return k;
+}
+
+/** Once a second: hide secrets on islands just reached, follow trails the railway passes, and find secrets. */
 export function tickSecrets(g: Game) {
   if ((g.s.orders ?? 0) < 1) return; // after the first order: the start is for learning
   const fresh: Secret[] = [];
@@ -108,20 +120,16 @@ export function tickSecrets(g: Game) {
     if (secretOn(g, k) || (g.s.noSecret ?? []).includes(k)) continue;
     const s = placeSecret(g, k);
     if (!s) { (g.s.noSecret ??= []).push(k); continue; }
-    for (const c of s.clues) if (railNear(g, c.x, c.y, CLUE_R)) c.got = true; // track already there reads its clue quietly
-    narrow(s); fresh.push(s);
+    readTrail(g, s); fresh.push(s); // track already there reads its clues quietly
   }
-  if (fresh.length > 2) say(g, `🗝 ${fresh.length} islands on your railway hide secrets: look for 📜 clues on the map, or open Story → Secrets`);
+  if (fresh.length > 2) say(g, `🗝 ${fresh.length} islands on your railway hide secrets: follow the 📜 trails on the map, or open Story → Secrets`);
   else for (const s of fresh) (g.secretCards ??= []).push({ id: s.id, ev: 'new' }); // its card explains it
   for (const s of g.s.secrets ?? []) {
     if (s.found !== undefined) continue;
     const k = islOf(g, s.x, s.y), I = SECRET_INFO[s.kind];
-    if (g.secretCards?.some(c => c.id === s.id && c.ev === 'clue')) g.secretCards = g.secretCards.filter(c => !(c.id === s.id && c.ev === 'clue')).concat({ id: s.id, ev: 'clue' }); // one card for clues read together
-    for (const c of s.clues) {
-      if (c.got || !railNear(g, c.x, c.y, CLUE_R)) continue;
-      c.got = true; narrow(s);
-      (g.secretCards ??= []).push({ id: s.id, ev: 'clue' }); // its card says what it was and where to go next
-      const got = s.clues.filter(o => o.got).length; say(g, `📜 Clue ${got} of 3 read on ${islName(g, k)}${got < 3 ? ': the gold 🗝 circle is smaller' : ': the spot is marked ✖'}`);
+    if (readTrail(g, s)) {
+      g.secretCards = (g.secretCards ?? []).filter(c => !(c.id === s.id && c.ev === 'clue')).concat({ id: s.id, ev: 'clue' }); // its card says where the trail goes next
+      const got = s.clues.filter(o => o.got).length; say(g, `📜 Clue ${got} of 3 read on ${islName(g, k)}: ${got < 3 ? 'its hint points to the next one' : 'its hint points to the secret'}`);
     }
     if (s.clues.every(c => c.got) && railNear(g, s.x, s.y, SPOT_R)) {
       s.found = Math.floor(g.s.t / 60);
@@ -134,45 +142,66 @@ export function tickSecrets(g: Game) {
   }
 }
 
-/** For the map: clues out of the fog not yet read, the search circle, and found secrets. */
-export function secretMarks(g: Game) {
-  const n = g.world.n, out: { clues: { x: number; y: number }[]; read: { x: number; y: number }[]; circle?: { x: number; y: number; r: number }; spot?: { x: number; y: number }; found?: { x: number; y: number; icon: string } }[] = [];
-  for (const s of g.s.secrets ?? []) {
-    if (s.found !== undefined) { out.push({ clues: [], read: [], found: { x: s.x, y: s.y, icon: SECRET_INFO[s.kind].icon } }); continue; }
-    const clues = s.clues.filter(c => !c.got && isRevealed(g, c.y * n + c.x));
-    out.push({ clues, read: s.clues.filter(c => c.got), ...(s.r ? { circle: { x: s.cx!, y: s.cy!, r: s.r } } : {}), ...(s.r === 0 ? { spot: { x: s.x, y: s.y } } : {}) });
+const DIRS = ['east', 'south-east', 'south', 'south-west', 'west', 'north-west', 'north', 'north-east'];
+/** Where a hint starts: the last clue read, else the town on the island nearest the first clue. */
+export function hintFrom(g: Game, s: Secret): { x: number; y: number; name: string } {
+  const read = s.clues.filter(c => c.got).at(-1); if (read) return { ...read, name: 'the last clue' };
+  const k = islOf(g, s.x, s.y), c = s.clues[0]!;
+  const t = g.s.sites.filter(o => o.kind === 'town' && islOf(g, o.x, o.y) === k).sort((a, b) => Math.hypot(a.x - c.x, a.y - c.y) - Math.hypot(b.x - c.x, b.y - c.y))[0];
+  return t ? { x: t.x, y: t.y, name: t.name ?? 'the town' } : { x: c.x, y: c.y, name: 'the shore' };
+}
+/** What the land is like round a square, in a few words. */
+function landAt(g: Game, x: number, y: number, skip?: string): string {
+  const n = g.world.n; let f = 0, h = 0, m = 0, w = 0;
+  for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) {
+    const X = x + dx, Y = y + dy; if (X < 0 || Y < 0 || X >= n || Y >= n) continue;
+    const v = g.world.terr[Y * n + X]; if (v === 0) w++; else if (v === 2) f++; else if (v === 3) h++; else if (v === 4) m++;
   }
+  const t = g.s.sites.find(o => o.kind === 'town' && o.name !== skip && Math.hypot(o.x - x, o.y - y) <= 6);
+  const land = m >= 3 ? 'at the foot of the mountains' : w >= 7 ? 'near the water' : h >= 6 ? 'up in the hills' : f >= 10 ? 'deep in the forest' : f >= 4 ? 'at the edge of a wood' : 'on open grassland';
+  return land + (t ? `, not far from ${t.name}` : '');
+}
+/** The hint for the next step: direction, rough distance and the land there. Never the exact spot. */
+export function secretHint(g: Game, s: Secret): string {
+  const t = trailNext(s); if (!t) return '';
+  const o = hintFrom(g, s), d = Math.hypot(t.x - o.x, t.y - o.y), a = Math.atan2(t.y - o.y, t.x - o.x);
+  const dir = DIRS[((Math.round(a / (Math.PI / 4)) % 8) + 8) % 8]!, far = Math.max(5, Math.round(d / 5) * 5);
+  return `From ${o.name}, head ${dir}, about ${far} squares, ${landAt(g, t.x, t.y, o.name)}. ${t.spot ? 'The secret is buried there' : 'A clue is hidden there'}: bring your track within ${t.spot ? SPOT_R : CLUE_R} squares of it.`;
+}
+
+/** For the map: clues already read (as faded ticks) and found secrets. Nothing shows where the next step is. */
+export function secretMarks(g: Game) {
+  const out: { read: { x: number; y: number }[]; found?: { x: number; y: number; icon: string } }[] = [];
+  for (const s of g.s.secrets ?? []) out.push(s.found !== undefined ? { read: [], found: { x: s.x, y: s.y, icon: SECRET_INFO[s.kind].icon } } : { read: s.clues.filter(c => c.got) });
   return out;
 }
 
-/** The secret whose clue (or ✖ spot) is on or next to this square, for a tap on the map. */
+/** The secret whose last read clue is on or next to this square, for a tap on the map (shows its hint). */
 export function secretTapAt(g: Game, i: number): Secret | undefined {
   const n = g.world.n, x = i % n, y = (i / n) | 0;
-  return (g.s.secrets ?? []).find(s => s.found === undefined && (s.clues.some(c => !c.got && isRevealed(g, c.y * n + c.x) && Math.abs(c.x - x) <= 1 && Math.abs(c.y - y) <= 1) || (s.r === 0 && Math.abs(s.x - x) <= 1 && Math.abs(s.y - y) <= 1)));
+  return (g.s.secrets ?? []).find(s => s.found === undefined && s.clues.some(c => c.got && Math.abs(c.x - x) <= 1 && Math.abs(c.y - y) <= 1));
 }
 
-/** Where 📍 Show takes the player next: the nearest unread clue in sight, else the search circle or ✖. */
+/** Where 📍 Show takes the player: where the hint starts (the last clue read, or the town). */
 export function secretNext(g: Game, s: Secret): { x: number; y: number } {
-  const n = g.world.n, c = s.clues.find(o => !o.got && isRevealed(g, o.y * n + o.x)) ?? s.clues.find(o => !o.got);
-  if (c && s.r !== 0) return { x: c.x, y: c.y };
-  return { x: Math.round(s.cx ?? s.x), y: Math.round(s.cy ?? s.y) };
+  const o = hintFrom(g, s); return { x: o.x, y: o.y };
 }
 
-/** The secret card: what it is, what was just found, and the next step. ev: new (just heard of), clue (one read), found, or a tap. */
+/** The secret card: what it is, what was just found, and the hint for the next step. ev: new, clue, found, or a tap. */
 export function secretCardHtml(g: Game, id: number, ev?: string): string | null {
   const s = (g.s.secrets ?? []).find(o => o.id === id); if (!s) return null;
   const I = SECRET_INFO[s.kind], k = islOf(g, s.x, s.y), nm = islName(g, k), got = s.clues.filter(c => c.got).length;
-  const head = s.found !== undefined ? ['🗝', `Secret found on ${nm}!`] : ev === 'clue' ? ['📜', got < 3 ? `Clue ${got} of 3 found!` : 'The last clue!'] : ev === 'new' ? ['🗝', `${nm} hides a secret`] : ['📜', 'An old clue'];
+  const head = s.found !== undefined ? ['🗝', `Secret found on ${nm}!`] : ev === 'clue' ? ['📜', got < 3 ? `Clue ${got} of 3 read!` : 'The last clue!'] : ev === 'new' ? ['🗝', `${nm} hides a secret`] : ['📜', `${got} of 3 clues read`];
   let h = `<div class="find"><span class="rar" style="border-color:#e8a33c;color:#e8a33c">🗝 ISLAND SECRET</span><small>on ${nm}</small><b class="fbig">${head[0]}</b><h2>${head[1]}</h2></div>`;
   if (s.found !== undefined) {
     h += `<div class="gift">${I.icon} <b>${I.name}</b>: ${s.kind === 'treasure' ? 'a chest of old coins, paid into your money' : I.perk}</div>`;
     return h + `<button class="act" data-act="secrets">🗝 All secrets</button>`;
   }
-  if (ev === 'clue') h += `<div class="note">📜 Your track passed ${CLUE_TEXT[(s.id + got) % CLUE_TEXT.length]}. ${got < 3 ? 'The gold 🗝 circle on the map now shows where the secret is: it gets smaller with every clue.' : 'The secret’s spot is now marked ✖ on the map.'}</div>`;
-  else h += `<div class="note">Sailors say ${I.rumour}. The 📜 parchments on ${nm} are clues to where it is.</div>`;
+  if (ev === 'clue') h += `<div class="note">📜 Your track passed ${CLUE_TEXT[(s.id + got) % CLUE_TEXT.length]}. Scratched on it is a hint to ${got < 3 ? 'the next clue' : 'where the secret is buried'}.</div>`;
+  else if (ev === 'new' || !got) h += `<div class="note">Sailors say ${I.rumour}. A trail of 3 hidden clues leads to it: nothing marks them on the map, only the hints.</div>`;
   const chip = (ok: boolean, t: string) => `<span class="chip2" style="${ok ? 'background:#2f7a34;color:#fff' : ''}">${ok ? '✅' : '⬜'} ${t}</span>`;
-  h += `<div class="gift"><b>How to find it</b><br>① Run your track past each 📜 parchment (within ${CLUE_R} squares of it) to read it. ${chip(got >= 1, '1')} ${chip(got >= 2, '2')} ${chip(got >= 3, '3')}<br>② Each clue shrinks the gold 🗝 circle round the secret.<br>③ After 3 clues a ✖ marks the spot: lay track to it ${chip(false, 'found')}</div>`;
-  h += `<div class="note">🎁 Reward: ${s.kind === 'treasure' ? `a chest of old coins (${fmt(treasureCash(g))} now)` : I.perk}</div>`;
-  const nx = secretNext(g, s);
-  return h + `<button class="act" data-act="lookxy" data-x="${nx.x}" data-y="${nx.y}">📍 ${got < 3 ? 'Show the next clue' : 'Show the ✖'}</button>`;
+  h += `<div class="gift">📜 <i>${esc(secretHint(g, s))}</i></div>`;
+  h += `<div class="note">${chip(got >= 1, '📜')} ${chip(got >= 2, '📜')} ${chip(got >= 3, '📜')} ${chip(false, '🗝')} · 🎁 ${s.kind === 'treasure' ? `a chest of old coins (${fmt(treasureCash(g))} now)` : I.perk}</div>`;
+  const o = secretNext(g, s);
+  return h + `<button class="act" data-act="lookxy" data-x="${o.x}" data-y="${o.y}">📍 Show ${got ? 'the last clue' : esc(hintFrom(g, s).name)}</button>`;
 }

@@ -3,7 +3,7 @@ import zlib from 'node:zlib';
 import { describe, expect, it } from 'vitest';
 import { loadGame, newGame } from '../src/game.ts';
 import { deserialize } from '../src/save/save.ts';
-import { secretCardHtml, secretTapAt, CLUE_R, secretMade, secretPay, tickSecrets, treasureCash } from '../src/world/secrets.ts';
+import { secretCardHtml, secretHint, secretMarks, secretTapAt, trailNext, CLUE_R, secretMade, secretPay, tickSecrets, treasureCash } from '../src/world/secrets.ts';
 import { reachedIslands } from '../src/progress/missions.ts';
 
 const SAVE = 'tests/saves/save-seb-2026-11-21-report20.txt';
@@ -13,15 +13,15 @@ describe('🗝 island secrets', () => {
   it('track already past a clue reads it quietly when the secret is placed: one note for many islands', () => {
     const g = loadGame(read()); tickSecrets(g);
     expect(g.news!.filter(m => m.startsWith('📜'))).toHaveLength(0);
-    expect(g.news!.filter(m => m.startsWith('🗝')).length).toBe(1);
-    expect(g.secretCards ?? []).toHaveLength(0); // many islands at once: no card storm
+    expect(g.news!.filter(m => m.startsWith('🗝') && !m.startsWith('🗝 Secret found')).length).toBe(1); // a trail your track already covers can pay out at once
+    expect((g.secretCards ?? []).filter(c => c.ev !== 'found')).toHaveLength(0); // many islands at once: no card storm
   });
 
   it('none before the first order is filled', () => {
     const g = newGame(7); tickSecrets(g); expect(g.s.secrets ?? []).toHaveLength(0);
   });
 
-  it('every big island the railway reaches hides one, with 3 clues apart on its land, off mountains; same map, same secrets', () => {
+  it('every big island the railway reaches hides one, with a trail of 3 clues on its land, off mountains; same map, same secrets', () => {
     const g = loadGame(read()), n = g.world.n; tickSecrets(g);
     const list = g.s.secrets!; expect(list.length).toBeGreaterThan(5);
     for (const s of list) {
@@ -33,20 +33,25 @@ describe('🗝 island secrets', () => {
     expect(h.s.secrets!.map(s => [s.x, s.y, s.kind])).toEqual(list.map(s => [s.x, s.y, s.kind]));
   });
 
-  it('track past each clue narrows the circle; track to the spot finds it and gives its reward', () => {
+  it('a trail: only the next clue counts, each one points to the next, the ✖ comes last and gives the reward', () => {
     const g = loadGame(read()), n = g.world.n; tickSecrets(g);
     const s = g.s.secrets!.find(x => x.kind === 'treasure' && x.clues.every(c => !c.got))!;
     const lay = (x: number, y: number) => { g.linked = new Set([...g.linked!, y * n + x]); };
+    expect(trailNext(s)).toEqual({ ...s.clues[0]!, spot: false });
+    expect(secretHint(g, s)).toMatch(/^From .+, head (north|south|east|west|north-east|north-west|south-east|south-west), about \d+ squares, /);
+    expect(secretMarks(g).find((_, i) => g.s.secrets![i] === s)!.read).toHaveLength(0); // nothing on the map shows where it is
+    lay(s.clues[1]!.x, s.clues[1]!.y); tickSecrets(g);
+    expect(s.clues.some(c => c.got)).toBe(false); // the second clue waits for the first
     lay(s.clues[0]!.x + CLUE_R, s.clues[0]!.y); tickSecrets(g);
-    expect(s.clues.map(c => !!c.got)).toEqual([true, false, false]); expect(s.r).toBe(10);
-    expect(g.secretCards?.at(-1)).toEqual({ id: s.id, ev: 'clue' }); // a card explains the clue and the next step
-    expect(secretCardHtml(g, s.id, 'clue')).toMatch(/Clue 1 of 3 found/);
-    expect(secretTapAt(g, s.clues[1]!.y * n + s.clues[1]!.x)?.id ?? s.id).toBe(s.id);
-    expect(Math.hypot(s.cx! - s.x, s.cy! - s.y)).toBeLessThanOrEqual(10);
-    lay(s.x, s.y); tickSecrets(g); expect(s.found).toBeUndefined(); // the spot needs all 3 clues first
-    lay(s.clues[1]!.x, s.clues[1]!.y); lay(s.clues[2]!.x, s.clues[2]!.y);
-    const m0 = g.s.money; tickSecrets(g);
-    expect(s.r).toBe(0); expect(s.found).toBeDefined(); expect(g.s.money - m0).toBe(treasureCash(g));
+    expect(s.clues.map(c => !!c.got)).toEqual([true, true, false]); // track already at the 2nd reads it right after
+    expect(secretHint(g, s)).toMatch(/^From the last clue, head /);
+    expect(g.secretCards?.at(-1)).toEqual({ id: s.id, ev: 'clue' });
+    expect(secretCardHtml(g, s.id, 'clue')).toMatch(/Clue 2 of 3 read/);
+    expect(secretTapAt(g, s.clues[1]!.y * n + s.clues[1]!.x)?.id).toBe(s.id); expect(secretTapAt(g, s.clues[2]!.y * n + s.clues[2]!.x)).toBeUndefined();
+    lay(s.clues[2]!.x, s.clues[2]!.y); tickSecrets(g);
+    expect(trailNext(s)).toEqual({ x: s.x, y: s.y, spot: true });
+    const m0 = g.s.money; lay(s.x, s.y); tickSecrets(g);
+    expect(s.found).toBeDefined(); expect(g.s.money - m0).toBeCloseTo(treasureCash(g));
     expect(g.news?.some(m => m.startsWith('🗝 Secret found'))).toBe(true);
     expect(g.secretCards?.at(-1)).toEqual({ id: s.id, ev: 'found' }); expect(secretCardHtml(g, s.id)).toMatch(/Secret found/);
   });

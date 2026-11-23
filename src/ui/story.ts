@@ -1,4 +1,4 @@
-import { SECRET_INFO } from '../world/secrets.ts';
+import { SECRET_INFO, secretHint, secretNext } from '../world/secrets.ts';
 import type { Game } from '../state.ts';
 import { ACTS, actOf, ashford, compass, type Mission, msOf, progress, reachedIslands, rumourOf, SWAP_SHARE } from '../progress/missions.ts';
 import { islandSpec, SPEC_TEXT } from '../world/specialty.ts';
@@ -51,7 +51,7 @@ export function storyHtml(g: Game, page?: string): string {
     if (hidden) h += `<div class="note">🌫 ${hidden} more island${hidden === 1 ? '' : 's'} still in the fog: scout by boat from a dock</div>`;
     return h + back;
   }
-  const tgt = (sc: NonNullable<typeof g.s.secrets>[number]) => { const c = sc.clues.find(o => !o.got); return c ?? { x: Math.round(sc.cx ?? sc.x), y: Math.round(sc.cy ?? sc.y) }; };
+  const tgt = (sc: NonNullable<typeof g.s.secrets>[number]) => secretNext(g, sc);
   if (page === 'secrets') {
     h += `<h3>🗝 Island secrets</h3>`;
     const list = g.s.secrets ?? [];
@@ -59,9 +59,9 @@ export function storyHtml(g: Game, page?: string): string {
       const I = SECRET_INFO[sc.kind], k = g.world.islandOf[sc.y * g.world.n + sc.x]!, nm = k === g.world.home ? 'Ashford Isle' : g.world.islands[k]?.name ?? 'Island', got = sc.clues.filter(c => c.got).length;
       h += sc.found !== undefined
         ? `<div class="row ok"><b class="ico">${I.icon}</b><div class="grow"><div class="line"><span>${esc(I.name)}</span><span>${esc(nm)}</span></div><small>${esc(I.perk)}</small></div></div>`
-        : `<div class="row"><b class="ico">🔍</b><div class="grow"><div class="line"><span>${esc(nm)}</span><span>📜 ${got}/3</span></div>${bar(got / 3, '#e8a33c')}<small>${got < 3 ? 'Run your track past the 📜 clues on its land' : 'Lay track to the ✖'}</small></div><button class="mini" data-act="lookxy" data-x="${tgt(sc).x}" data-y="${tgt(sc).y}">📍 Show</button></div>`;
+        : `<div class="row"><b class="ico">🔍</b><div class="grow"><div class="line"><span>${esc(nm)}</span><span>📜 ${got}/3</span></div>${bar(got / 3, '#e8a33c')}<small>📜 ${esc(secretHint(g, sc))}</small></div><button class="mini" data-act="lookxy" data-x="${tgt(sc).x}" data-y="${tgt(sc).y}">📍 Show</button></div>`;
     }
-    if (!list.length) h += `<div class="note">🗝 Every island your railway reaches hides a secret. ${(g.s.orders ?? 0) ? 'Look for 📜 clues on the map' : 'Fill your first town order and Mira will tell you about the first one'}</div>`;
+    if (!list.length) h += `<div class="note">🗝 Every island your railway reaches hides a secret. ${(g.s.orders ?? 0) ? 'Each one starts with a hint from a town on it' : 'Fill your first town order and Mira will tell you about the first one'}</div>`;
     return h + back;
   }
   h += `<div class="mira">${esc(M.actLine ?? A.intro[0])}</div>`;

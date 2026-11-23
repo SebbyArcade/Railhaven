@@ -8,7 +8,7 @@ import { drawLandmark } from './landmarks.ts';
 import { rumours } from '../world/maps.ts';
 import { crewSpots } from '../world/landfall.ts';
 import { boomLabel } from '../world/booms.ts';
-import { CLUE_R, secretMarks } from '../world/secrets.ts';
+import { secretMarks } from '../world/secrets.ts';
 
 /** Landmarks and wrecks that are out of the fog, scouts on their way, and in Scout mode the start rings and the route. */
 export function drawExplore(ctx: CanvasRenderingContext2D, g: Game, _t: Tools | undefined, tm: number, vis: (x: number, y: number) => boolean, z: number) {
@@ -72,22 +72,9 @@ export function drawScouting(ctx: CanvasRenderingContext2D, g: Game, t: Tools | 
     marker(ctx, (s.x + 0.5) * TILE, (s.y + 0.5) * TILE, '🏕', '#3c7a3a', z);
     for (const p of crewSpots(g, s)) marker(ctx, (p.x + 0.5) * TILE, (p.y + 0.5) * TILE, '🚶', '#c07a2a', z);
   }
-  // 🗝 island secrets: 📜 clues with their reach ring, the shrinking search circle, ✖ on the spot, found ones
+  // 🗝 island secrets: only clues already read (faded ticks, tap for the hint) and found ones; the next step is never marked
   for (const m of secretMarks(g)) {
-    for (const c of m.clues) {
-      const X = (c.x + 0.5) * TILE, Y = (c.y + 0.5) * TILE;
-      ctx.strokeStyle = 'rgba(255,236,170,.8)'; ctx.lineWidth = 1.5 / Math.max(0.5, z); ctx.setLineDash([4, 4]);
-      ctx.beginPath(); ctx.arc(X, Y, (CLUE_R + 0.5) * TILE, 0, 7); ctx.stroke(); ctx.setLineDash([]);
-      marker(ctx, X, Y, '📜', '#8a5a2b', z);
-    }
-    for (const c of m.read) { ctx.globalAlpha = 0.55; marker(ctx, (c.x + 0.5) * TILE, (c.y + 0.5) * TILE, '✓', '#6b5a3a', z); ctx.globalAlpha = 1; } // read clues stay as a faded tick
-    if (m.circle) {
-      const X = (m.circle.x + 0.5) * TILE, Y = (m.circle.y + 0.5) * TILE, R = (m.circle.r + 0.5) * TILE;
-      ctx.fillStyle = 'rgba(255,210,80,.08)'; ctx.strokeStyle = 'rgba(255,210,80,.85)'; ctx.lineWidth = 2.5 / Math.max(0.4, z); ctx.setLineDash([8, 6]);
-      ctx.beginPath(); ctx.arc(X, Y, R, 0, 7); ctx.fill(); ctx.stroke(); ctx.setLineDash([]);
-      pill(ctx, X, Y - R, '🗝 The secret is in here', 'rgba(120,80,20,.92)', z);
-    }
-    if (m.spot) { const X = (m.spot.x + 0.5) * TILE, Y = (m.spot.y + 0.5) * TILE, p = 0.5 + 0.5 * Math.sin(tm * 4); ctx.strokeStyle = `rgba(255,210,80,${0.5 + 0.5 * p})`; ctx.lineWidth = 3 / Math.max(0.4, z); ctx.beginPath(); ctx.arc(X, Y, TILE * 1.5, 0, 7); ctx.stroke(); marker(ctx, X, Y, '✖', '#b8461c', z); }
+    for (const c of m.read) { ctx.globalAlpha = 0.7; marker(ctx, (c.x + 0.5) * TILE, (c.y + 0.5) * TILE, '📜', '#6b5a3a', z); ctx.globalAlpha = 1; }
     if (m.found) marker(ctx, (m.found.x + 0.5) * TILE, (m.found.y + 0.5) * TILE, m.found.icon, '#7a5a12', z);
   }
   // 🔥 boom towns: a flare ring over the town and the countdown
