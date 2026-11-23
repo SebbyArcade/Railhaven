@@ -80,6 +80,7 @@ export function drawScouting(ctx: CanvasRenderingContext2D, g: Game, t: Tools | 
       ctx.beginPath(); ctx.arc(X, Y, (CLUE_R + 0.5) * TILE, 0, 7); ctx.stroke(); ctx.setLineDash([]);
       marker(ctx, X, Y, '📜', '#8a5a2b', z);
     }
+    for (const c of m.read) { ctx.globalAlpha = 0.55; marker(ctx, (c.x + 0.5) * TILE, (c.y + 0.5) * TILE, '✓', '#6b5a3a', z); ctx.globalAlpha = 1; } // read clues stay as a faded tick
     if (m.circle) {
       const X = (m.circle.x + 0.5) * TILE, Y = (m.circle.y + 0.5) * TILE, R = (m.circle.r + 0.5) * TILE;
       ctx.fillStyle = 'rgba(255,210,80,.08)'; ctx.strokeStyle = 'rgba(255,210,80,.85)'; ctx.lineWidth = 2.5 / Math.max(0.4, z); ctx.setLineDash([8, 6]);

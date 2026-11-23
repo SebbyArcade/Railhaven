@@ -112,19 +112,16 @@ export function tickSecrets(g: Game) {
     narrow(s); fresh.push(s);
   }
   if (fresh.length > 2) say(g, `🗝 ${fresh.length} islands on your railway hide secrets: look for 📜 clues on the map, or open Story → Secrets`);
-  else for (const s of fresh) {
-    const k = islOf(g, s.x, s.y), I = SECRET_INFO[s.kind], got = s.clues.filter(c => c.got).length, c = s.clues.find(o => !o.got);
-    say(g, `🗝 Sailors say ${islName(g, k)} hides a secret: ${I.rumour}. ${got ? `Your track already passes ${got === 1 ? 'one clue' : got + ' clues'}. ` : ''}Look for 📜 clues inland and run your track past them`, c ? { kind: 'sq', x: c.x, y: c.y } : undefined);
-  }
+  else for (const s of fresh) (g.secretCards ??= []).push({ id: s.id, ev: 'new' }); // its card explains it
   for (const s of g.s.secrets ?? []) {
     if (s.found !== undefined) continue;
     const k = islOf(g, s.x, s.y), I = SECRET_INFO[s.kind];
+    if (g.secretCards?.some(c => c.id === s.id && c.ev === 'clue')) g.secretCards = g.secretCards.filter(c => !(c.id === s.id && c.ev === 'clue')).concat({ id: s.id, ev: 'clue' }); // one card for clues read together
     for (const c of s.clues) {
       if (c.got || !railNear(g, c.x, c.y, CLUE_R)) continue;
       c.got = true; narrow(s);
-      const got = s.clues.filter(o => o.got).length;
-      say(g, got < 3 ? `📜 Clue ${got} of 3 on ${islName(g, k)}: ${CLUE_TEXT[(s.id + got) % CLUE_TEXT.length]}. The 🗝 search circle on the map is smaller now`
-        : `📜 The last clue on ${islName(g, k)}! The secret's spot is marked ✖: lay track to it`, { kind: 'sq', x: Math.round(s.cx!), y: Math.round(s.cy!) });
+      (g.secretCards ??= []).push({ id: s.id, ev: 'clue' }); // its card says what it was and where to go next
+      const got = s.clues.filter(o => o.got).length; say(g, `📜 Clue ${got} of 3 read on ${islName(g, k)}${got < 3 ? ': the gold 🗝 circle is smaller' : ': the spot is marked ✖'}`);
     }
     if (s.clues.every(c => c.got) && railNear(g, s.x, s.y, SPOT_R)) {
       s.found = Math.floor(g.s.t / 60);
@@ -132,17 +129,50 @@ export function tickSecrets(g: Game) {
       if (s.kind === 'treasure') { const v = treasureCash(g); g.s.money += v; g.s.earned = (g.s.earned ?? 0) + v; extra = `: ${fmt(v)} in old coins`; }
       else extra = `: ${I.perk}`;
       say(g, `🗝 Secret found on ${islName(g, k)}! ${I.icon} ${I.name}${extra}`, { kind: 'sq', x: s.x, y: s.y });
+      g.secretCards = (g.secretCards ?? []).filter(c => c.id !== s.id); g.secretCards.push({ id: s.id, ev: 'found' });
     }
   }
 }
 
 /** For the map: clues out of the fog not yet read, the search circle, and found secrets. */
 export function secretMarks(g: Game) {
-  const n = g.world.n, out: { clues: { x: number; y: number }[]; circle?: { x: number; y: number; r: number }; spot?: { x: number; y: number }; found?: { x: number; y: number; icon: string } }[] = [];
+  const n = g.world.n, out: { clues: { x: number; y: number }[]; read: { x: number; y: number }[]; circle?: { x: number; y: number; r: number }; spot?: { x: number; y: number }; found?: { x: number; y: number; icon: string } }[] = [];
   for (const s of g.s.secrets ?? []) {
-    if (s.found !== undefined) { out.push({ clues: [], found: { x: s.x, y: s.y, icon: SECRET_INFO[s.kind].icon } }); continue; }
+    if (s.found !== undefined) { out.push({ clues: [], read: [], found: { x: s.x, y: s.y, icon: SECRET_INFO[s.kind].icon } }); continue; }
     const clues = s.clues.filter(c => !c.got && isRevealed(g, c.y * n + c.x));
-    out.push({ clues, ...(s.r ? { circle: { x: s.cx!, y: s.cy!, r: s.r } } : {}), ...(s.r === 0 ? { spot: { x: s.x, y: s.y } } : {}) });
+    out.push({ clues, read: s.clues.filter(c => c.got), ...(s.r ? { circle: { x: s.cx!, y: s.cy!, r: s.r } } : {}), ...(s.r === 0 ? { spot: { x: s.x, y: s.y } } : {}) });
   }
   return out;
+}
+
+/** The secret whose clue (or ✖ spot) is on or next to this square, for a tap on the map. */
+export function secretTapAt(g: Game, i: number): Secret | undefined {
+  const n = g.world.n, x = i % n, y = (i / n) | 0;
+  return (g.s.secrets ?? []).find(s => s.found === undefined && (s.clues.some(c => !c.got && isRevealed(g, c.y * n + c.x) && Math.abs(c.x - x) <= 1 && Math.abs(c.y - y) <= 1) || (s.r === 0 && Math.abs(s.x - x) <= 1 && Math.abs(s.y - y) <= 1)));
+}
+
+/** Where 📍 Show takes the player next: the nearest unread clue in sight, else the search circle or ✖. */
+export function secretNext(g: Game, s: Secret): { x: number; y: number } {
+  const n = g.world.n, c = s.clues.find(o => !o.got && isRevealed(g, o.y * n + o.x)) ?? s.clues.find(o => !o.got);
+  if (c && s.r !== 0) return { x: c.x, y: c.y };
+  return { x: Math.round(s.cx ?? s.x), y: Math.round(s.cy ?? s.y) };
+}
+
+/** The secret card: what it is, what was just found, and the next step. ev: new (just heard of), clue (one read), found, or a tap. */
+export function secretCardHtml(g: Game, id: number, ev?: string): string | null {
+  const s = (g.s.secrets ?? []).find(o => o.id === id); if (!s) return null;
+  const I = SECRET_INFO[s.kind], k = islOf(g, s.x, s.y), nm = islName(g, k), got = s.clues.filter(c => c.got).length;
+  const head = s.found !== undefined ? ['🗝', `Secret found on ${nm}!`] : ev === 'clue' ? ['📜', got < 3 ? `Clue ${got} of 3 found!` : 'The last clue!'] : ev === 'new' ? ['🗝', `${nm} hides a secret`] : ['📜', 'An old clue'];
+  let h = `<div class="find"><span class="rar" style="border-color:#e8a33c;color:#e8a33c">🗝 ISLAND SECRET</span><small>on ${nm}</small><b class="fbig">${head[0]}</b><h2>${head[1]}</h2></div>`;
+  if (s.found !== undefined) {
+    h += `<div class="gift">${I.icon} <b>${I.name}</b>: ${s.kind === 'treasure' ? 'a chest of old coins, paid into your money' : I.perk}</div>`;
+    return h + `<button class="act" data-act="secrets">🗝 All secrets</button>`;
+  }
+  if (ev === 'clue') h += `<div class="note">📜 Your track passed ${CLUE_TEXT[(s.id + got) % CLUE_TEXT.length]}. ${got < 3 ? 'The gold 🗝 circle on the map now shows where the secret is: it gets smaller with every clue.' : 'The secret’s spot is now marked ✖ on the map.'}</div>`;
+  else h += `<div class="note">Sailors say ${I.rumour}. The 📜 parchments on ${nm} are clues to where it is.</div>`;
+  const chip = (ok: boolean, t: string) => `<span class="chip2" style="${ok ? 'background:#2f7a34;color:#fff' : ''}">${ok ? '✅' : '⬜'} ${t}</span>`;
+  h += `<div class="gift"><b>How to find it</b><br>① Run your track past each 📜 parchment (within ${CLUE_R} squares of it) to read it. ${chip(got >= 1, '1')} ${chip(got >= 2, '2')} ${chip(got >= 3, '3')}<br>② Each clue shrinks the gold 🗝 circle round the secret.<br>③ After 3 clues a ✖ marks the spot: lay track to it ${chip(false, 'found')}</div>`;
+  h += `<div class="note">🎁 Reward: ${s.kind === 'treasure' ? `a chest of old coins (${fmt(treasureCash(g))} now)` : I.perk}</div>`;
+  const nx = secretNext(g, s);
+  return h + `<button class="act" data-act="lookxy" data-x="${nx.x}" data-y="${nx.y}">📍 ${got < 3 ? 'Show the next clue' : 'Show the ✖'}</button>`;
 }

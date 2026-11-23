@@ -3,7 +3,7 @@ import zlib from 'node:zlib';
 import { describe, expect, it } from 'vitest';
 import { loadGame, newGame } from '../src/game.ts';
 import { deserialize } from '../src/save/save.ts';
-import { CLUE_R, secretMade, secretPay, tickSecrets, treasureCash } from '../src/world/secrets.ts';
+import { secretCardHtml, secretTapAt, CLUE_R, secretMade, secretPay, tickSecrets, treasureCash } from '../src/world/secrets.ts';
 import { reachedIslands } from '../src/progress/missions.ts';
 
 const SAVE = 'tests/saves/save-seb-2026-11-21-report20.txt';
@@ -14,6 +14,7 @@ describe('🗝 island secrets', () => {
     const g = loadGame(read()); tickSecrets(g);
     expect(g.news!.filter(m => m.startsWith('📜'))).toHaveLength(0);
     expect(g.news!.filter(m => m.startsWith('🗝')).length).toBe(1);
+    expect(g.secretCards ?? []).toHaveLength(0); // many islands at once: no card storm
   });
 
   it('none before the first order is filled', () => {
@@ -38,12 +39,16 @@ describe('🗝 island secrets', () => {
     const lay = (x: number, y: number) => { g.linked = new Set([...g.linked!, y * n + x]); };
     lay(s.clues[0]!.x + CLUE_R, s.clues[0]!.y); tickSecrets(g);
     expect(s.clues.map(c => !!c.got)).toEqual([true, false, false]); expect(s.r).toBe(10);
+    expect(g.secretCards?.at(-1)).toEqual({ id: s.id, ev: 'clue' }); // a card explains the clue and the next step
+    expect(secretCardHtml(g, s.id, 'clue')).toMatch(/Clue 1 of 3 found/);
+    expect(secretTapAt(g, s.clues[1]!.y * n + s.clues[1]!.x)?.id ?? s.id).toBe(s.id);
     expect(Math.hypot(s.cx! - s.x, s.cy! - s.y)).toBeLessThanOrEqual(10);
     lay(s.x, s.y); tickSecrets(g); expect(s.found).toBeUndefined(); // the spot needs all 3 clues first
     lay(s.clues[1]!.x, s.clues[1]!.y); lay(s.clues[2]!.x, s.clues[2]!.y);
     const m0 = g.s.money; tickSecrets(g);
     expect(s.r).toBe(0); expect(s.found).toBeDefined(); expect(g.s.money - m0).toBe(treasureCash(g));
     expect(g.news?.some(m => m.startsWith('🗝 Secret found'))).toBe(true);
+    expect(g.secretCards?.at(-1)).toEqual({ id: s.id, ev: 'found' }); expect(secretCardHtml(g, s.id)).toMatch(/Secret found/);
   });
 
   it('standing stones and hidden valley bonuses apply only on their island once found', () => {

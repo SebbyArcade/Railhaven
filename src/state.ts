@@ -175,6 +175,8 @@ export interface Game {
   mineOk?: Map<string, { at: number; ok: boolean }>;
   /** landmarks just spotted, waiting for their discovery card (not saved) */
   found?: number[];
+  /** 🗝 secret cards waiting to open: a secret just heard of, a clue read, a secret found (not saved) */
+  secretCards?: { id: number; ev: 'new' | 'clue' | 'found' }[];
   /** scout reports just filed, waiting for their card (not saved) */
   reported?: number[];
   /** islands just reached, waiting for their arrival card (not saved) */

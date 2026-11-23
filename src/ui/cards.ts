@@ -23,11 +23,12 @@ import { FLEET, type FleetKey, fleetLvl, levelGain, levelPrice, lvlUnlockAt, MAX
 import type { Train } from '../trains/train.ts';
 import { fmtMoney } from './hud.ts';
 import { storyHtml } from './story.ts';
+import { secretCardHtml } from '../world/secrets.ts';
 import { ordersHtml, placeName, waitingForTrain } from './orders.ts';
 import { mapHtml, type MapView } from './mapviews.ts';
 import { mapCost, MAP_R, MAP_R_SEA } from '../world/maps.ts';
 
-export type Card = { kind: 'shed'; id: 0; page?: string } | { kind: 'fleet'; id: 0; page?: string } | { kind: 'plot'; id: number } | { kind: 'town'; id: number; page?: string } | { kind: 'bld'; id: number; page?: string } | { kind: 'train'; id: number } | { kind: 'story'; id: 0; page?: string } | { kind: 'game'; id: number; page?: string } | { kind: 'orders'; id: 0 } | { kind: 'map'; id: 0 } | { kind: 'ship'; id: number } | { kind: 'ships'; id: 0 } | { kind: 'find'; id: number; more?: number } | { kind: 'scout'; id: number } | { kind: 'isle'; id: number; fresh?: boolean };
+export type Card = { kind: 'shed'; id: 0; page?: string } | { kind: 'fleet'; id: 0; page?: string } | { kind: 'plot'; id: number } | { kind: 'town'; id: number; page?: string } | { kind: 'bld'; id: number; page?: string } | { kind: 'train'; id: number } | { kind: 'story'; id: 0; page?: string } | { kind: 'game'; id: number; page?: string } | { kind: 'orders'; id: 0 } | { kind: 'map'; id: 0 } | { kind: 'ship'; id: number } | { kind: 'ships'; id: 0 } | { kind: 'find'; id: number; more?: number } | { kind: 'scout'; id: number } | { kind: 'isle'; id: number; fresh?: boolean } | { kind: 'secret'; id: number; ev?: string };
 
 /** the kind that makes each good */
 const makerOf = (k: Good) => (Object.keys(INDUSTRIES) as IndustryKind[]).find(m => INDUSTRIES[m].makes === k);
@@ -63,6 +64,7 @@ export function cardHtml(g: Game, c: Card, view?: MapView | null): string | null
   if (c.kind === 'ships') return shipsCard(g);
   if (c.kind === 'plot') { const p = siteOf(g, c.id); return p?.kind === 'plot' ? plotCard(g, p) : null; }
   if (c.kind === 'find') return findCard(g, c.id, c.more ?? 0);
+  if (c.kind === 'secret') return secretCardHtml(g, c.id, c.ev);
   if (c.kind === 'scout') return c.id ? scoutCard(g, c.id) : reportsHtml(g);
   if (c.kind === 'isle') return isleCard(g, c.id, !!c.fresh);
   if (c.kind === 'town') { const t = siteOf(g, c.id); return t?.kind === 'town' ? townCard(g, t, c.page) : null; }
