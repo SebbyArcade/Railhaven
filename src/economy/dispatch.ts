@@ -11,6 +11,8 @@ import { railIsle, railIsleAt, sameRail } from '../track/isles.ts';
 import { type Ferry, freeSlot, seaBetween, seaPath, shipSpeed, tickShips } from '../ships/ships.ts';
 import { tickScouts } from '../world/explore.ts';
 import { tickSweeps } from '../world/landfall.ts';
+import { boomMul, tickBooms } from '../world/booms.ts';
+import { secretPay, tickSecrets } from '../world/secrets.ts';
 import { reachedIslands, tickMissions } from '../progress/missions.ts';
 import { capOf, expressMul, fleetIsl, fleetMulOf, FLEET, minLoad, rushDelivered } from './upgrades.ts';
 import { V_MAX } from '../trains/train.ts';
@@ -415,7 +417,7 @@ function unload(g: Game, t: Train) {
   const town = siteOf(g, j.to.id)!;
   const p = deliverToTown(g, town, k, c.n, tradeRoom(g, town, k));
   // 🏛 town projects pay more; while its order waits on goods from the outer islands, the rest of the order pays in full
-  const v = (payFor(k, p.order + p.trade, c.d, 'order') + payFor(k, p.steady, c.d, steadyFull(g, town, k) ? 'order' : 'steady') + payFor(k, p.surplus, c.d, 'extra')) * payMul(g, town);
+  const v = (payFor(k, p.order + p.trade, c.d, 'order') + payFor(k, p.steady, c.d, steadyFull(g, town, k) ? 'order' : 'steady') + payFor(k, p.surplus, c.d, 'extra')) * payMul(g, town) * boomMul(g, town) * secretPay(g, town);
   pay(g, v); if (rushDelivered(g, j.to, k, p.order)) news(g, `⭐ Rush done: ${town.name} got its ${GOODS[k].name.toLowerCase()}`, { kind: 'town', id: town.id });
   t.lastPay = { pay: Math.round(v), at: g.s.t, n: c.n, good: k, to: j.to }; tripDone(t, v);
   if (!town.filled && orderDone(g, town)) {
@@ -449,7 +451,7 @@ function nearestTown(g: Game, t: Train): { kind: 'town'; id: number } | null {
 /** Goods trains run themselves: each idle train collects the best waiting load and takes it where the plan says. */
 export function tickTrains(g: Game, dt: number) {
   tickShips(g, dt); tickScouts(g, dt); tickSweeps(g, dt);
-  if (Math.floor(g.s.t) !== Math.floor(g.s.t - dt)) { tickMissions(g); if (Math.floor(g.s.t) % 5 === 0) { checkLevel(g); tickTrade(g); } } // reaching an island can let a held level through
+  if (Math.floor(g.s.t) !== Math.floor(g.s.t - dt)) { tickMissions(g); tickBooms(g); tickSecrets(g); if (Math.floor(g.s.t) % 5 === 0) { checkLevel(g); tickTrade(g); } } // reaching an island can let a held level through
   let plan: Plan | null = null;
   const P = () => (plan ??= shipPlan(g));
   const fm = fleetMul(g.s.trains.length);

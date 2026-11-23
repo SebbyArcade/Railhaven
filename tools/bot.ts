@@ -249,7 +249,7 @@ function overlaps(): string {
 const t0 = Date.now();
 for (let s = 0; s < minutes * 60; s++) {
   try { for (let k = 0; k < 20; k++) { const dt = 0.05; g.s.t += dt; g.sys.tick(dt); tickProduction(g, dt); tickTowns(g, dt); tickTrains(g, dt); if (+tickBreaks(g) + +tickEvents(g, dt)) breaksChanged(g); } } catch (e) { console.log('GAME ERROR', (g.s.t / 60).toFixed(1), (e as Error).stack?.split('\n').slice(0, 5).join(' | ')); }
-  if (process.env.BOTNEWS && g.news?.length) { for (const m of g.news) if (/[⛈🌊🌤🔧🔥🚒]/u.test(m)) console.log('news', (g.s.t / 60).toFixed(1), m); g.news.length = 0; }
+  if (process.env.BOTNEWS && g.news?.length) { for (const m of g.news) if (/[⛈🌊🌤🔧🔥🚒🎉🗝📜⛏🛢🌲🐟🏕🗺]/u.test(m)) console.log('news', (g.s.t / 60).toFixed(1), m); g.news.length = 0; }
   if (s % 5 === 0) { if (checkStuck(g)) rescues++; }
   if (s % 10 === 0) { try { think(); } catch (e) { log.push(`  BOT ERROR ${(e as Error).stack?.split('\n').slice(0, 3).join(' | ')}`); } }
   if (process.env.PLAYTEST && s % 60 === 59) monitor(g);
@@ -262,7 +262,7 @@ const ms = g.s.ms;
 if (ms) log.push(`missions done ${ms.done.length} ($${ms.done.reduce((v, d) => v + d.reward, 0)}): ${ms.done.map(d => `${d.min}m ${d.title}`).join(' · ')}\n  now: ${[ms.main, ...ms.side].filter(Boolean).map(m => m!.title).join(' | ')}`);
 console.log(log.join('\n'));
 console.log(`seed ${seed}: ${minutes} game min in ${((Date.now() - t0) / 1000).toFixed(1)} s · idle trains ${idle}/${g.s.trains.length} · no-fail top-ups ${rescues}`);
-if (process.env.BOTNEWS) for (const m of g.news ?? []) if (/[⛈🌊🌤🔧🔥🚒]/u.test(m)) console.log("news", m);
+if (process.env.BOTNEWS) for (const m of g.news ?? []) if (/[⛈🌊🌤🔧🔥🚒🎉🗝📜⛏🛢🌲🐟🏕🗺]/u.test(m)) console.log("news", m);
 if (process.env.BOTDEBUG) for (const t of g.s.trains) console.log('train', t.id, JSON.stringify(t.job), 'v', t.v, 'dest', t.dest, 'plan', t.plan.length, 'refuge', t.refuge, 'cargo', JSON.stringify(t.cargo), 'head', g.net.pieces[t.trail.at(-1)!.piece]!.squares.at(-1));
 if (process.env.BOTDEBUG) for (const b of g.s.buildings ?? []) console.log(b.kind, b.id, 'out/min', Math.round(outputOf(g, b) * 60), 'stock', Math.round(b.stock), 'linked', isLinked(g, b), 'yard', yardSquares(n, b).join(','));
 if (process.env.BOTSAVE) { const { saveTo } = await import('../src/save/save.ts'); const fs = await import('node:fs'); const file = process.env.BOTSAVE; saveTo({ getItem: () => null, setItem: (_k, v) => fs.writeFileSync(file, v) }, g); }

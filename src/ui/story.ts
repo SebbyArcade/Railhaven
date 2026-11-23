@@ -1,3 +1,4 @@
+import { SECRET_INFO } from '../world/secrets.ts';
 import type { Game } from '../state.ts';
 import { ACTS, actOf, ashford, compass, type Mission, msOf, progress, reachedIslands, rumourOf, SWAP_SHARE } from '../progress/missions.ts';
 import { islandSpec, SPEC_TEXT } from '../world/specialty.ts';
@@ -50,6 +51,19 @@ export function storyHtml(g: Game, page?: string): string {
     if (hidden) h += `<div class="note">🌫 ${hidden} more island${hidden === 1 ? '' : 's'} still in the fog: scout by boat from a dock</div>`;
     return h + back;
   }
+  const tgt = (sc: NonNullable<typeof g.s.secrets>[number]) => { const c = sc.clues.find(o => !o.got); return c ?? { x: Math.round(sc.cx ?? sc.x), y: Math.round(sc.cy ?? sc.y) }; };
+  if (page === 'secrets') {
+    h += `<h3>🗝 Island secrets</h3>`;
+    const list = g.s.secrets ?? [];
+    for (const sc of list) {
+      const I = SECRET_INFO[sc.kind], k = g.world.islandOf[sc.y * g.world.n + sc.x]!, nm = k === g.world.home ? 'Ashford Isle' : g.world.islands[k]?.name ?? 'Island', got = sc.clues.filter(c => c.got).length;
+      h += sc.found !== undefined
+        ? `<div class="row ok"><b class="ico">${I.icon}</b><div class="grow"><div class="line"><span>${esc(I.name)}</span><span>${esc(nm)}</span></div><small>${esc(I.perk)}</small></div></div>`
+        : `<div class="row"><b class="ico">🔍</b><div class="grow"><div class="line"><span>${esc(nm)}</span><span>📜 ${got}/3</span></div>${bar(got / 3, '#e8a33c')}<small>${got < 3 ? 'Run your track past the 📜 clues on its land' : 'Lay track to the ✖'}</small></div><button class="mini" data-act="lookxy" data-x="${tgt(sc).x}" data-y="${tgt(sc).y}">📍 Show</button></div>`;
+    }
+    if (!list.length) h += `<div class="note">🗝 Every island your railway reaches hides a secret. ${(g.s.orders ?? 0) ? 'Look for 📜 clues on the map' : 'Fill your first town order and Mira will tell you about the first one'}</div>`;
+    return h + back;
+  }
   h += `<div class="mira">${esc(M.actLine ?? A.intro[0])}</div>`;
   const m = M.main;
   if (m) {
@@ -61,6 +75,6 @@ export function storyHtml(g: Game, page?: string): string {
     h += `<h3>✨ Side missions</h3>`;
     M.side.forEach((s, i) => { const p = progressText(g, s); h += `<div class="row side"><div class="grow"><div class="line"><span>${esc(s.title)}${p.text ? ` · ${p.text}` : ''}</span><span>+${fmtMoney(s.reward)}</span></div></div><button class="mini" data-go="${i + 1}">Go ›</button></div>`; });
   }
-  h += `<div class="tiles"><button class="tile" data-act="page" data-page="journal">📜 Journal<small>${M.done.length || !(g.s.orders ?? 0) ? `${M.done.length} done` : `📋 ${g.s.orders} order${g.s.orders === 1 ? '' : 's'} filled`}</small></button><button class="tile" data-act="page" data-page="isl">🏝 Islands<small>${reachedIslands(g).size} reached</small></button><button class="tile" data-act="reports">🧭 Scout reports<small>${(g.s.reports ?? []).length || 'none yet'}</small></button></div>`;
+  h += `<div class="tiles"><button class="tile" data-act="page" data-page="journal">📜 Journal<small>${M.done.length || !(g.s.orders ?? 0) ? `${M.done.length} done` : `📋 ${g.s.orders} order${g.s.orders === 1 ? '' : 's'} filled`}</small></button><button class="tile" data-act="page" data-page="isl">🏝 Islands<small>${reachedIslands(g).size} reached</small></button><button class="tile" data-act="page" data-page="secrets">🗝 Secrets<small>${(g.s.secrets ?? []).filter(x => x.found !== undefined).length} of ${(g.s.secrets ?? []).length} found</small></button><button class="tile" data-act="reports">🧭 Scout reports<small>${(g.s.reports ?? []).length || 'none yet'}</small></button></div>`;
   return h;
 }

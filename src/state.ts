@@ -99,6 +99,10 @@ export interface GameState {
   scouts?: import('./world/explore.ts').Scout[];
   /** 🏕 landing crews mapping an island the railway just reached */
   sweeps?: import('./world/landfall.ts').Sweep[];
+  /** 🔥 boom towns: rushes running, how many started, when the next one starts, how many the railway reached in time */
+  booms?: import('./world/booms.ts').Boom[]; boomN?: number; nextBoom?: number; boomsWon?: number;
+  /** 🗝 island secrets placed so far, how many, and islands too small to hold one */
+  secrets?: import('./world/secrets.ts').Secret[]; secretN?: number; noSecret?: number[];
   /** 🧭 scout reports, the last few (newest last) */
   reports?: import('./world/explore.ts').ScoutReport[];
   /** islands whose arrival card was shown (missing: an older game, filled in quietly with the islands already reached) */

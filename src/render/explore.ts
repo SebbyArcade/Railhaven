@@ -7,6 +7,8 @@ import { CLAIM_R, poisOf, POI, POI_REACH, type Poi, scoutPlace, scoutStarts } fr
 import { drawLandmark } from './landmarks.ts';
 import { rumours } from '../world/maps.ts';
 import { crewSpots } from '../world/landfall.ts';
+import { boomLabel } from '../world/booms.ts';
+import { CLUE_R, secretMarks } from '../world/secrets.ts';
 
 /** Landmarks and wrecks that are out of the fog, scouts on their way, and in Scout mode the start rings and the route. */
 export function drawExplore(ctx: CanvasRenderingContext2D, g: Game, _t: Tools | undefined, tm: number, vis: (x: number, y: number) => boolean, z: number) {
@@ -70,6 +72,32 @@ export function drawScouting(ctx: CanvasRenderingContext2D, g: Game, t: Tools | 
     marker(ctx, (s.x + 0.5) * TILE, (s.y + 0.5) * TILE, '🏕', '#3c7a3a', z);
     for (const p of crewSpots(g, s)) marker(ctx, (p.x + 0.5) * TILE, (p.y + 0.5) * TILE, '🚶', '#c07a2a', z);
   }
+  // 🗝 island secrets: 📜 clues with their reach ring, the shrinking search circle, ✖ on the spot, found ones
+  for (const m of secretMarks(g)) {
+    for (const c of m.clues) {
+      const X = (c.x + 0.5) * TILE, Y = (c.y + 0.5) * TILE;
+      ctx.strokeStyle = 'rgba(255,236,170,.8)'; ctx.lineWidth = 1.5 / Math.max(0.5, z); ctx.setLineDash([4, 4]);
+      ctx.beginPath(); ctx.arc(X, Y, (CLUE_R + 0.5) * TILE, 0, 7); ctx.stroke(); ctx.setLineDash([]);
+      marker(ctx, X, Y, '📜', '#8a5a2b', z);
+    }
+    if (m.circle) {
+      const X = (m.circle.x + 0.5) * TILE, Y = (m.circle.y + 0.5) * TILE, R = (m.circle.r + 0.5) * TILE;
+      ctx.fillStyle = 'rgba(255,210,80,.08)'; ctx.strokeStyle = 'rgba(255,210,80,.85)'; ctx.lineWidth = 2.5 / Math.max(0.4, z); ctx.setLineDash([8, 6]);
+      ctx.beginPath(); ctx.arc(X, Y, R, 0, 7); ctx.fill(); ctx.stroke(); ctx.setLineDash([]);
+      pill(ctx, X, Y - R, '🗝 The secret is in here', 'rgba(120,80,20,.92)', z);
+    }
+    if (m.spot) { const X = (m.spot.x + 0.5) * TILE, Y = (m.spot.y + 0.5) * TILE, p = 0.5 + 0.5 * Math.sin(tm * 4); ctx.strokeStyle = `rgba(255,210,80,${0.5 + 0.5 * p})`; ctx.lineWidth = 3 / Math.max(0.4, z); ctx.beginPath(); ctx.arc(X, Y, TILE * 1.5, 0, 7); ctx.stroke(); marker(ctx, X, Y, '✖', '#b8461c', z); }
+    if (m.found) marker(ctx, (m.found.x + 0.5) * TILE, (m.found.y + 0.5) * TILE, m.found.icon, '#7a5a12', z);
+  }
+  // 🔥 boom towns: a flare ring over the town and the countdown
+  for (const b of g.s.booms ?? []) {
+    const s = g.s.sites.find(o => o.id === b.town); if (!s) continue;
+    const X = (s.x + 0.5) * TILE, Y = (s.y + 0.5) * TILE, p = 0.5 + 0.5 * Math.sin(tm * 5), won = b.boomTo !== undefined;
+    ctx.strokeStyle = won ? `rgba(120,230,120,${0.5 + 0.4 * p})` : `rgba(255,190,40,${0.55 + 0.45 * p})`; ctx.lineWidth = 3 / Math.max(0.4, z);
+    ctx.beginPath(); ctx.arc(X, Y, TILE * (1.6 + 0.5 * p), 0, 7); ctx.stroke();
+    ctx.beginPath(); ctx.arc(X, Y, TILE * (2.6 + 0.9 * ((tm * 0.8) % 1)), 0, 7); ctx.globalAlpha = 1 - ((tm * 0.8) % 1); ctx.stroke(); ctx.globalAlpha = 1;
+    pill(ctx, X, Y - TILE * 2.4, boomLabel(g, b), won ? 'rgba(36,110,44,.95)' : 'rgba(184,70,28,.95)', z);
+  }
   if (t?.mode !== 'scout') return;
   const pulse = 0.5 + 0.5 * Math.sin(tm * 4);
   if (!t.scout) for (const s of scoutStarts(g)) {
@@ -85,6 +113,16 @@ export function drawScouting(ctx: CanvasRenderingContext2D, g: Game, t: Tools | 
     const e = path.at(-1)!; ctx.fillStyle = 'rgba(255,255,255,.12)'; ctx.strokeStyle = 'rgba(255,255,255,.7)'; ctx.lineWidth = 1.5;
     ctx.beginPath(); ctx.arc((e % n + 0.5) * TILE, (((e / n) | 0) + 0.5) * TILE, TILE * 3.3, 0, 7); ctx.fill(); ctx.stroke();
   }
+}
+
+/** A label pill that stays readable at any zoom (boom countdowns). */
+function pill(ctx: CanvasRenderingContext2D, X: number, Y: number, text: string, bg: string, z: number) {
+  const k = 1 / Math.max(0.35, Math.min(1.4, z)); ctx.save(); ctx.translate(X, Y); ctx.scale(k, k);
+  ctx.font = 'bold 12px system-ui'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  const w = ctx.measureText(text).width + 16;
+  ctx.fillStyle = bg; ctx.beginPath(); ctx.roundRect(-w / 2, -11, w, 22, 11); ctx.fill();
+  ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; ctx.stroke();
+  ctx.fillStyle = '#fff'; ctx.fillText(text, 0, 0.5); ctx.restore();
 }
 
 function marker(ctx: CanvasRenderingContext2D, X: number, Y: number, icon: string, col: string, z: number) {

@@ -6,6 +6,7 @@ import { isMountainFoot } from '../world/sites.ts';
 import { hallAt, hallsOf, stationLinkError } from './stations.ts';
 import { specMul } from '../world/specialty.ts';
 import { kindMul, ruinsMul } from '../world/explore.ts';
+import { secretMade } from '../world/secrets.ts';
 
 /** Goods and what they are worth per unit (the old game's `rate`). */
 export const GOODS = {
@@ -418,7 +419,7 @@ export function joinYardEnds(g: Game, b: Building): number {
 /** Output per second, stock cap (by level). */
 // 🏛 ruins and 🌲/🌾 landmarks count when any square of the building (yard included) touches their reach circle;
 // ruins speed up factories too
-export const outputOf = (g: Game, b: Building) => b.kind === 'dock' ? 0 : isFactory(b.kind) ? (0.35 + 0.25 * b.lvl) * ruinsMul(g, b.x, b.y, buildingSquares(g.world.n, b)) : INDUSTRIES[b.kind].rate * (1 + 0.5 * (b.lvl - 1)) * shareAt(g, b) * specMul(g, g.world.islandOf[yardSquares(g.world.n, b)[0]!]!, b.kind) * ruinsMul(g, b.x, b.y, buildingSquares(g.world.n, b)) * kindMul(g, b.kind, b.x, b.y, buildingSquares(g.world.n, b));
+export const outputOf = (g: Game, b: Building) => b.kind === 'dock' ? 0 : secretMade(g, g.world.islandOf[yardSquares(g.world.n, b)[0]!]!) * (isFactory(b.kind) ? (0.35 + 0.25 * b.lvl) * ruinsMul(g, b.x, b.y, buildingSquares(g.world.n, b)) : INDUSTRIES[b.kind].rate * (1 + 0.5 * (b.lvl - 1)) * shareAt(g, b) * specMul(g, g.world.islandOf[yardSquares(g.world.n, b)[0]!]!, b.kind) * ruinsMul(g, b.x, b.y, buildingSquares(g.world.n, b)) * kindMul(g, b.kind, b.x, b.y, buildingSquares(g.world.n, b)));
 export const capOf = (b: Building) => 80 + 40 * (b.lvl - 1);
 
 /** Why linking neighbour squares a and b would break a yard (joined from its long side), or ''. */
