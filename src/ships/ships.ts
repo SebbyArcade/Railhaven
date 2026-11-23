@@ -1,3 +1,4 @@
+import { perks } from '../progress/prizes.ts';
 import type { Game } from '../state.ts';
 import { inStorm, STORM_SLOW } from '../world/events.ts';
 import { type Building, buildingSquares, type Good, yardSquares } from '../buildings/industries.ts';
@@ -27,7 +28,7 @@ export const SHIP_UP: Record<ShipUpKey, { icon: string; name: string; lv: number
 export const shipUpLvl = (g: Game, k: ShipUpKey) => g.s.shipU?.[k] ?? 0;
 /** units one ship carries, and squares it sails per second (before storms and lighthouses) */
 export const shipCap = (g: Game) => SHIP_UP.hold.lv[shipUpLvl(g, 'hold')] ?? SHIP_CAP;
-export const shipSpeed = (g: Game) => SHIP_SPEED * (SHIP_UP.spd.lv[shipUpLvl(g, 'spd')] ?? 1);
+export const shipSpeed = (g: Game) => SHIP_SPEED * (SHIP_UP.spd.lv[shipUpLvl(g, 'spd')] ?? 1) * perks(g).ship;
 /** Buy the next level of a ship upgrade. Returns why not, or '' when bought. */
 export function buyShipUp(g: Game, k: ShipUpKey): string {
   const l = shipUpLvl(g, k), p = SHIP_UP[k].price[l];

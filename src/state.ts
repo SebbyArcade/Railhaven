@@ -133,6 +133,10 @@ export interface GameState {
   trade?: Record<number, import('./economy/trade.ts').TradeOrder>;
   /** trade orders filled */
   tradeDone?: number;
+  /** 🌟 island stars earned (island name, or 'home' -> goal bits), prizes won so far, free builds waiting for a town */
+  stars?: Record<string, number>;
+  prize?: number;
+  free?: Partial<Record<import('./progress/prizes.ts').FreeKind, number>>;
 }
 
 /** The running game: saved state plus the world rebuilt from the seed. */
@@ -177,6 +181,10 @@ export interface Game {
   reported?: number[];
   /** islands just reached, waiting for their arrival card (not saved) */
   arrived?: number[];
+  /** 🌟 stars just earned, waiting for their card (not saved) */
+  starQ?: import('./progress/stars.ts').StarNews[];
+  /** the star card open now (not saved) */
+  starNow?: import('./progress/stars.ts').StarNews;
   /** set by the renderer: squares whose baked terrain must be redrawn (track hides trees) */
   terrainDirty?: (squares: number[]) => void;
   /** forest squares already redrawn as saplings */

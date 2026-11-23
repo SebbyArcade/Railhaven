@@ -235,6 +235,7 @@ cardEl.onclick = e => {
   if (b.dataset.act === 'report') { openCard({ kind: 'scout', id: +b.dataset.id! }); return; }
   if (b.dataset.act === 'reports') { openCard({ kind: 'scout', id: 0 }); return; }
   if (b.dataset.act === 'isle') { openCard({ kind: 'isle', id: +b.dataset.id! }); return; }
+  if (b.dataset.act === 'atlas') { openCard({ kind: 'story', id: 0, page: 'isl' }); return; }
   if (b.dataset.act === 'lookpoi') { const p = poisOf(game).find(x => x.id === +b.dataset.id!); closeCard(); if (p) { lookAt(p.x, p.y); tools.flash = { square: p.y * game.world.n + p.x, until: performance.now() + 2500 }; } return; }
   if (b.dataset.act === 'areamap') { const why = tools.openMap(+b.dataset.x!, +b.dataset.y!); if (why) { toast(why); return; } closeCard(); const c = game.s.camera; c.x = (+b.dataset.x! + 0.5) * 32; c.y = (+b.dataset.y! + 0.5) * 32; c.z = Math.max(0.1, Math.min(c.z, 0.9 * Math.min(view.w, view.h) / (2 * (tools.mapPv?.r ?? 45) * 32))); return; }
   if (b.dataset.act === 'view') { setView((b.dataset.v || null) as MapView | null); closeCard(); return; }
@@ -693,6 +694,7 @@ function frame(now: number) {
     if (M.actNew && !tools.card && tools.mode === 'pan' && !menuOpen && !tools.againOn()) { M.actNew = false; openCard({ kind: 'story', id: 0, page: 'act' }); }
     else if ((game.arrived?.length || game.reported?.length) && (lessonOn(game) || onHome())) { game.arrived = []; game.reported = []; }
     else if (game.arrived?.length && !tools.card && tools.mode === 'pan' && !menuOpen && !tools.againOn()) openCard({ kind: 'isle', id: game.arrived.shift()!, fresh: true }); // 🏝 a new island
+    else if (game.starQ?.length && !lessonOn(game) && !onHome() && !tools.card && tools.mode === 'pan' && !menuOpen && !tools.againOn()) { game.starNow = game.starQ.shift(); openCard({ kind: 'star', id: 0 }); } // 🌟 a star earned
     else if (game.reported?.length && !tools.card && (tools.mode === 'pan' || tools.mode === 'scout') && !tools.scout && !menuOpen && !tools.againOn()) { // 🧭 a scout is back: its report
       const id = game.reported.pop()!; game.reported = [];
       game.news = (game.news ?? []).filter(m => !/is back: the map is drawn/.test(m));

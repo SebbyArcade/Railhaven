@@ -7,6 +7,7 @@ import { isRevealed } from '../world/fog.ts';
 import { islandSpec, SPEC_TEXT } from '../world/specialty.ts';
 import { POI, poisOf, toldIslands, type Poi, type ScoutReport } from '../world/explore.ts';
 import { fmtMoney } from './hud.ts';
+import { islandGoalsHtml } from './atlas.ts';
 
 /**
  * 🧭 Scout reports and 🏝 island arrival cards: what a scout saw on its trip (with how far each town is from your
@@ -105,6 +106,7 @@ export function isleCard(g: Game, k: number, fresh: boolean): string | null {
   const hidTowns = towns.filter(t => !seen(t)).length + plots.filter(p => !seen(p)).length;
   let h = `<div class="find"><span class="rar" style="border-color:#5cc46a;color:#8fe39a">${fresh ? '🏝 NEW ISLAND REACHED' : '🏝 ISLAND'}</span><b class="fbig">🏝</b><h2>${esc(isl.name)}</h2>${sp ? `<small>${SPEC_TEXT[sp]}: ${sp === 'fish' ? 'fishing boats from its docks catch' : `${esc(INDUSTRIES[sp as IndustryKind]?.name ?? 'its industries')}s here make`} 50% more</small>` : `<small>${isl.size} squares of land</small>`}</div>`;
   if (fresh) h += `<div class="mira">Mira: “${esc(isl.name)}! The islanders have heard of your railway. ${hidTowns + hidPois ? 'They talk of places in the fog nobody has mapped yet.' : 'They’ll be glad of the trade.'}”</div>`;
+  h += islandGoalsHtml(g, k);
   h += `<h3>🏘 Towns</h3>`;
   const vis = towns.filter(seen);
   for (const t of vis) h += `<div class="row${townLinked(g, t) ? ' ok' : ''}"><b class="ico">🏘</b><div class="grow"><div class="line"><span>${esc(t.name ?? 'Town')}</span></div><small>${townLinked(g, t) ? '✅ On your railway' : '🛤 Lay track to it'}</small></div>${look(t.x, t.y)}</div>`;

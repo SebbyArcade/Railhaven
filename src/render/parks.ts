@@ -271,6 +271,48 @@ function drawPark(ctx: Ctx, g: Game, p: Park, zoom: number, tm: number) {
     ctx.fillStyle = 'rgba(235,248,255,.85)'; ctx.fillRect(u - 0.3, fy - jet - 1, 0.6, jet + 1); ctx.beginPath(); ctx.arc(u, fy - jet - 1, 0.8, 0, 7); ctx.fill();
     if (zoom > 1.2) { person(ctx, u - 9, fy + 1, '#7a3a8a'); person(ctx, u + 8, fy, '#2c4f8a'); person(ctx, u - 6, fy + 3.5, '#a8402e'); person(ctx, u + 10, fy + 3.5, '#e8c25a'); }
   }
+  else if (p.k === 'fair') {
+    // 🎡 a fairground (a 🌟 prize): a turning big wheel with coloured cars, a striped carousel tent, bunting and visitors
+    const wx = x + 11, wy = y + 12, R = 8;
+    ctx.fillStyle = 'rgba(20,16,10,.28)'; ctx.beginPath(); ctx.ellipse(wx + 2, y + TILE - 5, 7, 1.8, 0, 0, 7); ctx.fill();
+    ctx.strokeStyle = '#6a5a48'; ctx.lineWidth = 0.9;
+    ctx.beginPath(); ctx.moveTo(wx - 4.5, y + TILE - 5); ctx.lineTo(wx, wy); ctx.lineTo(wx + 4.5, y + TILE - 5); ctx.stroke(); // legs
+    ctx.strokeStyle = '#e8e0cc'; ctx.lineWidth = 0.7; ctx.beginPath(); ctx.arc(wx, wy, R, 0, 7); ctx.stroke();
+    const a0 = tm * 0.35, cols = ['#e85a5a', '#f2d24a', '#5aa0e8', '#7ac24a', '#c26ad8', '#f29a3a'];
+    ctx.lineWidth = 0.35;
+    for (let k = 0; k < 6; k++) { const a = a0 + k * Math.PI / 3; ctx.beginPath(); ctx.moveTo(wx, wy); ctx.lineTo(wx + Math.cos(a) * R, wy + Math.sin(a) * R); ctx.stroke(); }
+    for (let k = 0; k < 6; k++) { const a = a0 + k * Math.PI / 3, cx = wx + Math.cos(a) * R, cy = wy + Math.sin(a) * R; ctx.fillStyle = cols[k]!; ctx.fillRect(cx - 1.3, cy, 2.6, 2); }
+    ctx.fillStyle = '#d8b04a'; ctx.beginPath(); ctx.arc(wx, wy, 1, 0, 7); ctx.fill();
+    // the carousel tent: a striped cone roof on a round base
+    const cx = x + TILE - 9, cy = y + TILE - 10;
+    ctx.fillStyle = 'rgba(20,16,10,.25)'; ctx.beginPath(); ctx.ellipse(cx + 1.5, cy + 5, 6, 2, 0, 0, 7); ctx.fill();
+    ctx.fillStyle = '#f4ead2'; ctx.fillRect(cx - 5, cy, 10, 4.5);
+    for (let k = 0; k < 5; k++) { ctx.fillStyle = k % 2 ? '#f4f0e6' : '#d84a4a'; ctx.beginPath(); ctx.moveTo(cx, cy - 6); ctx.lineTo(cx - 5.5 + k * 2.2, cy + 0.5); ctx.lineTo(cx - 3.3 + k * 2.2, cy + 0.5); ctx.fill(); }
+    ctx.fillStyle = '#d8b04a'; ctx.fillRect(cx - 0.3, cy - 8, 0.6, 2.2);
+    const bob = Math.sin(tm * 3) * 0.6; ctx.fillStyle = '#7a4a2a'; ctx.fillRect(cx - 3, cy + 1.5 + bob, 1.6, 1.2); ctx.fillRect(cx + 1.4, cy + 1.5 - bob, 1.6, 1.2); // horses going round
+    // bunting from the wheel to the tent
+    ctx.strokeStyle = 'rgba(60,50,40,.6)'; ctx.lineWidth = 0.25; ctx.beginPath(); ctx.moveTo(wx + R, wy + 2); ctx.quadraticCurveTo(cx - 6, cy - 1, cx, cy - 6); ctx.stroke();
+    for (let k = 1; k < 6; k++) { const f = k / 6, bx = (1 - f) * (1 - f) * (wx + R) + 2 * f * (1 - f) * (cx - 6) + f * f * cx, by = (1 - f) * (1 - f) * (wy + 2) + 2 * f * (1 - f) * (cy - 1) + f * f * (cy - 6); ctx.fillStyle = cols[k % 6]!; ctx.beginPath(); ctx.moveTo(bx - 0.6, by); ctx.lineTo(bx + 0.6, by); ctx.lineTo(bx, by + 1.2); ctx.fill(); }
+    if (zoom > 1.2) { person(ctx, x + 6, y + TILE - 3, '#a8402e'); person(ctx, x + 18, y + TILE - 4, '#3f5a7a'); person(ctx, x + TILE - 4, y + TILE - 3, '#e8c25a'); }
+  }
+  else if (p.k === 'hotel') {
+    // 🏨 a grand hotel (a 🌟 prize): four storeys of cream stone with rows of lit windows, a red awning and a flag
+    const w = 22, top = y + 4, base = y + TILE - 6;
+    ctx.fillStyle = 'rgba(20,16,10,.3)'; ctx.fillRect(u - w / 2 + 3, top + 4, w, base - top);
+    ctx.fillStyle = '#ece0c4'; ctx.fillRect(u - w / 2, top + 3, w, base - top - 3);
+    ctx.fillStyle = '#5a4a5a'; ctx.beginPath(); ctx.moveTo(u - w / 2 - 1, top + 4); ctx.lineTo(u - w / 2 + 3, top); ctx.lineTo(u + w / 2 - 3, top); ctx.lineTo(u + w / 2 + 1, top + 4); ctx.fill(); // mansard roof
+    ctx.fillStyle = 'rgba(255,255,255,.25)'; ctx.fillRect(u - w / 2 + 3, top + 0.5, w - 6, 0.8);
+    for (let r = 0; r < 4; r++) for (let c = 0; c < 6; c++) {
+      const lit = hash(g.s.seed, p.x * 7 + c, p.y * 7 + r, 9) < 0.55 + 0.25 * Math.sin(tm * 0.2 + r + c);
+      ctx.fillStyle = lit ? '#f6d68a' : '#6f8fa8'; ctx.fillRect(u - w / 2 + 2 + c * 3.4, top + 5.5 + r * 3.6, 1.8, 2.2);
+    }
+    ctx.fillStyle = '#b83a3a'; ctx.fillRect(u - 4, base - 4.5, 8, 1.6); // awning over the door
+    ctx.fillStyle = '#4a3a2a'; ctx.fillRect(u - 1.3, base - 2.9, 2.6, 2.9);
+    ctx.fillStyle = '#6a5a48'; ctx.fillRect(u + w / 2 - 3, top - 6, 0.5, 6); // flagpole
+    ctx.fillStyle = '#3a6ab8'; ctx.beginPath(); ctx.moveTo(u + w / 2 - 2.5, top - 6); ctx.lineTo(u + w / 2 + 1 + Math.sin(tm * 3) * 0.5, top - 5); ctx.lineTo(u + w / 2 - 2.5, top - 4); ctx.fill();
+    bush(ctx, u - w / 2 + 1, base, 2, '#4f8a3a'); bush(ctx, u + w / 2 - 1, base, 2, '#4f8a3a');
+    if (zoom > 1.2) { person(ctx, u - 5, y + TILE - 3, '#2e2a26'); person(ctx, u + 5, y + TILE - 3, '#7a3a8a'); }
+  }
   if (zoom > 1.6) { fence(ctx, x + 2, y + TILE - 2, x + 9, y + TILE - 2); fence(ctx, x + TILE - 9, y + TILE - 2, x + TILE - 2, y + TILE - 2); }
   void pine;
 }

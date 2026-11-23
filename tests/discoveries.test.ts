@@ -55,6 +55,7 @@ describe('frontier landmarks on islands across the sea', () => {
 describe('far-sea islands', () => {
   it('islands an expedition finds get landmarks too, frontier ones included', () => {
     const { g, dock } = dockAndLanding(4242); dock.lvl = 3; g.s.money = 1e6; poisOf(g);
+    g.s.stars = Object.fromEntries(Array.from({ length: 5 }, (_, i) => ['isle' + i, 7])); // 🌟 15 stars chart the first ring
     const r = sendExpedition(g, dock); if (typeof r === 'string') throw new Error(r);
     const g2 = r.g, names = new Set(r.islands), ps = poisOf(g2);
     const onNew = ps.filter(p => names.has(g2.world.islands[islOf(g2, p)]?.name ?? ''));

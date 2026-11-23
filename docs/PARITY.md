@@ -69,3 +69,4 @@ that makes sense. Details for each line: `legacy/CHANGES.md` (search the version
 ## New in the rebuild (not in the old game)
 - [x] 🏕 Landing crews: the first time the railway reaches an island, a crew maps the whole island with its shore (Sébastien, 2026-11-22)
 - [x] 🔥 Boom towns: gold, oil, timber or fish struck at an unlinked town or site; link it before the countdown ends for a bonus and double pay there for 10 minutes; missing one costs nothing
+- [x] 🌟 Island stars: up to 3 goals per island (link its towns, grow a City, put its specialty to work); stars win prizes (named engines that help every train, free town projects, the prize-only 🎡 Fairground and 🏨 Grand Hotel) and chart the next expedition ring (15 stars a ring) (Sébastien, 2026-11-23)

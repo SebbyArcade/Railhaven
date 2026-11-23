@@ -5,20 +5,21 @@ import { labelAt } from '../render/stations.ts';
 import { hash } from '../core/rng.ts';
 import { takenSquares, yardSet } from './industries.ts';
 import { hallsOf } from './stations.ts';
+import { type FreeKind, freeOf } from '../progress/prizes.ts';
 
 /**
  * 🌳 Town parks and 🏛 town projects, as in the old game. Each one takes one square near the town, is drawn there,
  * and gives a small lasting bonus to that town only. Parks make its orders smaller; projects make deliveries there
  * pay more (the Tram Line makes orders smaller instead). Nothing here earns money by itself.
  */
-export type ParkKind = 'park' | 'clock' | 'market' | 'tram' | 'theatre' | 'foundry' | 'bridgeworks' | 'grandstation' | 'cathedral' | 'exhibition';
+export type ParkKind = 'park' | 'clock' | 'market' | 'tram' | 'theatre' | 'foundry' | 'bridgeworks' | 'grandstation' | 'cathedral' | 'exhibition' | 'fair' | 'hotel';
 export interface Park { town: number; x: number; y: number; k: ParkKind }
 
 /** up to 3 parks per town, each making its orders 5% smaller */
 export const PARK_PRICE = [5000, 10000, 20000];
 export const PARK_ORDER = 0.05;
 
-export interface Project { k: Exclude<ParkKind, 'park'>; icon: string; name: string; price: number; size: number; pay?: number; order?: number; text: string; /** Ashford only, from this Railway level */ ashford?: boolean; rlv?: number }
+export interface Project { k: Exclude<ParkKind, 'park'>; icon: string; name: string; price: number; size: number; pay?: number; order?: number; text: string; /** Ashford only, from this Railway level */ ashford?: boolean; rlv?: number; /** 🌟 won with island stars only, never bought */ prize?: boolean }
 /** size = the town's step it needs (2 Town, 3 City, 4 Metropolis) */
 export const PROJECTS: Project[] = [
   // the old game's Ashford landmark: it casts the iron for tunnel linings, so track can cross mountains
@@ -33,6 +34,9 @@ export const PROJECTS: Project[] = [
   { k: 'market', icon: '🛒', name: 'Market Hall', price: 30000, size: 3, pay: 0.15, text: 'Deliveries to this town pay 15% more' },
   { k: 'tram', icon: '🚋', name: 'Tram Line', price: 50000, size: 3, order: 0.05, text: 'Its orders are 5% smaller' },
   { k: 'theatre', icon: '🎭', name: 'Grand Theatre', price: 80000, size: 4, pay: 0.20, text: 'Deliveries to this town pay 20% more' },
+  // 🌟 prize-only buildings: won with island stars, never sold
+  { k: 'fair', icon: '🎡', name: 'Fairground', price: 0, size: 1, pay: 0.15, prize: true, text: 'Deliveries to this town pay 15% more' },
+  { k: 'hotel', icon: '🏨', name: 'Grand Hotel', price: 0, size: 2, order: 0.10, prize: true, text: 'Its orders are 10% smaller' },
 ];
 export const projectOf = (k: ParkKind) => PROJECTS.find(p => p.k === k);
 /** The projects a town can have (the Foundry is Ashford's alone). */
@@ -121,8 +125,9 @@ export function projectError(g: Game, t: Site, k: ParkKind): string {
   if (hasProject(g, t, k)) return `${t.name} already has a ${P.name}`;
   if (P.ashford && t !== g.s.sites[0]) return `Only Ashford can build the ${P.name}`;
   if (P.rlv && (g.s.rlv ?? 0) < P.rlv) return `Needs Railway level ${P.rlv}: fill more town orders`;
+  if (P.prize && !freeOf(g, k)) return `The ${P.name} is a 🌟 prize: earn more island stars to win one`;
   if ((t.lvl ?? 0) < P.size) return `${t.name} must grow into a ${['Hamlet', 'Village', 'Town', 'City', 'Metropolis'][P.size]} first`;
-  if (g.s.money < P.price) return `Need ${fmt(P.price - Math.floor(g.s.money))} more`;
+  if (!freeOf(g, k) && g.s.money < P.price) return `Need ${fmt(P.price - Math.floor(g.s.money))} more`;
   return '';
 }
 
@@ -130,6 +135,8 @@ export function projectError(g: Game, t: Site, k: ParkKind): string {
 export function buyProject(g: Game, t: Site, k: ParkKind): string {
   const e = projectError(g, t, k); if (e) return e;
   const P = projectOf(k)!, p = (P.ashford && P.size >= 3 ? parkSpot(g, t, true) : null) ?? parkSpot(g, t); if (!p) return NO_ROOM(t);
-  g.s.money -= P.price; (g.s.parks ??= []).push({ town: t.id, ...p, k });
+  if (freeOf(g, k)) g.s.free![k as FreeKind]!--; // 🌟 a prize: free
+  else g.s.money -= P.price;
+  (g.s.parks ??= []).push({ town: t.id, ...p, k });
   return '';
 }

@@ -3,6 +3,7 @@ import type { Game, GameState, Resource, Site } from '../state.ts';
 import type { Building } from '../buildings/industries.ts';
 import { chartSea, isDock, linkedDocks } from '../ships/docks.ts';
 import { reveal } from './fog.ts';
+import { ringStars, starCount } from '../progress/prizes.ts';
 import { frontierPois, poisOf } from './explore.ts';
 import { isLand, MAP_N, RING_W, T } from './terrain.ts';
 import { isMountainFoot, TOWN_NAMES } from './sites.ts';
@@ -27,6 +28,8 @@ export function expeditionError(g: Game, b: Building): string {
   if (!isDock(b)) return 'Only a dock can send an expedition';
   if (b.lvl < EXPEDITION_DOCK) return `Needs a level ${EXPEDITION_DOCK} dock: upgrade this one`;
   if (!linkedDocks(g).includes(b)) return 'Join this dock to your railway first';
+  const st = starCount(g), need = ringStars(g);
+  if (st < need) return `The charts for the next ring need 🌟 ${need} island stars: you have ${st}. Earn stars on the islands you reach`;
   const p = expeditionPrice(g); if (g.s.money < p) return `Need ${fmt(p - Math.floor(g.s.money))} more`;
   return '';
 }

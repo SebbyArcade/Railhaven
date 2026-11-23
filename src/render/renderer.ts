@@ -1,3 +1,4 @@
+import { atlasIslands, goalsOf } from '../progress/stars.ts';
 import { drawParks } from './parks.ts';
 import { hallOf } from '../buildings/stations.ts';
 import type { Game } from '../state.ts';
@@ -390,6 +391,14 @@ export class Renderer {
     return m;
   }
 
+  /** 🌟 stars earned and goals on an island, for its name board (rechecked every few seconds; only islands in the atlas). */
+  private starAt = 0; private starInfo = new Map<number, { got: number; of: number }>();
+  private goalsAt(k: number): { got: number; of: number } {
+    const now = performance.now();
+    if (now - this.starAt > 3000) { this.starAt = now; this.starInfo.clear(); for (const i of atlasIslands(this.g)) { const gl = goalsOf(this.g, i); this.starInfo.set(i, { got: gl.filter(o => o.earned).length, of: gl.length }); } }
+    return this.starInfo.get(k) ?? { got: 0, of: 0 };
+  }
+
   private drawIslandNames(ctx: CanvasRenderingContext2D, z: number) {
     if (z >= 0.8) return;
     const g = this.g, n = g.world.n, info = this.islandStats();
@@ -400,7 +409,15 @@ export class Renderer {
       ctx.font = `italic 700 ${f}px Georgia,serif`; ctx.lineWidth = 4 / z; ctx.strokeStyle = 'rgba(20,18,14,.75)';
       ctx.strokeText(o.name, X, Y); ctx.fillStyle = k === g.world.home ? 'rgba(255,226,160,.95)' : 'rgba(200,215,235,.85)'; ctx.fillText(o.name, X, Y);
       const sp = islandSpec(g, k); let yy = Y + f * 0.9;
-      if (sp) { const t = `★ ${SPEC_TEXT[sp]}`; ctx.font = `600 ${Math.round(f * 0.6)}px system-ui`; ctx.strokeText(t, X, yy); ctx.fillStyle = 'rgba(255,214,120,.9)'; ctx.fillText(t, X, yy); yy += f * 0.85; }
+      const gl = this.goalsAt(k);
+      if (gl.of) { // 🌟 island stars: gold for earned, dim for still to earn
+        ctx.font = `700 ${Math.round(f * 0.8)}px system-ui`; const s1 = '★'.repeat(gl.got), s2 = '★'.repeat(gl.of - gl.got), w1 = ctx.measureText(s1).width, w2 = ctx.measureText(s2).width;
+        ctx.textAlign = 'left'; const sx = X - (w1 + w2) / 2;
+        if (s1) { ctx.strokeText(s1, sx, yy); ctx.fillStyle = '#ffd24a'; ctx.fillText(s1, sx, yy); }
+        if (s2) { ctx.strokeText(s2, sx + w1, yy); ctx.fillStyle = 'rgba(200,200,200,.45)'; ctx.fillText(s2, sx + w1, yy); }
+        ctx.textAlign = 'center'; yy += f * 0.85;
+      }
+      if (sp) { const t = SPEC_TEXT[sp]; ctx.font = `600 ${Math.round(f * 0.6)}px system-ui`; ctx.strokeText(t, X, yy); ctx.fillStyle = 'rgba(255,214,120,.9)'; ctx.fillText(t, X, yy); yy += f * 0.85; }
       const st = info.get(k); if (!st) return;
       const t = st.linked ? `🏘 ${st.linked}/${st.towns} towns · 🚂 ${st.trains}${st.ships ? ` · 🚢 ${st.ships}` : ''}` : st.towns ? `⛵ not reached yet · ${st.towns} town${st.towns === 1 ? '' : 's'} found` : '';
       if (!t) return;
