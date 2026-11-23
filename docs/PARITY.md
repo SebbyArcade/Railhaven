@@ -65,3 +65,7 @@ that makes sense. Details for each line: `legacy/CHANGES.md` (search the version
 - [ ] Hints (💡), Recommended build, discovery cards, toasts queue, game report (done: 🎯 mission pill with Go plays the 💡 hint's part, 🐢 bottlenecks in Needs you, 📊 Game report to copy, toasts queue; ⭐ Recommended next build at the top of the Build menu, discovery cards with rarity for landmarks)
 - [ ] Miniature art at today's level: towns (street grid, gardens, station buildings), industries, factories, docks, shed, trains (steam + cargo wagons), ships, people, smoke
 - [x] Pause when hidden / idle, full-screen button, side sheet on wide screens
+
+## New in the rebuild (not in the old game)
+- [x] 🏕 Landing crews: the first time the railway reaches an island, a crew maps the whole island with its shore (Sébastien, 2026-11-22)
+- [x] 🔥 Boom towns: gold, oil, timber or fish struck at an unlinked town or site; link it before the countdown ends for a bonus and double pay there for 10 minutes; missing one costs nothing

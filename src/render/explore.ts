@@ -6,6 +6,8 @@ import type { Tools } from '../ui/tools.ts';
 import { CLAIM_R, poisOf, POI, POI_REACH, type Poi, scoutPlace, scoutStarts } from '../world/explore.ts';
 import { drawLandmark } from './landmarks.ts';
 import { rumours } from '../world/maps.ts';
+import { crewSpots } from '../world/landfall.ts';
+import { boomLabel } from '../world/booms.ts';
 
 /** Landmarks and wrecks that are out of the fog, scouts on their way, and in Scout mode the start rings and the route. */
 export function drawExplore(ctx: CanvasRenderingContext2D, g: Game, _t: Tools | undefined, tm: number, vis: (x: number, y: number) => boolean, z: number) {
@@ -64,6 +66,20 @@ export function drawScouting(ctx: CanvasRenderingContext2D, g: Game, t: Tools | 
     const p = scoutPlace(g, s), X = (p.x + 0.5) * TILE, Y = (p.y + 0.5) * TILE;
     marker(ctx, X, Y, s.boat ? '⛵' : '🚶', s.boat ? '#2f6f9a' : '#c07a2a', z);
   }
+  // 🏕 landing crews mapping an island: their camp where they came ashore and walkers on the edge of the mapped land
+  for (const s of g.s.sweeps ?? []) {
+    marker(ctx, (s.x + 0.5) * TILE, (s.y + 0.5) * TILE, '🏕', '#3c7a3a', z);
+    for (const p of crewSpots(g, s)) marker(ctx, (p.x + 0.5) * TILE, (p.y + 0.5) * TILE, '🚶', '#c07a2a', z);
+  }
+  // 🔥 boom towns: a flare ring over the town and the countdown
+  for (const b of g.s.booms ?? []) {
+    const s = g.s.sites.find(o => o.id === b.town); if (!s) continue;
+    const X = (s.x + 0.5) * TILE, Y = (s.y + 0.5) * TILE, p = 0.5 + 0.5 * Math.sin(tm * 5), won = b.boomTo !== undefined;
+    ctx.strokeStyle = won ? `rgba(120,230,120,${0.5 + 0.4 * p})` : `rgba(255,190,40,${0.55 + 0.45 * p})`; ctx.lineWidth = 3 / Math.max(0.4, z);
+    ctx.beginPath(); ctx.arc(X, Y, TILE * (1.6 + 0.5 * p), 0, 7); ctx.stroke();
+    ctx.beginPath(); ctx.arc(X, Y, TILE * (2.6 + 0.9 * ((tm * 0.8) % 1)), 0, 7); ctx.globalAlpha = 1 - ((tm * 0.8) % 1); ctx.stroke(); ctx.globalAlpha = 1;
+    pill(ctx, X, Y - TILE * 2.4, boomLabel(g, b), won ? 'rgba(36,110,44,.95)' : 'rgba(184,70,28,.95)', z);
+  }
   if (t?.mode !== 'scout') return;
   const pulse = 0.5 + 0.5 * Math.sin(tm * 4);
   if (!t.scout) for (const s of scoutStarts(g)) {
@@ -79,6 +95,16 @@ export function drawScouting(ctx: CanvasRenderingContext2D, g: Game, t: Tools | 
     const e = path.at(-1)!; ctx.fillStyle = 'rgba(255,255,255,.12)'; ctx.strokeStyle = 'rgba(255,255,255,.7)'; ctx.lineWidth = 1.5;
     ctx.beginPath(); ctx.arc((e % n + 0.5) * TILE, (((e / n) | 0) + 0.5) * TILE, TILE * 3.3, 0, 7); ctx.fill(); ctx.stroke();
   }
+}
+
+/** A label pill that stays readable at any zoom (boom countdowns). */
+function pill(ctx: CanvasRenderingContext2D, X: number, Y: number, text: string, bg: string, z: number) {
+  const k = 1 / Math.max(0.35, Math.min(1.4, z)); ctx.save(); ctx.translate(X, Y); ctx.scale(k, k);
+  ctx.font = 'bold 12px system-ui'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  const w = ctx.measureText(text).width + 16;
+  ctx.fillStyle = bg; ctx.beginPath(); ctx.roundRect(-w / 2, -11, w, 22, 11); ctx.fill();
+  ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; ctx.stroke();
+  ctx.fillStyle = '#fff'; ctx.fillText(text, 0, 0.5); ctx.restore();
 }
 
 function marker(ctx: CanvasRenderingContext2D, X: number, Y: number, icon: string, col: string, z: number) {

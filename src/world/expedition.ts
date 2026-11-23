@@ -44,6 +44,7 @@ export function growState(s: GameState, n0: number, d: number) {
   s.track = s.track.map(([i, l, b]) => [sq(i), l, b]);
   for (const o of [...s.sites, ...(s.buildings ?? []), ...(s.parks ?? []), ...(s.pois ?? []), ...(s.maps ?? [])]) xy(o);
   xy(s.shed); xy(s.storm);
+  s.sweeps = []; // island numbers change with the new ring: crews start again from the next track change
   s.camera.x += P; s.camera.y += P;
   for (const b of s.breaks ?? []) b.square = sq(b.square);
   for (const sc of s.scouts ?? []) sc.path = sc.path.map(sq);
