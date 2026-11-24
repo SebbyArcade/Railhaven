@@ -158,3 +158,15 @@ describe('🧭 Frontier: stone and the guide', () => {
     const c = coach(g)!; expect(`${c.what} ${c.why} ${c.tip}`).not.toMatch(/\d+ squares (north|south|east|west)/);
   });
 });
+
+describe('🧭 Frontier landmarks', () => {
+  it("an explorer's camp grants a wish, a lookout hill holds supplies", async () => {
+    const { poiGift, LOOKOUT_SUP } = await import('../src/frontier/frontier.ts');
+    const g = frontier(), f = fr(g)!, s0 = f.sup;
+    expect(poiGift(g, 'lookout', 1, 1)).toMatch(/supplies/); expect(f.sup).toBe(s0 + LOOKOUT_SUP);
+    // Ashford is on the railway from the start: the camp's wish goes to the nearest linked town
+    const p0 = f.picks.length; const txt = poiGift(g, 'camp', g.s.sites[0]!.x, g.s.sites[0]!.y);
+    if (txt) expect(f.picks.length).toBe(p0 + 1);
+    expect(poiGift(newGame(3), 'camp', 1, 1)).toBe('');
+  });
+});

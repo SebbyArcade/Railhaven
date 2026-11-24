@@ -25,7 +25,7 @@ export const PERKS: Record<PerkKind, PerkInfo> = {
   gang: { icon: '🛠', name: 'Track Gang Hut', text: 'New track costs 20% fewer supplies everywhere (stacks, down to half)', art: 'clock' },
   bridge: { icon: '🌉', name: 'Bridge Works', text: 'Bridges cost half the supplies', art: 'bridgeworks' },
   tunnel: { icon: '⛰', name: 'Tunnel Guild', text: 'Track can tunnel through mountains', art: 'foundry' },
-  lookout: { icon: '🔭', name: 'Lookout Tower', text: 'Clears the fog 14 squares round this town right away', art: 'park' },
+  lookout: { icon: '🔭', name: 'Lookout Tower', text: 'Clears the fog 22 squares round this town right away, landmarks and outcrops included', art: 'park' },
   market: { icon: '🛒', name: 'Market Hall', text: 'Deliveries to this town pay 30% more money', art: 'market' },
   foreman: { icon: '👷', name: "Foreman's Lodge", text: '25 track supplies right away, and the supply pile holds 20 more', art: 'clock' },
   mason: { icon: '⛏', name: 'Stonemasons', text: 'Track over hills costs the same as flat land', art: 'foundry' },
@@ -347,6 +347,25 @@ export function tickFrontier(g: Game): string[] {
   return out;
 }
 
+/** Supplies a ⛰ Lookout hill's old store holds. */
+export const LOOKOUT_SUP = 20;
+/**
+ * 🧭 Landmarks pay off in the frontier (Sébastien, 2026-11-24: explorer's camps and towers didn't do much any more):
+ * an 🏕 Explorer's camp's notes are a ✨ wish for the nearest town on the railway, a ⛰ Lookout hill holds track supplies.
+ * Returns the extra words for the news line ('' when nothing).
+ */
+export function poiGift(g: Game, kind: string, x: number, y: number): string {
+  const f = fr(g); if (!f) return '';
+  if (kind === 'lookout') { f.sup += LOOKOUT_SUP; return ` · its old store holds 🛤 ${LOOKOUT_SUP} supplies`; }
+  if (kind === 'camp') {
+    const t = g.s.sites.filter(s => s.kind === 'town' && townLinked(g, s)).sort((a, b) => Math.hypot(a.x - x, a.y - y) - Math.hypot(b.x - x, b.y - y))[0];
+    if (!t) return '';
+    f.picks.push(t.id); f.granted++;
+    return ` · the explorer's notes grant ${t.name} a ✨ wish: pick a building`;
+  }
+  return '';
+}
+
 /** A town grew (its order filled and the player upgraded it): that is a wish granted too. */
 export function townGrew(g: Game, t: Site) { const f = fr(g); if (f) { f.picks.push(t.id); f.granted++; } }
 
@@ -373,7 +392,7 @@ export function pickPerk(g: Game, townId: number, k: PerkKind): string {
   f.perks.push({ town: t.id, k });
   const spot = parkSpot(g, t);
   if (spot) (g.s.parks ??= []).push({ town: t.id, ...spot, k: PERKS[k].art, fp: k } as never);
-  if (k === 'lookout') reveal(g, t.x, t.y, 14);
+  if (k === 'lookout') reveal(g, t.x, t.y, 22);
   if (k === 'foreman') f.sup += 25;
   if (k === 'well') { f.picks.unshift(t.id); f.granted++; }
   if (k === 'harbour') f.freeDocks = (f.freeDocks ?? 0) + 1;

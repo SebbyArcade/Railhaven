@@ -6,6 +6,7 @@ import { squareCost } from '../track/rules.ts';
 import { buildingSquares, footprint, isLinked } from '../buildings/industries.ts';
 import { townLinked } from '../economy/towns.ts';
 import { type NewsGo, say } from '../core/news.ts';
+import { poiGift } from '../frontier/frontier.ts';
 
 /**
  * Exploring. Scouts set out from a town on the railway (on foot, over land) or from a dock (by boat, over water) along
@@ -185,7 +186,7 @@ export function checkPois(g: Game) {
     if (p.kind === 'lookout') reveal(g, p.x, p.y, LOOKOUT_R);
     if (p.kind === 'halt') { g.s.money += HALT_PAY; g.s.earned = (g.s.earned ?? 0) + HALT_PAY; }
     if (p.kind === 'camp') reveal(g, p.x, p.y, CAMP_R);
-    news(g, `${POI[p.kind].icon} ${POI[p.kind].name} is yours: ${POI[p.kind].perk}`, { kind: 'sq', x: p.x, y: p.y });
+    news(g, `${POI[p.kind].icon} ${POI[p.kind].name} is yours: ${POI[p.kind].perk}${poiGift(g, p.kind, p.x, p.y)}`, { kind: 'sq', x: p.x, y: p.y });
   }
 }
 
