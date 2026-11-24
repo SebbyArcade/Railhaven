@@ -2,6 +2,7 @@ import type { Game, Site } from '../state.ts';
 import { BUY_SUP, buyPrice, choices, supCap, supFull, fr, PERKS, type Piece, spikeGap, wishOf } from './frontier.ts';
 import { townLinked } from '../economy/towns.ts';
 import { isRevealed } from '../world/fog.ts';
+import { isLinked } from '../buildings/industries.ts';
 
 const esc = (s: string) => s.replace(/[&<>"]/g, c => `&#${c.charCodeAt(0)};`);
 const bar = (f: number, col: string) => `<div class="bar"><i style="width:${Math.round(Math.min(1, Math.max(0, f)) * 100)}%;background:${col}"></i></div>`;
@@ -13,7 +14,17 @@ export function frPill(g: Game): string {
   const f = fr(g)!;
   if (f.done !== undefined) return `<span class="mtext">🏁 Golden spike driven! <b>Tap for your island</b></span>`;
   const pick = f.picks.length ? ` · ✨ <b>Pick a building</b>` : '';
+  const step = firstStep(g);
+  if (step && !pick) return `<span class="mtext">🛤 <b>${f.sup}</b> · 👉 ${step}</span>`;
   return `<span class="mtext">🛤 <b>${f.sup}</b> supplies · 🏁 ${spikeGap(g)} squares to the golden spike${pick}</span>`;
+}
+
+/** The first steps, while the supply line isn't running yet (the lessons are off in the frontier). */
+export function firstStep(g: Game): string {
+  const camp = (g.s.buildings ?? []).some(b => (b.kind === 'wood' || b.kind === 'stone') && isLinked(g, b));
+  if (!camp) return (g.s.buildings ?? []).some(b => b.kind === 'wood' || b.kind === 'stone') ? 'Rail your camp to Ashford' : 'Build a 🪵 Lumber Camp by a forest';
+  if (!g.s.trains.length) return 'Buy a 🚂 Train to haul the wood';
+  return '';
 }
 
 /** Start distance to the spike, for the progress bar. */
@@ -53,7 +64,9 @@ export function frStoryHtml(g: Game, page?: string): string {
   // the main card
   const gap = spikeGap(g); if (!startGap.has(f)) startGap.set(f, Math.max(gap, 1));
   const g0 = Math.max(startGap.get(f)!, gap);
+  const step = firstStep(g);
   let h = `<div class="head"><b class="big">🧭</b><div><h2>Frontier Village</h2><span class="chip2">🛤 ${f.sup} supplies</span> <span class="chip2">✨ ${f.granted} wishes</span> <span class="chip2">🏗 ${f.perks.length} buildings</span></div></div>`;
+  if (step) h += `<div class="note big2">👉 First: ${step}</div>`;
   if (f.picks.length) h += `<button class="act alt" data-act="page" data-page="pick">✨ Pick a building for ${esc(town(g, f.picks[0]!)?.name ?? 'a town')} ›</button>`;
   h += `<div class="row main"><b class="ico">🏁</b><div class="grow"><div class="line"><span>Golden spike</span><span>${f.done !== undefined ? '✅ Driven' : `${gap} squares to go`}</span></div>${bar(f.done !== undefined ? 1 : 1 - gap / g0, '#ffd27a')}<small>On the far coast. Your track must reach within ${2} squares of it.</small>${look(sx, sy)}</div></div>`;
   h += `<div class="row"><b class="ico">🛤</b><div class="grow"><div class="line"><span>Track supplies</span><span><b>${f.sup}</b> / ${supCap(g)}</span></div><small>2 a square, 3 on hills, 8-20 a bridge square, 10 a tunnel. Trains bring 🪵 wood and 🪨 stone to a 🏗 depot: 4 units make 1 supply. ${supFull(g) ? '<b>The pile is full</b>: lay track, or pick a 🏗 Supply Depot for more room.' : ''}</small><div class="btns"><button class="mini buy" data-act="frbuy" ${g.s.money >= buyPrice(g) ? '' : 'disabled'}>🪓 Buy ${BUY_SUP.n} for $${buyPrice(g).toLocaleString('en-US')}</button></div></div></div>`;

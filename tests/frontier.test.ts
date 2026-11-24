@@ -80,3 +80,11 @@ describe('🧭 Frontier Village preview', () => {
     expect(fr(g)).toBeUndefined();
   });
 });
+
+describe('🧭 Frontier first steps', () => {
+  it('points a new player at a lumber camp first', async () => {
+    const { firstStep } = await import('../src/frontier/ui.ts');
+    const g = frontier();
+    expect(firstStep(g)).toMatch(/Lumber Camp/);
+  });
+});
