@@ -160,6 +160,9 @@ export function shipPlan(g: Game, skip?: Train): Plan {
   take('need');
   // across the sea a factory draws goods whether or not an order waits for its product (as before)
   seaNeeds(g, srcs.filter(s => !out.has(s.sk) && !isDock(s.b)), out, targets, (p: Pair, w: 'need') => p.f ? factoryRoom(p.f, p.s.k) - (way.get(key(p.to, p.s.k)) ?? 0) : room(p, w));
+  // 🧭 Frontier: once no order wants it, wood and stone go to the nearest supply depot (track supplies) before any
+  // town that merely keeps buying them (Sébastien, 2026-11-24: a camp beside Brinemoor fed Brinemoor, Ashford got none)
+  if (fr(g)) for (const p of pairs) if (!out.has(p.s.sk) && p.t && !dead(p.s.b) && depotTakes(g, p.t, p.s.k)) out.set(p.s.sk, { to: p.to, why: 'steady', d: p.d });
   take('steady');
   for (const p of pairs) if (!out.has(p.s.sk) && p.t) out.set(p.s.sk, { to: p.to, why: 'extra', d: p.d });
   const plan = new Map<number, Ship>() as Plan; plan.docks = new Map();

@@ -5,6 +5,7 @@ import { refreshIslands, refreshWater, T } from '../world/terrain.ts';
 import { townLinked } from '../economy/towns.ts';
 import { parkSpot } from '../buildings/parks.ts';
 import type { Good } from '../buildings/industries.ts';
+import { isMountainFoot } from '../world/sites.ts';
 
 /**
  * 🧭 Frontier Village (preview, 2026-11-24): the railhead pushes into the fog, and the towns it reaches grow into
@@ -85,6 +86,10 @@ export interface FrState {
   t0?: number;
   /** ⚓ free docks left (the reward for a spike: one on your coast, one landing on the next island) */
   freeDocks?: number;
+  /** ridge outcrops were added (older preview games get them on load) */
+  rocks?: boolean;
+  /** the guide step whose card was shown */
+  coach?: string;
   /** settlement sites were turned into towns (older preview games get them on load) */
   plotted?: boolean;
   /** the next island's first card was shown */
@@ -164,6 +169,7 @@ function landDist(g: Game, from?: number): Int32Array {
 export function setupFrontier(g: Game) {
   const a = g.s.sites[0]!, { spike, pieces } = carve(g, a.x, a.y, 11, 0);
   plotsToTowns(g, g.world.home);
+  for (const p of pieces) ridgeRocks(g, p);
   (g.s as { fr?: FrState }).fr = { sup: START_SUP, spike, pieces, seen: [], perks: [], wishes: [], picks: [], granted: 0, laid: 0, used: 0, stage: 0 };
   g.s.tut = undefined; // the frontier has its own first card instead of the lessons
 }
@@ -230,6 +236,28 @@ function carve(g: Game, ox: number, oy: number, clear: number, nth: number): { s
 
 // ---------------------------------------------------------------- the next island
 
+/**
+ * 🪨 Two rock outcrops at the foot of a ridge, for quarries: every town's order wants stone, and one outcrop hidden
+ * somewhere in the fog left an island stuck (Sébastien, 2026-11-24: "No stone so I can't keep building").
+ */
+export function ridgeRocks(g: Game, p: Piece) {
+  if (p.kind !== 'ridge') return;
+  const w = g.world, n = w.n, got: Site[] = [], isl = w.islandOf[p.y * n + p.x];
+  const cand: { x: number; y: number; r: number }[] = [];
+  for (let y = p.y - 8; y <= p.y + 8; y++) for (let x = p.x - 8; x <= p.x + 8; x++) {
+    if (x < 2 || y < 2 || x >= n - 2 || y >= n - 2 || w.islandOf[y * n + x] !== isl || !isMountainFoot(w, x, y) || g.track.has(y * n + x)) continue;
+    cand.push({ x, y, r: hash(g.s.seed, x, y, 991) });
+  }
+  cand.sort((a, b) => a.r - b.r);
+  for (const c of cand) {
+    if (got.length >= 2) break;
+    const near = (s: { x: number; y: number }, d: number) => Math.hypot(s.x - c.x, s.y - c.y) < d;
+    if (g.s.sites.some(s => near(s, 4)) || (g.s.buildings ?? []).some(b => near(b, 4)) || got.some(s => near(s, 7))) continue;
+    const s = { id: Math.max(-1, ...g.s.sites.map(o => o.id)) + 1, kind: 'dep', x: c.x, y: c.y, res: 'stone' } as Site;
+    g.s.sites.push(s); got.push(s);
+  }
+}
+
 /** On a frontier island every settlement site is a town waiting for the railway: more towns, more wishes. */
 function plotsToTowns(g: Game, isl: number) {
   const n = g.world.n;
@@ -264,6 +292,7 @@ export function sailOn(g: Game): string {
   (f.isles ??= []).push(f.isle ?? w.home); (f.spikes ??= []).push(f.spike);
   const { spike, pieces } = carve(g, o % n, (o / n) | 0, 5, (f.stage ?? 0) + 1);
   plotsToTowns(g, k);
+  for (const p of pieces) ridgeRocks(g, p);
   f.isle = k; f.stage = (f.stage ?? 0) + 1; f.spike = spike; f.pieces.push(...pieces);
   f.done = undefined; f.fin = false; f.sailed = false; f.t0 = g.s.t; f.freeDocks = 2;
   f.sup = Math.min(supCap(g), f.sup + ISLE_SUP);
@@ -300,6 +329,7 @@ export function tickFrontier(g: Game): string[] {
   const f = fr(g); if (!f) return [];
   const out: string[] = [], n = g.world.n;
   if (!f.plotted) { f.plotted = true; plotsToTowns(g, g.world.home); if (f.isle !== undefined) plotsToTowns(g, f.isle); } // games started before towns replaced the sites
+  if (!f.rocks) { f.rocks = true; for (const p of f.pieces) if (!g.s.sites.some(s => s.kind === 'dep' && s.res === 'stone' && Math.hypot(s.x - p.x, s.y - p.y) <= 9)) ridgeRocks(g, p); }
   for (const t of g.s.sites) {
     if (t.kind !== 'town' || !townLinked(g, t)) continue;
     const w = wishOf(g, t);

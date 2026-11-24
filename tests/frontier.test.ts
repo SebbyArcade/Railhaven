@@ -137,3 +137,24 @@ describe('🧭 Frontier: more islands and more buildings', () => {
     f.perks.push({ town: 0, k: 'mason' as never }); expect(squareSup(g, hill, 100)).toBe(1);
   });
 });
+
+describe('🧭 Frontier: stone and the guide', () => {
+  it('every ridge has rock outcrops at its foot for quarries', () => {
+    for (const seed of [3, 8, 21]) {
+      const g = frontier(seed), f = fr(g)!, r = f.pieces.find(p => p.kind === 'ridge');
+      if (!r) continue;
+      expect(g.s.sites.filter(s => s.kind === 'dep' && s.res === 'stone' && Math.hypot(s.x - r.x, s.y - r.y) <= 9).length).toBeGreaterThanOrEqual(1);
+      expect(new Set(g.s.sites.map(s => s.id)).size).toBe(g.s.sites.length);
+    }
+  });
+
+  it('the guide teaches one step at a time, opens each step once, and never says where', async () => {
+    const { coach, coachNext } = await import('../src/frontier/ui.ts');
+    const g = frontier(), f = fr(g)!;
+    expect(coachNext(g)).toBeUndefined(); // not before the intro
+    f.intro = true;
+    expect(coach(g)!.k).toBe('camp');
+    expect(coachNext(g)).toBe('coach'); expect(coachNext(g)).toBeUndefined();
+    const c = coach(g)!; expect(`${c.what} ${c.why} ${c.tip}`).not.toMatch(/\d+ squares (north|south|east|west)/);
+  });
+});

@@ -48,6 +48,7 @@ import { ashford, compass, missionsOf, msOf, recommendedBuild, swapMission } fro
 import { missionPill } from './ui/story.ts';
 import { FRONTIER, FRONTIER_SEED } from './frontier/mode.ts';
 import { BUY_SUP, buySupplies, fr, frNext, PERKS, type PerkKind, pickPerk, sailOn, setupFrontier } from './frontier/frontier.ts';
+import { coachNext } from './frontier/ui.ts';
 import { gameHtml } from './ui/gamecard.ts';
 import { decodeLegacy, importLegacy, isLegacy } from './save/legacy.ts';
 import { LESSONS, lessonOn, lessonText, skipLessons } from './progress/lessons.ts';
@@ -703,7 +704,7 @@ function frame(now: number) {
     checkArrivals(game); // islands just reached queue their arrival card
     const M = msOf(game); // a new act opens its card once nothing else is open
     const calm = !tools.card && tools.mode === 'pan' && !menuOpen && !tools.againOn() && !onHome(), F = fr(game);
-    const pg = F && calm ? frNext(game) : undefined;
+    const pg = F && calm ? frNext(game) ?? coachNext(game) : undefined;
     if (pg) openCard({ kind: 'story', id: 0, page: pg }); // 🧭 the frontier's cards: intro, set pieces, picks, the spike
     else if (!F && M.actNew && !tools.card && tools.mode === 'pan' && !menuOpen && !tools.againOn()) { M.actNew = false; openCard({ kind: 'story', id: 0, page: 'act' }); }
     else if ((game.arrived?.length || game.reported?.length) && (lessonOn(game) || onHome())) { game.arrived = []; game.reported = []; }

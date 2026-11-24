@@ -29,13 +29,57 @@ function dockIsles(g: Game) {
   return new Set(linkedDocks(g).map(b => islandOfB(g, b)));
 }
 
-/** The first steps, while the supply line isn't running yet (the lessons are off in the frontier). */
-export function firstStep(g: Game): string {
-  const camp = (g.s.buildings ?? []).some(b => (b.kind === 'wood' || b.kind === 'stone') && isLinked(g, b));
-  if (!camp) return (g.s.buildings ?? []).some(b => b.kind === 'wood' || b.kind === 'stone') ? 'Rail your camp to Ashford' : 'Build a 🪵 Lumber Camp by a forest';
-  if (!g.s.trains.length) return 'Buy a 🚂 Train to haul the wood';
-  if (!fr(g)!.earned) return `Your train brings 🪵 to Ashford: ${PER_SUP} 🪵 = 1 🛤`;
-  return sailStep(g, dockIsles(g));
+/**
+ * 🧑‍🏫 The frontier guide (the lessons are off here): one step at a time, each with what to do, why it matters and a
+ * tip for reading the land. It never says where: finding the spot is the player's part (Sébastien, 2026-11-24: "too
+ * easy to know where to build", and "the game needs to teach the player better what to do").
+ */
+export interface Coach { k: string; icon: string; short: string; title: string; what: string; why: string; tip: string }
+export function coach(g: Game): Coach | undefined {
+  const f = fr(g)!, bs = g.s.buildings ?? [], raw = (b: { kind: string }) => b.kind === 'wood' || b.kind === 'stone';
+  if (!bs.some(raw)) return { k: 'camp', icon: '🪵', short: 'Build a 🪵 Lumber Camp by a forest', title: 'Start a supply line',
+    what: 'Open 🏗 Build and choose 🪵 Lumber Camp, then tap a spot for it.',
+    why: 'Track costs 🛤 supplies, and supplies are made from wood and stone. No camp, no new track.',
+    tip: 'A camp makes more the more trees stand round it: look for thick dark-green woods. The card shows how much it would make before you pay.' };
+  if (!bs.some(b => raw(b) && isLinked(g, b))) return { k: 'rail', icon: '🛤', short: 'Rail your camp to your track', title: 'Join the camp to your railway',
+    what: 'Open 🛤 Rails and drag from your track to one of the camp\'s gold end squares, then ✓ Build.',
+    why: 'Trains only reach buildings joined to the railway. Each square costs 1 🛤 supply (hills 2), and you start with a few.',
+    tip: 'Short and straight is cheapest. Rails can\'t cross mountains (yet) or run along a station\'s side.' };
+  if (!g.s.trains.length) return { k: 'train', icon: '🚂', short: 'Buy a 🚂 Train', title: 'Buy your first train',
+    what: 'Tap 🚂 Train and buy one.',
+    why: 'Trains run themselves: each one takes goods from a building to the nearest place that needs them. Wood and stone go to Ashford and become supplies.',
+    tip: 'One train per camp is plenty to start. More trains cost a little each minute while they run.' };
+  if (!f.earned) return { k: 'haul', icon: '📦', short: `Wait for wood at Ashford: ${PER_SUP} 🪵 = 1 🛤`, title: 'Your first haul',
+    what: 'Watch your train load at the camp and bring the wood to Ashford.',
+    why: `Every ${PER_SUP} wood or stone that reaches Ashford makes 1 🛤 supply, shown top left.`,
+    tip: 'While you wait, look at the land: where are the towns? Where are the hills and the sea?' };
+  const towns = g.s.sites.filter(s => s.kind === 'town' && s !== g.s.sites[0] && townLinked(g, s));
+  if (!towns.length) return { k: 'link', icon: '🏘', short: 'Link a town to your railway', title: 'Reach your first town',
+    what: 'Lay track from your line into a town you can see. A station appears where the line runs through or ends beside it.',
+    why: 'Linked towns make ✨ wishes. Grant one (link it to its neighbour) and you pick a new building for the town.',
+    tip: 'Track uncovers the land round it, so pushing out also finds towns hidden in the fog.' };
+  if (!g.s.orders) return { k: 'order', icon: '📋', short: 'Fill a town\'s order', title: 'Feed a town',
+    what: 'Tap a town to see what it wants (its order), build what makes it, and join that to your railway.',
+    why: 'Filled orders pay money and raise your Railway level. A town with a full order can grow: that\'s another ✨ pick.',
+    tip: 'Farms need open grass, quarries sit at the foot of mountains, camps by forests.' };
+  if (g.s.sites.some(s => s.kind === 'town' && s.filled) && f.granted < 3) return { k: 'grow', icon: '⬆', short: 'Tap ⬆ on a town to grow it', title: 'Grow a town',
+    what: 'A town whose order is full shows ⬆. Tap the town and Upgrade it.',
+    why: 'Growing a town grants a wish: pick one of its buildings. Some make track cheaper, some let you tunnel or bridge.',
+    tip: 'Each pick is a surprise: you never know which three buildings will be offered.' };
+  const sail = sailStep(g, dockIsles(g));
+  if (sail) return { k: 'sail' + (f.stage ?? 0) + (sail.startsWith('Land') ? 'b' : 'a'), icon: '⚓', short: sail, title: sail.startsWith('Land') ? 'Land on the new island' : 'Build a dock',
+    what: sail.startsWith('Land') ? `Open 🏗 Build, choose ⚓ Dock, and place it on the shore of ${isleName(g)}.` : `Open 🏗 Build, choose ⚓ Dock, and place it on a shore facing ${isleName(g)}. Then rail it to your track.`,
+    why: 'Bridges can\'t join two islands. Docks can: a dock joined to your railway lets you land another one across the sea, and your track there starts from it.',
+    tip: 'A dock\'s pier stands over the water and its loading track on land. The nearer the shores, the easier the crossing.' };
+  return;
+}
+/** The short step for the goal pill and card. */
+export const firstStep = (g: Game) => coach(g)?.short ?? '';
+/** The guide card to open by itself: when the step changes (once per step). */
+export function coachNext(g: Game): string | undefined {
+  const f = fr(g); if (!f || !f.intro) return;
+  const c = coach(g); if (!c || f.coach === c.k) return;
+  f.coach = c.k; return 'coach';
 }
 
 /** Start distance to the spike, for the progress bar. */
@@ -74,6 +118,14 @@ export function frStoryHtml(g: Game, page?: string): string {
           + `<button class="act" data-act="frsail">⛵ Sail on</button><button class="act alt" data-act="close">Stay a while</button>`
         : `<div class="note">That's every island in this preview. Keep playing if you like: your towns keep growing.</div><button class="act" data-act="close">🎉 Wonderful</button>`);
   }
+  if (page === 'coach') {
+    const c = coach(g); if (!c) return `<div class="note">Nothing to do right now: head for the 🏁 golden spike.</div><button class="act" data-act="close">👍 Got it</button>`;
+    return `<div class="actcard"><div class="aic">${c.icon}</div><small class="cap">YOUR NEXT STEP</small><h2>${c.title}</h2></div>`
+      + `<div class="row main"><b class="ico">👉</b><div class="grow"><b>What to do</b><small>${c.what}</small></div></div>`
+      + `<div class="row"><b class="ico">💡</b><div class="grow"><b>Why</b><small>${c.why}</small></div></div>`
+      + `<div class="row"><b class="ico">🔎</b><div class="grow"><b>Tip</b><small>${c.tip}</small></div></div>`
+      + `<button class="act" data-act="close">👍 Got it</button>`;
+  }
   if (page === 'isle') {
     return `<div class="actcard"><div class="aic">⛵</div><small class="cap">A NEW FRONTIER · ISLAND ${(f.stage ?? 0) + 1}</small><h2>${esc(isleName(g))}</h2><p>Its golden spike glows on the far side. Get your railway across the sea and out to it.</p></div>`
       + `<div class="row"><b class="ico">⚓</b><div class="grow"><b>1. Build a Dock on your coast</b><small>Free. On ${esc(f.isles?.length && f.isles.at(-1) !== g.world.home ? g.world.islands[f.isles.at(-1)!]?.name ?? 'your island' : 'Ashford Isle')}, facing ${esc(isleName(g))}, joined to your railway.</small></div></div>`
@@ -86,7 +138,7 @@ export function frStoryHtml(g: Game, page?: string): string {
   const g0 = Math.max(startGap.get(f)!, gap);
   const step = firstStep(g);
   let h = `<div class="head"><b class="big">🧭</b><div><h2>Frontier Village</h2><span class="chip2">🛤 ${f.sup} supplies</span> <span class="chip2">✨ ${f.granted} wishes</span> <span class="chip2">🏗 ${f.perks.length} buildings</span></div></div>`;
-  if (step) h += `<div class="note big2">👉 Next: ${step}</div>`;
+  if (step) h += `<button class="act alt" data-act="page" data-page="coach">👉 Next: ${step} ›</button>`;
   if (f.picks.length) h += `<button class="act alt" data-act="page" data-page="pick">✨ Pick a building for ${esc(town(g, f.picks[0]!)?.name ?? 'a town')} ›</button>`;
   h += `<div class="row main"><b class="ico">🏁</b><div class="grow"><div class="line"><span>Golden spike</span><span>${f.done !== undefined ? '✅ Driven' : `${gap} squares to go`}</span></div>${bar(f.done !== undefined ? 1 : 1 - gap / g0, '#ffd27a')}<small>On the far coast. Your track must reach within ${2} squares of it.</small>${look(sx, sy)}</div></div>`;
   h += `<div class="row"><b class="ico">🛤</b><div class="grow"><div class="line"><span>Track supplies</span><span><b>${f.sup}</b> / ${supCap(g)}</span></div><small>Rails are built with supplies, not money: ${SUP.flat} a square, ${SUP.hills} on hills, ${SUP.bridge[1]}-${SUP.bridge[3]} a bridge square, ${SUP.tunnel} a tunnel.</small></div></div>`;
