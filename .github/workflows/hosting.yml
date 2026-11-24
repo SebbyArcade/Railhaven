@@ -29,7 +29,8 @@ jobs:
           node-version: 22
           cache: npm
       - if: steps.cfg.outputs.skip != '1'
-        run: npm ci && npm run build
+        # the game at the web address, and the 🧭 Frontier Village preview beside it at /frontier/
+        run: npm ci && npm run build && VITE_FRONTIER=1 npx vite build --outDir dist/frontier --emptyOutDir
         env:
           VITE_APP_URL: https://${{ steps.cfg.outputs.project }}.web.app/
       - if: steps.cfg.outputs.skip != '1'
