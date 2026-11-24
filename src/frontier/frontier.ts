@@ -85,6 +85,8 @@ export interface FrState {
   t0?: number;
   /** ⚓ free docks left (the reward for a spike: one on your coast, one landing on the next island) */
   freeDocks?: number;
+  /** settlement sites were turned into towns (older preview games get them on load) */
+  plotted?: boolean;
   /** the next island's first card was shown */
   sailed?: boolean;
 }
@@ -297,6 +299,7 @@ export const wishOf = (g: Game, t: Site) => fr(g)?.wishes.find(w => w.town === t
 export function tickFrontier(g: Game): string[] {
   const f = fr(g); if (!f) return [];
   const out: string[] = [], n = g.world.n;
+  if (!f.plotted) { f.plotted = true; plotsToTowns(g, g.world.home); if (f.isle !== undefined) plotsToTowns(g, f.isle); } // games started before towns replaced the sites
   for (const t of g.s.sites) {
     if (t.kind !== 'town' || !townLinked(g, t)) continue;
     const w = wishOf(g, t);
