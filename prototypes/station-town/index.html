@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>Railhaven · Station Town</title>
+<style>
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;overflow:hidden;background:#7fb85a;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:#2c2a25;user-select:none;-webkit-user-select:none}
+canvas{position:absolute;left:0;top:0;touch-action:none}
+.hud{position:absolute;left:8px;right:50px;top:8px;display:flex;gap:5px;flex-wrap:wrap;z-index:2;pointer-events:none}
+.chip{background:rgba(255,253,245,.96);border-radius:16px;padding:5px 9px;font-weight:700;font-size:13.5px;box-shadow:0 2px 5px rgba(0,0,0,.25)}
+.chip.low{background:#ffe1dc;color:#a3271b}
+.help{position:absolute;right:8px;top:8px;z-index:3;background:rgba(255,253,245,.96);border-radius:50%;width:34px;height:34px;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:17px;box-shadow:0 2px 5px rgba(0,0,0,.25);cursor:pointer}
+.tray{position:absolute;left:0;right:0;bottom:0;background:rgba(255,251,240,.98);border-radius:18px 18px 0 0;padding:10px 10px calc(12px + env(safe-area-inset-bottom));box-shadow:0 -3px 12px rgba(0,0,0,.3);z-index:3}
+.row{display:flex;align-items:center;gap:8px}
+.bar{flex:1;height:14px;background:#e9e1cf;border-radius:8px;overflow:hidden}
+.bar i{display:block;height:100%;background:linear-gradient(90deg,#e8a317,#f3c64b);border-radius:8px}
+.lvl{font-weight:800;font-size:15px}
+.alerts{font-size:12.5px;margin:7px 0 2px;min-height:34px;line-height:1.4}
+.alerts div{padding:1px 0}
+.btns{display:flex;gap:7px;margin-top:6px}
+.btn{flex:1;display:block;text-align:center;background:#2f8f86;color:#fff;font-weight:800;border-radius:12px;padding:10px 6px;font-size:14.5px;border:0;cursor:pointer}
+.btn2{background:#fff;color:#2f8f86;border:2px solid #2f8f86}
+.btn.off{background:#b9b2a4}
+.modal{position:absolute;inset:0;background:rgba(20,30,40,.55);display:flex;align-items:flex-end;justify-content:center;z-index:5}
+.modal.mid{align-items:center;padding:16px}
+.sheet{background:#fffbf0;border-radius:18px 18px 0 0;padding:14px 12px calc(14px + env(safe-area-inset-bottom));width:100%;max-width:520px;box-shadow:0 6px 20px rgba(0,0,0,.4);max-height:88%;overflow:auto}
+.mid .sheet{border-radius:18px}
+.sheet h2{margin:0 0 4px;font-size:19px}
+.sheet p{font-size:13.5px;line-height:1.45;margin:4px 0 8px;color:#5f594f}
+.cards{display:flex;gap:7px}
+.card{flex:1;border-radius:14px;padding:9px 4px 8px;text-align:center;background:#fff;border:3px solid #e3dccb;box-shadow:0 2px 4px rgba(0,0,0,.12);cursor:pointer}
+.card .ic{font-size:32px;line-height:1.1}
+.card b{display:block;font-size:13.5px;margin:4px 0 3px}
+.card span{display:inline-block;font-size:11px;border-radius:10px;padding:2px 6px;margin:1px;color:#fff;font-weight:700;line-height:1.25}
+.g{background:#3f9d4b}.o{background:#e08a1e}.b{background:#3b7fc4}.p{background:#8b5cc4}.r{background:#c9483b}.gr{background:#7d776b}
+.shop{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+.item{background:#fff;border:2px solid #e3dccb;border-radius:12px;padding:8px;cursor:pointer}
+.item b{font-size:13.5px;display:block}
+.item small{font-size:11.5px;color:#6a645a;display:block;margin:2px 0 4px;line-height:1.3}
+.item .cost{font-weight:800;font-size:13px;color:#2f8f86}
+.item.cant{opacity:.55}
+.item.max{opacity:.45}
+.toast{position:absolute;left:50%;top:38%;transform:translate(-50%,-50%);background:#fffbf0;border-radius:14px;padding:10px 14px;font-weight:800;font-size:14.5px;box-shadow:0 4px 14px rgba(0,0,0,.4);z-index:4;text-align:center;pointer-events:none;transition:opacity .4s;max-width:88%}
+.bubble{position:absolute;transform:translate(-50%,-100%);background:#fffbf0;border-radius:10px;padding:2px 6px;font-size:12px;font-weight:800;box-shadow:0 2px 4px rgba(0,0,0,.3);z-index:2;pointer-events:none;white-space:nowrap}
+.bubble.bad{background:#ffe1dc;color:#a3271b}
+</style></head><body>
+<canvas id="c"></canvas>
+<div class="hud" id="hud"></div>
+<div class="help" id="helpBtn">?</div>
+<div id="bubbles"></div>
+<div class="tray" id="tray"></div>
+<script>
+'use strict';
+// ───────────────────────── Station Town ─────────────────────────
+// One station, one town. Trains come by themselves; shape the station so it copes.
+const SAVE = 'rh-station-town-1', DAY = 150; // seconds per day
+const LEVELS = [
+  { name: 'Hamlet', need: 60 }, { name: 'Village', need: 140 }, { name: 'Town', need: 260 }, { name: 'City', need: 420 },
+  { name: 'Metropolis', need: 640 }, { name: 'Megacity', need: 900 },
+];
+const LINES = ['🛤 West line', '🛤 East line', '🌲 Forest line', '🌊 Coast line', '⛰ Hill line', '🏙 Capital line', '🌉 River line'];
+const BUILDINGS = {
+  hotel:   { icon: '🏨', name: 'Grand Hotel',  tags: [['p', 'tourist expresses'], ['o', 'need long platforms']] },
+  goods:   { icon: '📦', name: 'Goods Shed',   tags: [['o', 'freight trains'], ['g', '+$40 each']] },
+  clock:   { icon: '🕰', name: 'Clock Tower',  tags: [['b', 'trains wait twice as long before late']] },
+  market:  { icon: '🧺', name: 'Market Hall',  tags: [['g', '+25% passengers']] },
+  school:  { icon: '🏫', name: 'School',       tags: [['p', 'big morning rush'], ['g', '+growth']] },
+  factory: { icon: '🏭', name: 'Factory',      tags: [['o', 'freight, +$60 each'], ['r', '−happiness']] },
+  theatre: { icon: '🎭', name: 'Theatre',      tags: [['p', 'big evening rush'], ['g', '+growth']] },
+  post:    { icon: '📮', name: 'Post Office',  tags: [['o', 'quick mail trains'], ['g', '+$30 each']] },
+  park:    { icon: '🌳', name: 'Park',         tags: [['g', '+happiness']] },
+  tram:    { icon: '🚋', name: 'Tram Depot',   tags: [['g', '+20% passengers'], ['b', 'faster boarding']] },
+  museum:  { icon: '🏛', name: 'Museum',       tags: [['p', 'more tourists'], ['g', '+growth']] },
+  bakery:  { icon: '🥐', name: 'Bakery',       tags: [['g', '+happiness'], ['g', '+$5 per train']] },
+  pier:    { icon: '🎡', name: 'Seaside Pier', tags: [['p', 'excursion crowds'], ['g', '+growth']] },
+  houses:  { icon: '🏘', name: 'New Street',   tags: [['g', '+25% passengers']] },
+  inn:     { icon: '🍺', name: 'Railway Inn',  tags: [['g', 'fares +15%']] },
+};
+const SHOP = {
+  track:  { icon: '🛤', name: 'New platform track', what: 'one more train can stop at once', base: 150, grow: 2, max: 6 },
+  long:   { icon: '📏', name: 'Longer platforms', what: 'room for long expresses (7 cars)', base: 350, grow: 1, max: 1 },
+  bridge: { icon: '🌉', name: 'Footbridge', what: 'people board 50% faster', base: 250, grow: 1, max: 1 },
+  siding: { icon: '📦', name: 'Goods siding', what: 'freight unloads off the platforms', base: 300, grow: 1, max: 1 },
+  room:   { icon: '🪑', name: 'Waiting room', what: 'platforms hold 40 more people before it gets crowded', base: 120, grow: 1.8, max: 5 },
+  signal: { icon: '🚦', name: 'Signal box', what: 'trains get in and out 30% faster', base: 400, grow: 1, max: 1 },
+};
+const TYPES = {
+  local:   { cars: 4, cap: 24, fare: 1, col: '#2d5f8a', name: 'Local' },
+  express: { cars: 7, cap: 60, fare: 3, col: '#7a1e1e', name: 'Express', long: true },
+  freight: { cars: 6, cap: 0, fare: 0, col: '#555', name: 'Freight', goods: true },
+  mail:    { cars: 3, cap: 0, fare: 0, col: '#c9483b', name: 'Mail', mail: true },
+  excursion: { cars: 5, cap: 40, fare: 2, col: '#3f9d4b', name: 'Excursion', crowd: 30 },
+};
+let S = null;
+function newGame() {
+  S = { t: 0, coins: 150, growth: 0, level: 0, happy: 80, wait: 6, served: 0, late: 0, built: [], shop: { track: 2 }, trains: [], nextId: 1, spawn: { local: 4, express: 9e9, freight: 9e9, mail: 9e9, excursion: 9e9 }, lines: 2, pick: null, log: [], day: 1, dayStats: { fares: 0, served: 0, late: 0 }, seenHelp: false };
+}
+const has = k => S.built.filter(b => b === k).length;
+const lvlOf = k => S.shop[k] || 0;
+const tracks = () => lvlOf('track');
+const crowdCap = () => tracks() * 30 + 40 * lvlOf('room');
+const boardRate = () => 8 * (lvlOf('bridge') ? 1.5 : 1) * (has('tram') ? 1.25 : 1);
+const lateAfter = () => 10 * (has('clock') ? 2 : 1);
+const speedMul = () => lvlOf('signal') ? 1.3 : 1;
+function paxRate() { // people arriving per second
+  const pop = 1 + S.level * .3;
+  let r = 1.7 * pop * (1 + .25 * has('market') + .2 * has('tram') + .25 * has('houses'));
+  const d = (S.t % DAY) / DAY;
+  if (d < .18) r *= 1.6 + .8 * has('school'); else if (d > .6 && d < .78) r *= 1.5 + .8 * has('theatre');
+  return r;
+}
+function interval(type) {
+  const L = S.lines;
+  switch (type) {
+    case 'local': return Math.max(3, 8.2 - L * 1);
+    case 'express': return has('hotel') ? Math.max(14, 30 - 4 * has('museum')) : 9e9;
+    case 'freight': return (has('goods') || has('factory')) ? Math.max(12, 26 - 5 * (has('goods') + has('factory'))) : 9e9;
+    case 'mail': return has('post') ? 22 : 9e9;
+    case 'excursion': return has('pier') ? 28 : 9e9;
+  }
+}
+const price = k => Math.round(SHOP[k].base * Math.pow(SHOP[k].grow, Math.max(0, lvlOf(k) - (k === 'track' ? 2 : 0))));
+
+// ── geometry (screen units) ──
+const cv = document.getElementById('c'), x = cv.getContext('2d');
+let W = 0, H = 0, DPR = 1, trayH = 190, G = null;
+function layout() {
+  DPR = Math.min(2, devicePixelRatio || 1); W = innerWidth; H = innerHeight; cv.width = W * DPR; cv.height = H * DPR; cv.style.width = W + 'px'; cv.style.height = H + 'px';
+  trayH = document.getElementById('tray').offsetHeight || 190;
+  const n = 6, per = Math.max(30, Math.min(46, Math.floor((H - trayH - 150) * .62 / 6))), stH = n * per + 40, bottom = H - trayH - 8, top = bottom - stH;
+  const carW = Math.max(17, Math.min(24, W / 19));
+  G = { top, bottom, per, carW, cx: W / 2, platShort: carW * 4.6, platLong: carW * 7.6, town: [50, top - 8], siding: bottom - 14 };
+}
+const trackY = i => G.top + 12 + i * G.per + G.per * .62;
+const platLen = () => lvlOf('long') ? G.platLong : G.platShort;
+const trainLen = tr => TYPES[tr.type].cars * G.carW;
+
+// ── simulation ──
+function spawn(type) {
+  const dir = Math.random() < .5 ? 1 : -1;
+  S.trains.push({ id: S.nextId++, type, dir, track: -1, x: 0, state: 'queue', qt: 0, aboard: 0, dwell: 0, left: 0, late: false, line: Math.floor(Math.random() * S.lines) });
+}
+function freeTrack(tr) {
+  const T = TYPES[tr.type];
+  if (T.goods && lvlOf('siding')) return S.trains.some(o => o.track === 99 && o !== tr) ? -1 : 99;
+  if (T.long && !lvlOf('long')) return -2;
+  for (let i = 0; i < tracks(); i++) if (!S.trains.some(o => o !== tr && o.track === i)) return i;
+  return -1;
+}
+function step(dt) {
+  S.t += dt;
+  const day = Math.floor(S.t / DAY) + 1; if (day !== S.day) endDay(day);
+  for (const k of Object.keys(S.spawn)) { S.spawn[k] -= dt; if (S.spawn[k] <= 0) { spawn(k); S.spawn[k] = interval(k) * (.8 + Math.random() * .4); } }
+  // people arrive
+  S.wait += paxRate() * dt;
+  if (S.wait > crowdCap() * 1.6) { S.gaveUp = (S.gaveUp || 0) + S.wait - crowdCap() * 1.6; S.wait = crowdCap() * 1.6; if (S.gaveUp > 25) { S.gaveUp = 0; note('😤 25 people gave up waiting and walked home'); } }
+  const over = S.wait - crowdCap();
+  const target = Math.max(10, Math.min(100, 70 + 8 * has('park') + 5 * has('bakery') - 10 * has('factory') - (over > 0 ? Math.min(50, over) : 0) - Math.min(30, S.trains.filter(t => t.state === 'queue' && t.qt > lateAfter()).length * 10)));
+  S.happy += (target - S.happy) * Math.min(1, dt * .15);
+  const sp = 150 * speedMul();
+  for (const tr of S.trains) {
+    const T = TYPES[tr.type], len = trainLen(tr);
+    if (tr.state === 'queue') {
+      tr.qt += dt;
+      if (tr.qt > lateAfter() && !tr.late) { tr.late = true; S.late++; S.dayStats.late++; }
+      const k = freeTrack(tr);
+      if (k === -2) { if (tr.qt > 6) { tr.state = 'gone'; note('🚄 An express couldn’t stop: it needs 📏 longer platforms'); } continue; }
+      if (k >= 0 || k === 99) {
+        // first in the queue on its side only
+        const first = S.trains.find(o => o.state === 'queue' && o.dir === tr.dir); if (first !== tr) continue;
+        tr.track = k; tr.state = 'in'; tr.x = tr.dir > 0 ? -10 : W + 10;
+      }
+      continue;
+    }
+    const stopX = tr.dir > 0 ? G.cx + platLen() / 2 - 2 : G.cx - platLen() / 2 + 2;
+    if (tr.track === 99) { /* siding stops in the middle too */ }
+    if (tr.state === 'in') {
+      const d = (stopX - tr.x) * tr.dir, v = Math.max(28, Math.min(sp, d * 2.2));
+      tr.x += tr.dir * Math.min(d, v * dt);
+      if (d <= .5) { tr.x = stopX; tr.state = 'dwell'; tr.dwell = 0; arriveAt(tr); }
+    } else if (tr.state === 'dwell') {
+      tr.dwell += dt;
+      if (T.cap) { const room = T.cap - tr.aboard, b = Math.min(room, S.wait, boardRate() * dt); tr.aboard += b; S.wait -= b; }
+      const done = T.cap ? (tr.aboard >= T.cap - .01 || (S.wait < 1 && tr.dwell > 3)) : tr.dwell > (T.goods ? (tr.track === 99 ? 5 : 11) : 3);
+      if ((done && tr.dwell > 2.5) || tr.dwell > 16 || tr.go) depart(tr);
+    } else if (tr.state === 'out') {
+      const v = Math.min(sp, 20 + (tr.dwell += dt) * 90); tr.x += tr.dir * v * dt;
+      if ((tr.dir > 0 && tr.x - len > W + 20) || (tr.dir < 0 && tr.x + len < -20)) tr.state = 'gone';
+      // the track frees once the tail has left the platform
+      if (tr.track >= 0 && tr.track !== 99 && ((tr.dir > 0 && tr.x - len > G.cx + platLen() / 2 + 30) || (tr.dir < 0 && tr.x + len < G.cx - platLen() / 2 - 30))) tr.track = -1;
+      if (tr.track === 99 && ((tr.dir > 0 && tr.x - len > W) || (tr.dir < 0 && tr.x + len < 0))) tr.track = -1;
+    }
+  }
+  S.trains = S.trains.filter(t => t.state !== 'gone');
+}
+function arriveAt(tr) {
+  const T = TYPES[tr.type];
+  // passengers getting off make the town grow
+  const off = T.crowd ? T.crowd : T.cap ? Math.round(T.cap * (.4 + Math.random() * .4)) : 0;
+  if (off) { S.served += off; addGrowth(off * .5); popAt(tr, `+${off} 🚶`); }
+  if (T.goods) { const c = 40 * has('goods') + 60 * has('factory') || 40; S.coins += c; S.dayStats.fares += c; addGrowth(4); popAt(tr, `+$${c}`); }
+  if (T.mail) { S.coins += 30; S.dayStats.fares += 30; addGrowth(2); popAt(tr, '+$30 ✉️'); }
+  if (has('bakery')) S.coins += 5;
+}
+function depart(tr) {
+  const T = TYPES[tr.type]; tr.state = 'out'; tr.dwell = 0;
+  if (T.cap) { const f = Math.round(tr.aboard * T.fare * (1 + .15 * has('inn'))); S.coins += f; S.dayStats.fares += f; S.dayStats.served += Math.round(tr.aboard); addGrowth(tr.aboard * .5); if (f) popAt(tr, `+$${f}`); }
+}
+function addGrowth(v) {
+  const bonus = 1 + .15 * (has('school') + has('theatre') + has('museum') + has('pier')), h = .5 + S.happy / 100;
+  S.growth += v * .3 * bonus * h;
+  const need = LEVELS[Math.min(S.level, LEVELS.length - 1)].need * (S.level >= LEVELS.length ? 1 + .5 * (S.level - LEVELS.length + 1) : 1);
+  if (S.growth >= need && !S.pick) { S.growth -= need; S.pick = offer(); paused = true; showPick(); }
+}
+function offer() { const ks = Object.keys(BUILDINGS), out = []; while (out.length < 3) { const k = ks[Math.floor(Math.random() * ks.length)]; if (!out.includes(k)) out.push(k); } return out; }
+function choose(k) {
+  S.built.push(k); S.level++; S.pick = null;
+  if (S.level % 1 === 0 && S.lines < LINES.length) { S.lines++; note(`🆕 The ${LINES[S.lines - 1].slice(2)} opens: more trains will come`); }
+  if (interval('express') < 9e8 && S.spawn.express > 9e8) S.spawn.express = 5;
+  if (interval('freight') < 9e8 && S.spawn.freight > 9e8) S.spawn.freight = 6;
+  if (interval('mail') < 9e8 && S.spawn.mail > 9e8) S.spawn.mail = 8;
+  if (interval('excursion') < 9e8 && S.spawn.excursion > 9e8) S.spawn.excursion = 10;
+  if (k === 'hotel' && !lvlOf('long')) note('🏨 Expresses are coming: buy 📏 Longer platforms so they can stop');
+  if ((k === 'goods' || k === 'factory') && !lvlOf('siding')) note('📦 Freight is coming: a 📦 Goods siding keeps it off your platforms');
+  paused = false; save(); ui();
+}
+function buy(k) {
+  if (lvlOf(k) >= SHOP[k].max || S.coins < price(k)) return;
+  S.coins -= price(k); S.shop[k] = lvlOf(k) + 1; note(`${SHOP[k].icon} ${SHOP[k].name} built`); save(); ui();
+}
+function endDay(day) { const d = S.dayStats; note(`🌙 Day ${S.day} done: $${d.fares} earned · ${d.served} passengers · ${d.late} late trains`); S.day = day; S.dayStats = { fares: 0, served: 0, late: 0 }; }
+function note(s) { S.log.push(s); if (S.log.length > 6) S.log.shift(); toast(s); }
+
+// ── drawing ──
+const WALLS = ['#e9dcc0', '#f2e6cf', '#e0cba5', '#ecd9c6'], ROOFS = ['#b8503c', '#8a4a3a', '#a35d3b', '#6d7a8a', '#3b6ea5'];
+function hash(a, b, c) { let h = (a * 374761393 + b * 668265263 + c * 2147483647) | 0; h = (h ^ (h >>> 13)) * 1274126177; return ((h ^ (h >>> 16)) >>> 0) / 4294967296; }
+function house(px, py, w, h, wall, roof) { x.fillStyle = 'rgba(0,0,0,.22)'; x.fillRect(px + 2, py + 2, w, h); x.fillStyle = wall; x.fillRect(px, py, w, h); x.fillStyle = roof; x.beginPath(); x.moveTo(px - w * .12, py + h * .45); x.lineTo(px + w / 2, py - h * .45); x.lineTo(px + w * 1.12, py + h * .45); x.fill(); x.fillStyle = 'rgba(0,0,0,.13)'; x.beginPath(); x.moveTo(px + w / 2, py - h * .45); x.lineTo(px + w * 1.12, py + h * .45); x.lineTo(px + w / 2, py + h * .45); x.fill(); x.fillStyle = '#5a86a8'; x.fillRect(px + w * .2, py + h * .6, w * .18, h * .22); x.fillRect(px + w * .62, py + h * .6, w * .18, h * .22); }
+function tree(px, py, s) { x.fillStyle = 'rgba(0,0,0,.2)'; x.beginPath(); x.ellipse(px + 2, py + 3, 7 * s, 4 * s, 0, 0, 7); x.fill(); x.fillStyle = '#6b4a2b'; x.fillRect(px - 1, py, 2, 5 * s); x.fillStyle = '#3e7d34'; x.beginPath(); x.arc(px, py - 3 * s, 6.5 * s, 0, 7); x.fill(); }
+function smoke(px, py, t) { for (let k = 0; k < 3; k++) { const ph = (t / 1300 + k / 3) % 1; x.fillStyle = `rgba(245,245,245,${.5 * (1 - ph)})`; x.beginPath(); x.arc(px + ph * 5, py - ph * 16, 2 + ph * 4, 0, 7); x.fill(); } }
+function person(px, py, col) { x.fillStyle = col; x.fillRect(px - 1.5, py - 3, 3, 4); x.fillStyle = '#f0c9a0'; x.beginPath(); x.arc(px, py - 4.5, 1.6, 0, 7); x.fill(); }
+const PCOL = ['#c33', '#36c', '#393', '#c93', '#639', '#333', '#e8a317'];
+function rails(y, x0, x1) {
+  x.fillStyle = '#a88f6a'; x.fillRect(x0, y - 6, x1 - x0, 12);
+  x.fillStyle = '#5e4630'; for (let px = x0; px < x1; px += 5) x.fillRect(px, y - 5.5, 2, 11);
+  x.fillStyle = '#70757b'; x.fillRect(x0, y - 3.6, x1 - x0, 1.4); x.fillRect(x0, y + 2.2, x1 - x0, 1.4);
+}
+function drawTown(t) {
+  // streets and houses fill in as the town grows
+  const top = 46, bot = G.top - 6, rows = Math.max(1, Math.floor((bot - top) / 34));
+  x.fillStyle = '#b9ab92';
+  x.fillRect(0, bot - 8, W, 8);
+  const lv = S.level, blocks = Math.min(rows * 6, 6 + lv * 5 + has('houses') * 4);
+  let n = 0; const spots = [];
+  for (let r = 0; r < rows; r++) for (let c = 0; c < 6; c++) spots.push([r, c]);
+  spots.sort((a, b) => (Math.abs(a[1] - 2.5) + a[0] * 1.2) - (Math.abs(b[1] - 2.5) + b[0] * 1.2));
+  const cw = W / 6;
+  // street grid
+  x.fillStyle = '#b9ab92'; for (let c = 1; c < 6; c += 2) x.fillRect(c * cw - 3, top, 6, bot - top); for (let r = 1; r < rows; r++) x.fillRect(0, bot - r * 34 - 4, W, 5);
+  const bset = S.built.map((k, i) => [k, i]);
+  for (const [r, c] of spots) {
+    if (n >= blocks) break;
+    const px = c * cw + 8, py = bot - (r + 1) * 34 + 8, i = r * 6 + c;
+    const b = bset[n - 2]; // the first 2 spots are plain houses, then each chosen building takes a spot
+    if (b && n >= 2 && n - 2 < bset.length) {
+      const [k] = b; house(px + 2, py + 4, cw - 22, 18, '#f4ecd8', '#5c6670'); x.font = '17px system-ui'; x.textAlign = 'center'; x.fillText(BUILDINGS[k].icon, px + (cw - 18) / 2 + 2, py + 4); x.textAlign = 'left';
+    } else { house(px, py + 6, (cw - 22) * .45, 13, WALLS[i % 4], ROOFS[(i * 3) % 5]); house(px + (cw - 22) * .55, py + 4, (cw - 22) * .45, 14, WALLS[(i + 1) % 4], ROOFS[(i * 3 + 1) % 5]); if (hash(i, 1, 2) < .3) smoke(px + 6, py + 2, t + i * 400); }
+    n++;
+  }
+  // empty lots: gardens and trees until the town fills them
+  for (const [r, c] of spots.slice(n)) { const px = c * cw + 8, py = bot - (r + 1) * 34 + 8, i = r * 6 + c; if (hash(i, 9, 9) < .45) { tree(px + 10 + hash(i, 1, 1) * (cw - 40), py + 14, .9); tree(px + 20 + hash(i, 2, 2) * (cw - 40), py + 22, .8); } else if (hash(i, 9, 9) < .65) { x.fillStyle = '#9cc65a'; x.fillRect(px, py + 4, cw - 22, 20); x.strokeStyle = '#86b048'; for (let z = 7; z < 24; z += 4) { x.beginPath(); x.moveTo(px, py + z); x.lineTo(px + cw - 22, py + z); x.stroke(); } } }
+  for (let k = 0; k < 7; k++) tree(hash(k, 3, 3) * W, top + hash(k, 4, 4) * 20, .9);
+}
+function drawStation(t) {
+  const y0 = G.top, y1 = G.bottom, pl = platLen(), cx = G.cx;
+  x.fillStyle = '#a99a7c'; x.fillRect(0, y0, W, y1 - y0);
+  // the station building
+  const by = y0 - 12; x.fillStyle = 'rgba(0,0,0,.2)'; x.fillRect(cx - pl / 2 + 3, by + 3, pl, 18);
+  x.fillStyle = '#d9c7a6'; x.fillRect(cx - pl / 2, by, pl, 18); x.fillStyle = '#9b3b2f'; x.fillRect(cx - pl / 2 - 3, by - 4, pl + 6, 6);
+  x.fillStyle = '#9b3b2f'; x.font = '800 11px system-ui'; x.textAlign = 'center'; x.fillText('ASHFORD', cx, by + 13); x.textAlign = 'left';
+  const n = tracks(), wait = Math.min(160, Math.round(S.wait));
+  for (let i = 0; i < 6; i++) {
+    const y = trackY(i);
+    if (i >= n) { x.fillStyle = 'rgba(120,110,90,.35)'; x.setLineDash([4, 4]); x.strokeStyle = 'rgba(255,255,255,.35)'; x.strokeRect(cx - pl / 2, y - 18, pl, 26); x.setLineDash([]); continue; }
+    // platform above each track
+    const ph = Math.max(10, G.per - 22); x.fillStyle = 'rgba(0,0,0,.18)'; x.fillRect(cx - pl / 2 + 2, y - 7 - ph, pl, ph); x.fillStyle = '#cfc6b4'; x.fillRect(cx - pl / 2, y - 9 - ph, pl, ph); x.fillStyle = '#e8d27a'; x.fillRect(cx - pl / 2, y - 10.5, pl, 1.5);
+    rails(y, 0, W);
+  }
+  // people spread across platforms
+  for (let k = 0; k < wait; k++) { const i = k % n, y = trackY(i); person(cx - pl / 2 + 6 + hash(k, 5, 1) * (pl - 12), y - 11 - hash(k, 6, 2) * Math.max(6, G.per - 28), PCOL[k % 7]); }
+  // footbridge
+  if (lvlOf('bridge')) { const bx = cx + pl / 2 - 18; x.fillStyle = 'rgba(0,0,0,.2)'; x.fillRect(bx + 3, y0 + 14, 10, trackY(n - 1) - y0); x.fillStyle = '#5b6e80'; x.fillRect(bx, y0 + 12, 10, trackY(n - 1) - y0); }
+  // signal box
+  if (lvlOf('signal')) { house(10, y0 + 2, 22, 12, '#b8503c', '#3a3a3a'); }
+  // goods siding
+  if (lvlOf('siding')) { rails(G.siding, 0, W); x.fillStyle = '#b59a74'; x.fillRect(cx - 40, G.siding - 24, 80, 13); x.fillStyle = '#555'; x.fillRect(cx - 42, G.siding - 27, 84, 4); }
+  // glass roof
+  x.fillStyle = 'rgba(170,200,220,.22)'; x.fillRect(cx - pl / 2 + 10, y0 + 14, pl - 20, trackY(n - 1) - y0); x.strokeStyle = 'rgba(90,110,130,.45)'; x.lineWidth = 1; for (let px = cx - pl / 2 + 10; px <= cx + pl / 2 - 10; px += 22) { x.beginPath(); x.moveTo(px, y0 + 14); x.lineTo(px, trackY(n - 1) + 6); x.stroke(); }
+}
+function drawTrain(tr, t) {
+  if (tr.state === 'queue') return;
+  const T = TYPES[tr.type], y = tr.track === 99 ? G.siding : trackY(tr.track === -1 ? tr.lastTrack ?? 0 : tr.track); if (tr.track >= 0) tr.lastTrack = tr.track;
+  const cw = G.carW;
+  for (let k = 0; k < T.cars; k++) {
+    const px = tr.dir > 0 ? tr.x - (k + 1) * cw : tr.x + k * cw;
+    x.fillStyle = 'rgba(0,0,0,.25)'; x.fillRect(px + 3, y - 3, cw - 2, 10);
+    x.fillStyle = '#2a2a2a'; x.fillRect(px + 1, y - 5, cw - 2, 10);
+    if (k === 0) { x.fillStyle = T.col; x.fillRect(px + 2, y - 4.5, cw - 4, 9); x.fillStyle = '#222'; x.beginPath(); x.arc(tr.dir > 0 ? px + cw - 6 : px + 6, y, 2.4, 0, 7); x.fill(); if (tr.state !== 'dwell') smoke(tr.dir > 0 ? px + cw - 6 : px + 6, y - 6, t); }
+    else { x.fillStyle = T.goods ? '#8a5a2b' : T.mail ? '#c9483b' : '#7a1e1e'; x.fillRect(px + 2, y - 4, cw - 4, 8); x.fillStyle = T.goods ? '#a0743c' : '#e9e0c8'; x.fillRect(px + 4, y - 2.5, cw - 8, 5); }
+  }
+}
+let paused = false, last = 0, bubblesHtml = '';
+function frame(now) {
+  const dt = Math.min(.1, (now - (last || now)) / 1000); last = now;
+  if (!paused && S && !document.hidden) step(dt);
+  x.setTransform(DPR, 0, 0, DPR, 0, 0);
+  x.fillStyle = '#7fb85a'; x.fillRect(0, 0, W, H);
+  drawTown(now); drawStation(now);
+  for (const tr of S.trains) drawTrain(tr, now);
+  // bubbles for waiting trains
+  const qs = S.trains.filter(t => t.state === 'queue'), b = [];
+  for (const side of [1, -1]) { const q = qs.filter(t => t.dir === side); if (!q.length) continue; const late = q.some(t => t.qt > lateAfter()); b.push(`<div class="bubble ${late ? 'bad' : ''}" style="left:${side > 0 ? 34 : W - 34}px;top:${G.top - 4}px">${side > 0 ? '⏳→' : '←⏳'} ${q.length} waiting${late ? ' · late!' : ''}</div>`); }
+  const h = b.join(''); if (h !== bubblesHtml) { document.getElementById('bubbles').innerHTML = h; bubblesHtml = h; }
+  if (Math.floor(now / 500) !== frame.tick) { frame.tick = Math.floor(now / 500); hud(); trayLive(); if (frame.tick % 10 === 0) save(); }
+  requestAnimationFrame(frame);
+}
+function popAt(tr, s) { const y = tr.track === 99 ? G.siding : trackY(Math.max(0, tr.track)); const el = document.createElement('div'); el.className = 'bubble'; el.textContent = s; el.style.left = (tr.x - tr.dir * trainLen(tr) / 2) + 'px'; el.style.top = (y - 8) + 'px'; el.style.background = '#eaf7e6'; document.body.appendChild(el); const t0 = performance.now(); const an = n => { const f = (n - t0) / 1200; el.style.top = (y - 8 - f * 24) + 'px'; el.style.opacity = String(1 - Math.max(0, f - .6) / .4); if (f < 1) requestAnimationFrame(an); else el.remove(); }; requestAnimationFrame(an); }
+function toast(s) { const el = document.createElement('div'); el.className = 'toast'; el.textContent = s; document.body.appendChild(el); setTimeout(() => el.style.opacity = '0', 2600); setTimeout(() => el.remove(), 3100); }
+
+// ── UI ──
+const $ = id => document.getElementById(id);
+function hud() {
+  const crowded = S.wait > crowdCap(), d = (S.t % DAY) / DAY, hr = 6 + Math.floor(d * 18), mn = Math.floor((d * 18 % 1) * 60);
+  const rush = d < .18 ? ' 🌅 rush' : d > .6 && d < .78 ? ' 🌆 rush' : '';
+  $('hud').innerHTML = `<div class="chip">💰 $${Math.floor(S.coins)}</div><div class="chip ${crowded ? 'low' : ''}">👥 ${Math.round(S.wait)}/${crowdCap()}</div><div class="chip ${S.happy < 45 ? 'low' : ''}">${S.happy > 70 ? '😊' : S.happy > 45 ? '😐' : '😟'} ${Math.round(S.happy)}%</div><div class="chip">🕐 ${hr}:${String(mn).padStart(2, '0')}${rush}</div>`;
+}
+function alerts() {
+  const a = [];
+  if (S.wait > crowdCap()) a.push('⚠️ Platforms are crowded: add a 🛤 track or a 🪑 waiting room');
+  const q = S.trains.filter(t => t.state === 'queue');
+  if (q.some(t => t.qt > lateAfter())) a.push('⏰ Trains are waiting outside: more 🛤 tracks, or tap a train to send it off');
+  if (q.some(t => TYPES[t.type].long) && !lvlOf('long')) a.push('🚄 An express is waiting: it needs 📏 Longer platforms');
+  if (!a.length) a.push(S.log.length ? S.log[S.log.length - 1] : '🚉 Trains come by themselves. Tap a train at a platform to send it off early.');
+  return a.slice(0, 2);
+}
+function trayLive() {
+  const lv = LEVELS[Math.min(S.level, LEVELS.length - 1)], name = S.level < LEVELS.length ? lv.name : `Megacity ${S.level - LEVELS.length + 2}`, next = S.level + 1 < LEVELS.length ? LEVELS[S.level + 1].name : 'bigger';
+  const need = lv.need * (S.level >= LEVELS.length ? 1 + .5 * (S.level - LEVELS.length + 1) : 1);
+  const el = $('lv'); if (!el) return ui();
+  el.textContent = `🏙 Ashford · ${name} ▸ ${next}`; $('gb').style.width = Math.min(100, S.growth / need * 100) + '%';
+  $('al').innerHTML = alerts().map(s => `<div>${s}</div>`).join('');
+  const cheap = Object.keys(SHOP).some(k => lvlOf(k) < SHOP[k].max && S.coins >= price(k)); $('shopBtn').textContent = cheap ? '🔨 Build (you can afford something)' : '🔨 Build';
+}
+function ui() {
+  $('tray').innerHTML = `<div class="row"><span class="lvl" id="lv"></span></div><div class="row" style="margin-top:5px"><div class="bar"><i id="gb"></i></div><span style="font-size:12px;font-weight:700">grows next</span></div>
+  <div class="alerts" id="al"></div><div class="btns"><button class="btn" id="shopBtn">🔨 Build</button><button class="btn btn2" id="townBtn">🏘 Town</button></div>`;
+  $('shopBtn').onclick = showShop; $('townBtn').onclick = showTown; trayLive(); hud(); setTimeout(layout, 0);
+}
+function modal(html, mid) { const m = document.createElement('div'); m.className = 'modal' + (mid ? ' mid' : ''); m.innerHTML = `<div class="sheet">${html}</div>`; document.body.appendChild(m); m.addEventListener('click', e => { if (e.target === m && !S.pick) { m.remove(); paused = false; } }); return m; }
+function showShop() {
+  paused = true;
+  const m = modal(`<h2>🔨 Build at the station</h2><p>The game is paused while you build. You have <b>$${Math.floor(S.coins)}</b>.</p><div class="shop">${Object.keys(SHOP).map(k => { const s = SHOP[k], max = lvlOf(k) >= s.max, can = S.coins >= price(k); return `<div class="item ${max ? 'max' : can ? '' : 'cant'}" data-k="${k}"><b>${s.icon} ${s.name}</b><small>${s.what}</small><span class="cost">${max ? '✓ built' : `$${price(k)}`}${k === 'track' || k === 'room' ? ` · ${lvlOf(k)}/${s.max}` : ''}</span></div>`; }).join('')}</div><div class="btns"><button class="btn btn2" id="close">Back to the station</button></div>`);
+  for (const el of m.querySelectorAll('.item')) el.onclick = () => { const k = el.dataset.k; if (lvlOf(k) >= SHOP[k].max) return; if (S.coins < price(k)) return toast(`You need $${price(k)}. Trains earn fares as they leave.`); buy(k); m.remove(); showShop(); };
+  m.querySelector('#close').onclick = () => { m.remove(); paused = false; };
+}
+function showTown() {
+  paused = true;
+  const m = modal(`<h2>🏘 Ashford</h2><p>${S.built.length ? 'Buildings you chose:' : 'No buildings yet. Each time Ashford grows, you pick 1 of 3.'}</p>
+  <div class="shop">${S.built.map(k => `<div class="item"><b>${BUILDINGS[k].icon} ${BUILDINGS[k].name}</b><small>${BUILDINGS[k].tags.map(t => t[1]).join(', ')}</small></div>`).join('')}</div>
+  <p>🛤 ${S.lines} lines run here · 🚶 ${S.served} passengers arrived · ⏰ ${S.late} late trains · 🌙 day ${S.day}</p><div class="btns"><button class="btn btn2" id="close">Back to the station</button></div>`);
+  m.querySelector('#close').onclick = () => { m.remove(); paused = false; };
+}
+function showPick() {
+  const lv = S.level + 1, name = lv < LEVELS.length ? LEVELS[lv].name : 'Megacity';
+  const m = modal(`<h2>🎉 Ashford grew! Now a ${name}</h2><p>Pick the next building. Each one changes which trains come next.</p><div class="cards">${S.pick.map(k => `<div class="card" data-k="${k}"><div class="ic">${BUILDINGS[k].icon}</div><b>${BUILDINGS[k].name}</b>${BUILDINGS[k].tags.map(([c, t]) => `<span class="${c}">${t}</span>`).join('')}</div>`).join('')}</div>`, true);
+  for (const el of m.querySelectorAll('.card')) el.onclick = () => { m.remove(); choose(el.dataset.k); };
+}
+function help(first) {
+  paused = true;
+  const m = modal(`<h2>🚉 Station Town</h2>
+  <p>The whole game is <b>one station</b> and the town that grows around it. Trains come by themselves, from both sides.</p>
+  <p>🚶 People gather on the platforms and board trains as they stop. Fares pay for <b>🔨 building</b> more tracks, longer platforms, a footbridge and more.</p>
+  <p>⏳ If every track is busy, trains wait outside, and late trains make people unhappy. Tap a train at a platform to send it off early.</p>
+  <p>🎉 Passengers make Ashford grow. Each time it grows, you <b>pick 1 of 3 buildings</b>, shuffled every time. A hotel brings expresses, a goods shed brings freight, a theatre brings an evening rush, and so on. New lines open as it grows.</p>
+  <p>You can't lose. A crowded, unhappy station just grows more slowly.</p>
+  <div class="btns"><button class="btn" id="close">${first ? 'Open the station' : 'Back to the station'}</button></div>`, true);
+  m.querySelector('#close').onclick = () => { m.remove(); paused = false; };
+}
+$('helpBtn').onclick = () => help(false);
+cv.addEventListener('pointerdown', e => {
+  for (const tr of S.trains) if (tr.state === 'dwell' && tr.track >= 0) {
+    const y = tr.track === 99 ? G.siding : trackY(tr.track), len = trainLen(tr), x0 = tr.dir > 0 ? tr.x - len : tr.x;
+    if (e.clientY > y - 14 && e.clientY < y + 14 && e.clientX > x0 - 6 && e.clientX < x0 + len + 6) { tr.go = true; toast(`🚂 ${TYPES[tr.type].name} sent off${TYPES[tr.type].cap ? ` with ${Math.round(tr.aboard)} aboard` : ''}`); return; }
+  }
+});
+function save() { localStorage.setItem(SAVE, JSON.stringify(S)); }
+addEventListener('resize', layout);
+try { S = JSON.parse(localStorage.getItem(SAVE) || 'null'); } catch { S = null; }
+const fresh = !S || !S.shop; if (fresh) newGame();
+layout(); ui();
+if (S.pick) { paused = true; showPick(); } else if (fresh) help(true);
+requestAnimationFrame(frame);
+window.ST = { addGrowth, get S() { return S; }, step, buy, choose, price, get paused() { return paused; }, set paused(v) { paused = v; } };
+</script>
+</body></html>

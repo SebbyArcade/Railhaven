@@ -6,6 +6,7 @@ import { stationLinkError } from '../buildings/stations.ts';
 import { INDUSTRIES, joinYardEnds, linkedSquares, parkName, yardSquares, yardLinkError, yardSet } from '../buildings/industries.ts';
 import type { TrackMap, TrackSquare } from './types.ts';
 import { reveal } from '../world/fog.ts';
+import { fr, squareSup, stroke } from '../frontier/frontier.ts';
 
 /** The track as it would be with this stroke laid (copies only what it touches). */
 export function withPath(g: Game, path: number[]): TrackMap {
@@ -110,10 +111,19 @@ export function extendPlan(g: Game, p: PaintPlan, i: number) {
 
 /** Price of the new squares in a stroke (existing track is free to join). */
 export function planCost(g: Game, p: PaintPlan): number {
+  if (fr(g)) return 0; // 🧭 Frontier Village: track costs supplies, not money
   let c = 0;
   const strait = straitSquares(g, p);
   for (const i of p.path) if (!g.track.has(i)) { const k = strait.has(i) ? STRAIT_COST : squareCost(g, i); if (typeof k === 'number') c += k; }
   return c;
+}
+
+/** 🧭 Frontier Village: the 🛤 track supplies a stroke's new squares cost. */
+export function planSupplies(g: Game, p: PaintPlan): number {
+  if (!fr(g)) return 0;
+  const per: number[] = [];
+  for (const i of new Set(p.path)) if (!g.track.has(i)) { const k = squareCost(g, i); if (typeof k === 'number') per.push(squareSup(g, i, k)); }
+  return stroke(g, per);
 }
 
 /** New water squares in this stroke that join two islands (a strait bridge, priced higher). */
@@ -144,6 +154,8 @@ export function planError(g: Game, p: PaintPlan): string {
   const loose = looseStart(g, p);
   if (loose && !reachesNetwork(g, p.path)) return `🔌 Not joined yet: run the line from the ${INDUSTRIES[loose.kind].name} on to your track to build it`;
   if (cost > g.s.money) return `Need $${Math.ceil(cost - g.s.money).toLocaleString('en-US')} more`;
+  const f = fr(g), sup = planSupplies(g, p);
+  if (f && sup > f.sup) return `Need ${sup - f.sup} more 🛤 supplies: trains bring wood and stone to a 🏗 depot (Ashford first), or buy some on the 🧭 goal card`;
   return '';
 }
 
@@ -156,6 +168,8 @@ export interface BuiltStroke {
   revealed: number;
   /** where the engine shed stood before (null: no shed), so Undo puts it back if the new track moved it */
   shed?: Shed | null;
+  /** 🧭 track supplies it used */
+  sup?: number;
 }
 
 /** Track uncovers the land around it, this many squares out. */
@@ -168,6 +182,8 @@ export function buildPlan(g: Game, p: PaintPlan): BuiltStroke | string {
   const before: BuiltStroke['before'] = [...new Set(p.path)].map(i => { const o = g.track.get(i); return [i, o && { ...o }]; });
   const shed = g.s.shed ? { ...g.s.shed } : null;
   g.s.money -= cost;
+  const f = fr(g), sup = planSupplies(g, p);
+  if (f) { f.sup -= sup; f.used += sup; f.laid += fresh.length; }
   const over = crossedSquares(g, p.path);
   layPath(g.track, n, p.path);
   for (const i of over) g.track.get(i)!.cross = true;
@@ -181,7 +197,7 @@ export function buildPlan(g: Game, p: PaintPlan): BuiltStroke | string {
   }
   let revealed = 0;
   for (const i of fresh) revealed += reveal(g, i % n, (i / n) | 0, TRACK_REVEAL);
-  return { before, cost, revealed, shed };
+  return { before, cost, revealed, shed, ...(f ? { sup } : {}) };
 }
 
 /** Squares where a stroke runs straight over a plain straight line at right angles: these become flat crossings. */
@@ -202,4 +218,5 @@ export function undoStroke(g: Game, b: BuiltStroke) {
   if (moved) restoreShed(g, b.shed); // take up the siding the shed got when it moved, before the old track comes back
   for (const [i, o] of b.before) { if (o) g.track.set(i, { ...o }); else g.track.delete(i); }
   g.s.money += b.cost;
+  const f = fr(g); if (f && b.sup) { f.sup += b.sup; f.used -= b.sup; f.laid -= b.before.filter(([, o]) => !o).length; }
 }

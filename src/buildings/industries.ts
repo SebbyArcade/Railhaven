@@ -6,6 +6,7 @@ import { isMountainFoot } from '../world/sites.ts';
 import { hallAt, hallsOf, stationLinkError } from './stations.ts';
 import { specMul } from '../world/specialty.ts';
 import { kindMul, ruinsMul } from '../world/explore.ts';
+import { fr } from '../frontier/frontier.ts';
 
 /** Goods and what they are worth per unit (the old game's `rate`). */
 export const GOODS = {
@@ -83,7 +84,7 @@ export const inputsOf = (k: IndustryKind) => Object.keys(info(k).in ?? {}) as Go
 /** input store per good, by level */
 export const bufOf = (b: Building) => 30 + 20 * b.lvl;
 /** Why this kind can't be built yet (Railway level), or '' */
-export const lockedText = (g: Game, k: IndustryKind) => (info(k).ring ?? 0) > (g.s.rings ?? 0)
+export const lockedText = (g: Game, k: IndustryKind) => (g.s as { cl?: unknown }).cl ? (k === 'dock' ? '' : 'City Lines has no industries: your trains carry travellers') : k === 'dock' && (fr(g)?.stage || fr(g)?.perks.some(p => p.k === 'harbour')) ? '' : (info(k).ring ?? 0) > (g.s.rings ?? 0)
   ? `🔒 Found past the edge of the sea: send ${info(k).ring === 1 ? 'an' : info(k).ring} 🗺 expedition${info(k).ring === 1 ? '' : 's'} from a level 3 dock`
   : (info(k).unlock ?? 0) > (g.s.rlv ?? 0) ? `🔒 Unlocks at Railway level ${info(k).unlock}` : '';
 export const MINES = new Set<IndustryKind>(['stone', 'coal', 'iron', 'oil', 'gold', 'gems', 'cocoa', 'rubber']);
@@ -211,6 +212,7 @@ export const SAME_ISLAND = 1.25, ELSEWHERE = 1.05;
 export const ramp = (base: number, same: number, other: number) => Math.round(base * Math.pow(SAME_ISLAND, same) * Math.pow(ELSEWHERE, other) / 50) * 50;
 /** Price of the next building of this kind on an island (Ashford Isle when none is given). */
 export function priceOf(g: Game, kind: IndustryKind, isl = g.world.home): number {
+  if (kind === 'dock' && (fr(g)?.freeDocks ?? 0) > 0) return 0; // 🧭 a golden spike's reward: docks to reach the next island
   const n = g.world.n; let same = 0, other = 0;
   for (const b of g.s.buildings ?? []) if (b.kind === kind) { if (g.world.islandOf[yardSquares(n, b)[0]!] === isl) same++; else other++; }
   return ramp(INDUSTRIES[kind].price, same, other);
@@ -379,6 +381,7 @@ export function build(g: Game, p: ReturnType<typeof placementsAt>[number]): Buil
   const price = priceOf(g, p.kind, islandAtYard(g, p));
   if (price > g.s.money) return `Need $${(price - g.s.money).toLocaleString('en-US')} more`;
   g.s.money -= price;
+  const f = fr(g); if (p.kind === 'dock' && f?.freeDocks) f.freeDocks--;
   const dep = depositUnder(g, p);
   const b: Building = { id: g.s.nextId++, ...p, lvl: 1, stock: 0, paid: price, built: g.s.t, ...(dep ? { dep: dep.id } : {}) };
   (g.s.buildings ??= []).push(b);
@@ -505,7 +508,8 @@ export const noSpotText = (kind: IndustryKind) => MINES.has(kind)
   : `No room for ${aName(INDUSTRIES[kind].name)} on uncovered land: it needs ${INDUSTRIES[kind].needs}`;
 
 /** "Ashford's park" / "Ashford's Clock Tower", for refusals. */
-export function parkName(g: Game, p: { town: number; k: string }): string {
+export function parkName(g: Game, p: { town: number; k: string; fp?: string }): string {
   const t = g.s.sites.find(s => s.id === p.town)?.name ?? 'a town';
+  if (p.fp) return `${t}'s ${({ depot: 'Supply Depot', gang: 'Track Gang Hut', bridge: 'Bridge Works', tunnel: 'Tunnel Guild', lookout: 'Lookout Tower', market: 'Market Hall' } as Record<string, string>)[p.fp] ?? 'building'}`;
   return `${t}'s ${{ park: 'park', clock: 'Clock Tower', market: 'Market Hall', tram: 'Tram Line', theatre: 'Grand Theatre' }[p.k] ?? 'park'}`;
 }

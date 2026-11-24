@@ -20,6 +20,8 @@ export function updateHud(el: HTMLElement, g: Game) {
   const set = (e: HTMLElement, t: string) => { if (e.textContent !== t) e.textContent = t; };
   set(m!, `💰 ${fmtMoney(g.s.money)}`);
   set(i!, `${inc < 0 ? '📉 −' : '📈 +'}${fmtMoney(Math.abs(inc))}/min`); i!.className = `chip ${inc < 0 ? 'neg' : 'pos'}`;
+  const c = (g.s as { cl?: { carried: number } }).cl; // 🚉 City Lines: travellers carried instead of orders
+  if (c) { set(l!, `🧳 ${c.carried.toLocaleString('en-US')} carried`); return; }
   set(l!, `⭐ Level ${L} · 📋 ${o}${next ? '/' + next : ''}${next !== undefined && o >= next && levelNow(g).blocked ? ' · ⛵' : ''}`); // ⛵: the next level waits for another island
 }
 

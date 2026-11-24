@@ -6,6 +6,8 @@ import { islandName } from '../ships/docks.ts';
 import { boatRoute, MAX_SCOUTS, SCOUT_CAP, scoutCost, scoutStarts, scoutStepError, sendScout } from '../world/explore.ts';
 import { trackChanged } from '../game.ts';
 import { type BuiltStroke, buildPlan, extendPlan, isAnchor, type PaintPlan, planCost, planError, startPlan, undoStroke, yardStart } from '../track/paint.ts';
+import { planSupplies } from '../track/paint.ts';
+import { fr } from '../frontier/frontier.ts';
 import { removeSquare } from '../track/edit.ts';
 import { passingLoop } from '../track/loops.ts';
 import { BRIDGE_UPKEEP, TRACK_COST } from '../track/rules.ts';
@@ -461,7 +463,7 @@ export class Tools {
     if (!this.canUndo()) { toast('A train is on that track'); return; }
     undoStroke(g, b); this.lastStroke = null; this.plan = null; this.again = null;
     trackChanged(g); g.terrainDirty?.(b.before.map(([i]) => i));
-    toast(`Undone · ${fmtMoney(b.cost)} back`);
+    toast(`Undone · ${b.sup !== undefined ? `🛤 ${b.sup} supplies` : fmtMoney(b.cost)} back`);
   }
 
   // ---- the confirm bar
@@ -471,7 +473,7 @@ export class Tools {
     if (this.mode === 'rail' && this.plan && this.plan.path.length === 1) return { text: isAnchor(g, this.plan.path[0]!) ? '🛤 Line starts here: drag from it, or tap where it goes' : '🛤 Line starts at the building: run it on to your track', ok: '✓ Build', can: false };
     if (this.mode === 'rail' && this.plan && this.plan.path.length > 1) {
       const e = planError(g, this.plan), n = this.plan.path.filter(i => !g.track.has(i)).length, wet = this.plan.path.filter(i => !g.track.has(i) && g.world.terr[i] === 0).length;
-      return { text: e || `${n} new square${n === 1 ? '' : 's'} · ${fmtMoney(planCost(g, this.plan))}${wet ? ` · 🌉 then ${fmtMoney(wet * BRIDGE_UPKEEP)}/min upkeep` : ''}${harmText(harmOf(g, this.plan.path.filter(i => !g.track.has(i))))}${stationsText(g, this.plan.path)}`, ok: '✓ Build', can: !e };
+      return { text: e || `${n} new square${n === 1 ? '' : 's'} · ${fr(g) ? `🛤 ${planSupplies(g, this.plan)} of ${fr(g)!.sup} supplies` : fmtMoney(planCost(g, this.plan))}${wet ? ` · 🌉 then ${fmtMoney(wet * BRIDGE_UPKEEP)}/min upkeep` : ''}${harmText(harmOf(g, this.plan.path.filter(i => !g.track.has(i))))}${stationsText(g, this.plan.path)}`, ok: '✓ Build', can: !e };
     }
     if (this.mode === 'double' && this.dbl.size) {
       const add = [...this.dbl].filter(i => g.track.has(i) && !g.track.get(i)!.dbl && !g.net.twin?.has(i)), c = add.length * TRACK_COST.double;

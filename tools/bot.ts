@@ -24,12 +24,49 @@ import { jams } from '../src/economy/jams.ts';
 import { TRACK_COST } from '../src/track/rules.ts';
 import { reachedIslands } from '../src/progress/missions.ts';
 import { monitor, report } from './playtest-watch.ts';
+import { BUY_SUP, buyPrice, buySupplies, choices, fr, PERKS, type PerkKind, pickPerk, setupFrontier, spikeGap } from '../src/frontier/frontier.ts';
+let frDoneLogged = false;
+import { BLDS, choices as clChoices, cl, goalNow, pickBld, setupLines, waitingAt } from '../src/lines/lines.ts';
 
 const [seed = 4242, minutes = 20] = process.argv.slice(2).map(Number);
 // BOTLOAD=save.json: carry on from a saved game instead of a new map
 let g = process.env.BOTLOAD ? await (async () => { const { loadFrom } = await import('../src/save/save.ts'); const txt = (await import('node:fs')).readFileSync(process.env.BOTLOAD!, 'utf8'); return loadFrom({ getItem: () => txt, setItem: () => {} } as unknown as Storage)!; })() : newGame(seed), n = g.world.n, ash = g.s.sites[0]!;
 const log: string[] = [];
 let rescues = 0;
+// FRONTIER=1: the 🧭 Frontier Village preview rules (track costs supplies, wishes, the golden spike)
+if (process.env.FRONTIER && !process.env.BOTLOAD) setupFrontier(g);
+// LINES=1: the City Lines preview (travellers between cities, the Grand Line)
+if (process.env.LINES && !process.env.BOTLOAD) setupLines(g);
+let clStep = 0;
+/** City Lines: pick buildings, grow cities, buy trains for waiting travellers, link cities, then cross the sea. */
+function linesThink(): void {
+  const c = cl(g)!;
+  while (c.picks.length) { const t = g.s.sites.find(s => s.id === c.picks[0])!, ch = clChoices(g, t), pref = ['hotel', 'market', 'coaches', 'works', 'street', 'theatre', 'tram'] as const; const k = pref.find(p => ch.includes(p)) ?? ch[0]!; pickBld(g, t.id, k); log.push(`  ${(g.s.t / 60).toFixed(1)}m pick: ${t.name} gets ${BLDS[k].name}`); }
+  if (c.step !== clStep) { clStep = c.step; log.push(`  ${(g.s.t / 60).toFixed(1)}m GOAL step ${c.step}: now "${goalNow(g).s?.text ?? 'done'}"`); }
+  for (const t of g.s.sites) if (t.kind === 'town' && orderDone(g, t) && g.s.money > upgradePrice(stepOf(t)) + 300) if (!upgradeTown(g, t)) log.push(`  ${(g.s.t / 60).toFixed(1)}m ${t.name} grew to ${stepOf(t)}`);
+  const wait = g.s.sites.reduce((a, t) => a + (t.kind === 'town' ? waitingAt(g, t) : 0), 0), lk = g.s.sites.filter(t => t.kind === 'town' && townLinked(g, t)).length;
+  const want = lk < 2 ? 0 : Math.min(lk * 2, Math.max(1, Math.round(lk * 0.7 + wait / 80)));
+  if (g.s.trains.length < want && g.s.money > trainPrice(g) + 200) { const t = buyTrain(g); if (typeof t !== 'string') { log.push(`  ${(g.s.t / 60).toFixed(1)}m bought train ${t.id} (${wait} waiting)`); return; } }
+  if (g.s.money > +(process.env.LINKAT ?? 1500)) {
+    const towns = g.s.sites.filter(t => t.kind === 'town' && !townLinked(g, t) && g.world.islandOf[t.y * n + t.x] === g.world.home && !failedTown.has(t.id)).sort((a, b) => Math.hypot(a.x - ash.x, a.y - ash.y) - Math.hypot(b.x - ash.x, b.y - ash.y));
+    for (const t of towns.slice(0, 3)) { if (linkTown(t)) { log.push(`  ${(g.s.t / 60).toFixed(1)}m linked ${t.name} ($${Math.round(g.s.money)} left)`); return; } failedTown.add(t.id); }
+  }
+  for (const j of jams(g)) { const sq = (j.loop ?? j.squares).filter(i => g.track.has(i) && !g.track.get(i)!.dbl); const cst = sq.length * TRACK_COST.double;
+    if (sq.length && g.s.money > cst + 300) { for (const i of sq) g.track.get(i)!.dbl = true; g.s.money -= cst; trackChanged(g); log.push(`  ${(g.s.t / 60).toFixed(1)}m doubled ${sq.length} squares near ${j.near}`); return; } }
+  if (lk >= 3) sea();
+}
+/** Frontier: pick buildings for granted wishes, push toward the golden spike, buy supplies when stuck. */
+function frontierThink() {
+  const f = fr(g); if (!f) return;
+  while (f.picks.length) {
+    const t = g.s.sites.find(s => s.id === f.picks[0])!, c = choices(g, t), pref = ['tunnel', 'depot', 'gang', 'bridge', 'market', 'lookout'] as PerkKind[];
+    const k = pref.find(p => c.includes(p)) ?? c[0]!; pickPerk(g, t.id, k); log.push(`  ${(g.s.t / 60).toFixed(1)}m ✨ ${t.name} picks ${PERKS[k].name}`);
+  }
+  if (f.done !== undefined) return;
+  if (f.sup >= 12 && lay([f.spike, f.spike + 1, f.spike - 1, f.spike + n, f.spike - n])) { trackChanged(g); log.push(`  ${(g.s.t / 60).toFixed(1)}m 🛤 toward the spike, ${spikeGap(g)} to go, supplies ${f.sup}`); }
+  if (f.sup < 6 && g.s.money > 3000 + buyPrice(g)) { buySupplies(g); frBought++; }
+}
+let frBought = 0;
 
 /** Lay track from the network to any of the target squares (bot only: a breadth-first path, painted square by square). */
 function lay(targets: number[], last?: number): boolean {
@@ -110,6 +147,7 @@ function linkTown(t: Site): boolean {
 }
 
 function think() {
+  if (cl(g) && g.s.shed) { linesThink(); return; }
   if (!g.s.shed && g.s.t < 20) { // first thing, like a player following the hint: a straight line for the engine shed
     for (const d of [1, -1, n, -n]) {
       const a = ash.y * n + ash.x, p = startPlan(g, a); if (!p) break;
@@ -189,6 +227,7 @@ function sea(): boolean {
   const islTowns = (k: number) => towns.filter(t => g.world.islandOf[t.y * n + t.x] === k);
   const targets = [...new Set(towns.map(t => g.world.islandOf[t.y * n + t.x]!))].filter(k => k !== home && !reached.has(k) && !failedIsl.has(k))
     .sort((a, b) => Math.hypot(g.world.islands[a]!.cx - ash.x, g.world.islands[a]!.cy - ash.y) - Math.hypot(g.world.islands[b]!.cx - ash.x, g.world.islands[b]!.cy - ash.y));
+  if (cl(g)) { const gl = cl(g)!.isles; targets.sort((a, b) => (gl.includes(a) ? gl.indexOf(a) : 99) - (gl.includes(b) ? gl.indexOf(b) : 99)); }
   if (!homeDock) {
     if (lockedText(g, 'dock') || g.s.money < priceOf(g, 'dock', home) + 6000 || !targets.length) return false;
     const I = g.world.islands[targets[0]!]!, b = tryDock(home, I.cx, I.cy);
@@ -224,6 +263,7 @@ function sea(): boolean {
     const have = g.s.trains.filter(t => islandOfTrain(g, t) === k).length;
     if (have < Math.max(1, Math.ceil(bs * 0.8)) && g.s.money > trainPrice(g) + 1500) { const t = buyTrainAt(g, d); if (typeof t !== 'string') { log.push(`  train ${t.id} by boat to ${islandName(g, k)}`); return true; } }
   }
+  if (cl(g)) return false;
   // spare money: Ashford landmarks, town projects, parks, fleet upgrades per island, ship upgrades, expeditions
   for (const P of PROJECTS) for (const t of P.ashford ? [ash] : towns.filter(t => townLinked(g, t) || t === ash))
     if (g.s.money > P.price * (P.ashford ? 1.3 : 2.5) && !projectError(g, t, P.k) && !buyProject(g, t, P.k)) { log.push(`  ${P.icon} ${P.name} at ${t.name}`); return true; }
@@ -251,9 +291,12 @@ for (let s = 0; s < minutes * 60; s++) {
   try { for (let k = 0; k < 20; k++) { const dt = 0.05; g.s.t += dt; g.sys.tick(dt); tickProduction(g, dt); tickTowns(g, dt); tickTrains(g, dt); if (+tickBreaks(g) + +tickEvents(g, dt)) breaksChanged(g); } } catch (e) { console.log('GAME ERROR', (g.s.t / 60).toFixed(1), (e as Error).stack?.split('\n').slice(0, 5).join(' | ')); }
   if (process.env.BOTNEWS && g.news?.length) { for (const m of g.news) if (/[⛈🌊🌤🔧🔥🚒🎉🗝📜⛏🛢🌲🐟🏕🗺]/u.test(m)) console.log('news', (g.s.t / 60).toFixed(1), m); g.news.length = 0; }
   if (s % 5 === 0) { if (checkStuck(g)) rescues++; }
+  if (s % 10 === 0 && fr(g)) { try { frontierThink(); } catch (e) { log.push(`  FR ERROR ${(e as Error).stack?.split('\n').slice(0, 3).join(' | ')}`); } }
+  if (fr(g)?.done !== undefined && !frDoneLogged) { frDoneLogged = true; log.push(`🏁 GOLDEN SPIKE at ${(g.s.t / 60).toFixed(1)} min · laid ${fr(g)!.laid} · supplies used ${fr(g)!.used} · bought ${frBought}×${BUY_SUP.n}`); }
   if (s % 10 === 0) { try { think(); } catch (e) { log.push(`  BOT ERROR ${(e as Error).stack?.split('\n').slice(0, 3).join(' | ')}`); } }
   if (process.env.PLAYTEST && s % 60 === 59) monitor(g);
-  if (s % 300 === 299) log.push(`min ${Math.round((s + 1) / 60)}: $${Math.round(g.s.money)} earned $${Math.round(g.s.earned ?? 0)} orders ${g.s.orders ?? 0} level ${g.s.rlv ?? 0} towns ${g.s.sites.filter(t => t.kind === 'town' && townLinked(g, t)).length} trains ${g.s.trains.length} ships ${g.s.ships?.length ?? 0} islands ${reachedIslands(g).size} buildings ${(g.s.buildings ?? []).length}`);
+  if (s % 300 === 299 && cl(g)) log.push(`min ${Math.round((s + 1) / 60)}: step ${cl(g)!.step} carried ${cl(g)!.carried} $${Math.round(g.s.money)} earned $${Math.round(g.s.earned ?? 0)} upkeep $${Math.round(g.s.upkeep ?? 0)} cities ${g.s.sites.filter(t => t.kind === 'town' && townLinked(g, t)).map(t => `${t.name}:${t.lvl ?? 0}`).join(' ')} trains ${g.s.trains.length} islands ${reachedIslands(g).size}`);
+  else if (s % 300 === 299) log.push(`min ${Math.round((s + 1) / 60)}: ${fr(g) ? `🛤 ${fr(g)!.sup} sup, spike ${spikeGap(g)} away, wishes ${fr(g)!.granted} · ` : ''}$${Math.round(g.s.money)} earned $${Math.round(g.s.earned ?? 0)} orders ${g.s.orders ?? 0} level ${g.s.rlv ?? 0} towns ${g.s.sites.filter(t => t.kind === 'town' && townLinked(g, t)).length} trains ${g.s.trains.length} ships ${g.s.ships?.length ?? 0} islands ${reachedIslands(g).size} buildings ${(g.s.buildings ?? []).length}`);
 }
 if (process.env.PLAYTEST) report(g);
 const idle = g.s.trains.filter(t => !t.job).length;

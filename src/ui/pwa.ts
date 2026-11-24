@@ -1,3 +1,6 @@
+import { FRONTIER } from '../frontier/mode.ts';
+import { LINES } from '../lines/mode.ts';
+
 /**
  * Installable web app: register the offline copy and catch Chrome's install offer, when the game is served from its
  * own web address. Opened from a file or inside the Claude app, none of this runs and the game works as before.
@@ -5,7 +8,7 @@
 let offer: { prompt(): Promise<void>; userChoice: Promise<{ outcome: string }> } | null = null;
 let installed = false;
 
-export const servedOnline = () => (location.protocol === 'https:' || location.hostname === 'localhost') && window.top === window.self;
+export const servedOnline = () => !FRONTIER && !LINES && (location.protocol === 'https:' || location.hostname === 'localhost') && window.top === window.self;
 export const isInstalled = () => installed || matchMedia('(display-mode: fullscreen), (display-mode: standalone)').matches;
 export const canInstall = () => !!offer && !isInstalled();
 
