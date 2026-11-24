@@ -1,4 +1,5 @@
 import type { Game, Site } from '../state.ts';
+import { cityGrew, cl, growProgress } from '../lines/lines.ts';
 import { addSupplies, DEPOT_GOODS, depotTakes, isDepot, townGrew } from '../frontier/frontier.ts';
 import { farText, type Good, INDUSTRIES, type IndustryKind, inputsOf, isFactory, yardSet } from '../buildings/industries.ts';
 import { hallOf } from '../buildings/stations.ts';
@@ -35,6 +36,7 @@ export const stepOf = (t: Site) => t.lvl ?? 0;
 
 /** The current order: fixed for the first five steps, then the goods the railway makes, a quarter bigger each step. */
 export function orderOf(g: Game, t: Site): Partial<Record<Good, number>> {
+  if (cl(g)) return {}; // 🚉 City Lines: cities grow from visitors, not goods
   const m = orderMul(g, t), o0 = orderOfFull(g, t);
   if (m >= 1) return o0;
   // 🌳 parks and a 🚋 Tram Line make the order smaller
@@ -69,6 +71,7 @@ export function madeGoods(g: Game): Good[] {
 
 /** How far along the order is, 0-1. */
 export function orderProgress(g: Game, t: Site): number {
+  if (cl(g)) return growProgress(g, t);
   const o = orderOf(g, t), ks = Object.keys(o) as Good[];
   if (!ks.length) return 1;
   return ks.reduce((a, k) => a + Math.min(1, (t.got?.[k] ?? 0) / o[k]!), 0) / ks.length;
@@ -78,6 +81,7 @@ export const orderDone = (g: Game, t: Site) => orderProgress(g, t) >= 1;
 /** Goods of steps already climbed: the town keeps buying these (steady demand). Towns by the sea also buy fish, and
  *  shellfish from Town size. While its order waits on goods from the outer islands, it keeps buying its order's other goods too. */
 export function steadyGoods(t: Site, g?: Game): Good[] {
+  if (g && cl(g)) return [];
   const out = [...new Set(LADDER.slice(0, Math.min(stepOf(t), LADDER.length)).flatMap(o => Object.keys(o) as Good[]))];
   if (g && isCoastal(g, t)) { out.push('fish'); if (stepOf(t) >= 2) out.push('shellfish'); }
   if (g) for (const k of waitsAbroad(g, t).length ? Object.keys(orderOf(g, t)) as Good[] : []) if (!out.includes(k) && !overseas(g, k)) out.push(k);
@@ -164,7 +168,7 @@ export function deliverToTown(g: Game, t: Site, k: Good, n: number, tradeLeft = 
 /** Steady demand refills; people move in as the order fills. */
 export function tickTowns(g: Game, dt: number) {
   for (const t of g.s.sites) {
-    if (t.kind !== 'town' || !townLinked(g, t)) continue;
+    if (t.kind !== 'town' || !townLinked(g, t) || cl(g)) continue;
     const cap = steadyRate(t.pop ?? 0);
     for (const k of steadyGoods(t, g)) (t.steady ??= {})[k] = Math.min(cap, (t.steady[k] ?? 0) + dt * cap / 60);
     const L = stepOf(t), target = sizeFloor(L) + (sizeCap(L) - sizeFloor(L)) * orderProgress(g, t);
@@ -174,12 +178,13 @@ export function tickTowns(g: Game, dt: number) {
 
 /** The order is filled and the player taps ⬆ Upgrade: pay, climb a step, start the next order. */
 export function upgradeTown(g: Game, t: Site): string {
-  if (!orderDone(g, t)) return `${t.name} still needs goods for its order`;
+  if (!orderDone(g, t)) return cl(g) ? `${t.name} needs more visitors first` : `${t.name} still needs goods for its order`;
   const price = upgradePrice(stepOf(t));
   if (price > g.s.money) return `Need $${(price - g.s.money).toLocaleString('en-US')} more to upgrade ${t.name}`;
   g.s.money -= price;
   t.lvl = stepOf(t) + 1; t.got = {}; t.filled = false;
   townGrew(g, t); // 🧭 a grown town picks a new building
+  cityGrew(g, t); // 🚉 City Lines: so does a grown city
   const isl = g.world.islandOf[t.y * g.world.n + t.x];
   t.sea0 = isCoastal(g, t) && (g.s.buildings ?? []).some(b => b.kind === 'dock' && (b.fish ?? 0) > 0 && g.world.islandOf[(b.y) * g.world.n + b.x] === isl) || undefined;
   return '';

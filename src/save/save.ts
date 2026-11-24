@@ -1,8 +1,9 @@
 import { FRONTIER } from '../frontier/mode.ts';
+import { LINES } from '../lines/mode.ts';
 import type { Game, GameState } from '../state.ts';
 import { loadGame, prepareSave } from '../game.ts';
 
-export const SAVE_KEY = FRONTIER ? 'railhaven-frontier' : 'railhaven2'; // 🧭 the preview keeps its own games
+export const SAVE_KEY = LINES ? 'railhaven-lines' : FRONTIER ? 'railhaven-frontier' : 'railhaven2'; // 🧭 the preview keeps its own games
 export const SAVE_VERSION = 1;
 
 const toB64 = (u: Uint8Array) => { let s = ''; for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode(...u.subarray(i, i + 0x8000)); return btoa(s); };

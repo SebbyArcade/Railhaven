@@ -47,6 +47,8 @@ import { checkStuck } from './economy/nofail.ts';
 import { ashford, compass, missionsOf, msOf, recommendedBuild, swapMission } from './progress/missions.ts';
 import { missionPill } from './ui/story.ts';
 import { FRONTIER, FRONTIER_SEED } from './frontier/mode.ts';
+import { LINES } from './lines/mode.ts';
+import { BLDS, type BldKind, cl, clNext, goalNow, pickBld, setupLines } from './lines/lines.ts';
 import { BUY_SUP, buySupplies, fr, frNext, PERKS, type PerkKind, pickPerk, sailOn, setupFrontier } from './frontier/frontier.ts';
 import { coachNext } from './frontier/ui.ts';
 import { gameHtml } from './ui/gamecard.ts';
@@ -66,7 +68,8 @@ const $ = (id: string) => document.getElementById(id)!;
 const params = new URLSearchParams(location.search);
 /** a new game in the browser starts Mira's lessons */
 if (FRONTIER) document.title = 'Railhaven · Frontier Village preview';
-const freshGame = (seed?: number) => { if (FRONTIER) { const g = newGame(seed ?? (loadFrom(localStorage) ? undefined : FRONTIER_SEED)); setupFrontier(g); return g; } const g = newGame(seed); g.s.tut = 0; return g; };
+if (LINES) document.title = 'Railhaven · City Lines preview';
+const freshGame = (seed?: number) => { if (LINES) { const g = newGame(seed); setupLines(g); return g; } if (FRONTIER) { const g = newGame(seed ?? (loadFrom(localStorage) ? undefined : FRONTIER_SEED)); setupFrontier(g); return g; } const g = newGame(seed); g.s.tut = 0; return g; };
 // save slots: the playing game stays under the usual key, the list of games beside it (made from this browser's game the first time)
 const slotsOk = (() => { try { readIndex(localStorage); return true; } catch { return false; } })();
 let game: Game = (!params.has('new') && !params.has('seed') && loadFrom(localStorage)) || freshGame(params.has('seed') ? +params.get('seed')! : undefined);
@@ -289,6 +292,18 @@ cardEl.onclick = e => {
   if (b.dataset.act === 'loadpaste') { const t = (cardEl.querySelector('#pasteCode') as HTMLTextAreaElement | null)?.value ?? ''; if (t.trim()) void bringOver(t); else toast('Paste the code first'); return; }
   if (b.dataset.go !== undefined) { goMission(+b.dataset.go); return; }
   if (b.dataset.act === 'frpick') { const t = game.s.sites.find(s => s.id === +b.dataset.town!), why = pickPerk(game, +b.dataset.town!, b.dataset.k as PerkKind); if (why) { toast(why); return; } toast(`${PERKS[b.dataset.k as PerkKind].icon} ${PERKS[b.dataset.k as PerkKind].name} built in ${t?.name}`); game.terrainDirty?.([]); if (fr(game)!.picks.length) openCard({ kind: 'story', id: 0, page: 'pick' }); else { closeCard(); if (t) lookAt(t.x, t.y); } return; }
+  if (b.dataset.act === 'clpick') { // 🚉 a city's new building
+    const t = game.s.sites.find(s => s.id === +b.dataset.town!), k = b.dataset.k as BldKind, why = pickBld(game, +b.dataset.town!, k); if (why) { toast(why); return; }
+    toast(`${BLDS[k].icon} ${BLDS[k].name} built in ${t?.name}: ${BLDS[k].text}`, 4000);
+    if (cl(game)!.picks.length) openCard({ kind: 'story', id: 0, page: 'pick' }); else { closeCard(); if (t) lookAt(t.x, t.y); } return;
+  }
+  if (b.dataset.act === 'clshow') { // 🏁 frame the railway's end and the next capital together
+    const at = goalNow(game).s?.at; if (!at) { closeCard(); return; }
+    const linked = game.s.sites.filter(s => s.kind === 'town' && townLinked(game, s)), a = linked.sort((p, q) => Math.hypot(p.x - at.x, p.y - at.y) - Math.hypot(q.x - at.x, q.y - at.y))[0] ?? game.s.sites[0]!, c = game.s.camera; closeCard();
+    c.x = ((a.x + at.x) / 2 + 0.5) * 32; c.y = ((a.y + at.y) / 2 + 0.5) * 32;
+    c.z = Math.max(0.15, Math.min(1.2, 0.8 * Math.min(view.w / ((Math.abs(at.x - a.x) + 8) * 32), view.h / ((Math.abs(at.y - a.y) + 8) * 32))));
+    tools.flash = { square: at.y * game.world.n + at.x, until: performance.now() + 3000 }; return;
+  }
   if (b.dataset.act === 'frshow') { // 🏁 frame Ashford and the golden spike together
     const f = fr(game)!, n = game.world.n, last = f.spikes?.at(-1), a = last !== undefined ? { x: last % n, y: (last / n) | 0 } : game.s.sites[0]!, sx = f.spike % n, sy = (f.spike / n) | 0, c = game.s.camera; closeCard();
     c.x = ((a.x + sx) / 2 + 0.5) * 32; c.y = ((a.y + sy) / 2 + 0.5) * 32;
@@ -365,7 +380,8 @@ cardEl.onclick = e => {
   }
   if (b.dataset.act === 'upgrade') {
     const t = game.s.sites.find(s => s.id === +b.dataset.id!)!, L = (t.lvl ?? 0) + 1;
-    const why = upgradeTown(game, t); toast(why || `⬆ ${t.name} is now a ${sizeName(L)}! New order on its card`); renderCard();
+    const why = upgradeTown(game, t); toast(why || (cl(game) ? `⬆ ${t.name} is now a ${sizeName(L)}!` : `⬆ ${t.name} is now a ${sizeName(L)}! New order on its card`));
+    if (!why && cl(game)?.picks.length) { cl(game)!.shown = cl(game)!.granted - cl(game)!.picks.length + 1; openCard({ kind: 'story', id: 0, page: 'pick' }); } else renderCard();
   }
 };
 
@@ -383,6 +399,7 @@ pill.onclick = e => {
     game.s.lesMin = !game.s.lesMin; pill.innerHTML = lessonHtml(); return;
   }
   if (b?.dataset.go !== undefined) { goMission(+b.dataset.go); return; }
+  if (b?.dataset.clgo !== undefined) { openCard({ kind: 'story', id: 0, page: b.dataset.clgo }); return; }
   if (tools.card?.kind === 'story') closeCard(); else openCard({ kind: 'story', id: 0 });
 };
 const lookAt = (x: number, y: number) => { const c = game.s.camera; c.x = (x + 0.5) * 32; c.y = (y + 0.5) * 32; };
@@ -578,6 +595,7 @@ function renderMenu() {
     return `<button data-k="${k}" class="${tools.buildKind === k ? 'on' : ''}${lock ? ' locked' : ''}"><b>${d.icon}</b>${d.name}<small>${lock ? (d.ring && d.ring > (game.s.rings ?? 0) ? '🔒 🗺 Expedition' : '🔒 Level ' + d.unlock) : fmtMoney(p)}</small>${recipe}</button>`;
   };
   const r = recommendedBuild(game);
+  if (cl(game)) { menu.innerHTML = `<div class="mhead">⚓ Sea: docks and landings take your trains to other islands</div>` + tile('dock'); return; } // 🚉 City Lines: no industries
   menu.innerHTML = (r ? `<button data-k="${r.k}" class="rec"><b>${info(r.k).icon}</b><span style="font-size:11px;font-weight:800;color:#ffd24a;letter-spacing:.05em">⭐ RECOMMENDED NEXT BUILD${r.mission ? ' · YOUR MISSION' : ''}</span><br>${info(r.k).name} · ${fmtMoney(priceOf(game, r.k, menuIsl))}<small>${r.why}</small></button>` : '')
     + kinds.filter(k => !isFactory(k) && k !== 'dock').map(tile).join('') + `<div class="mhead">🏭 Factories: turn raw goods into products</div>` + kinds.filter(isFactory).map(tile).join('')
     + `<div class="mhead">⚓ Sea: docks reach other islands</div>` + tile('dock');
@@ -703,8 +721,8 @@ function frame(now: number) {
     lastCard = Math.floor(now / 1000);
     checkArrivals(game); // islands just reached queue their arrival card
     const M = msOf(game); // a new act opens its card once nothing else is open
-    const calm = !tools.card && tools.mode === 'pan' && !menuOpen && !tools.againOn() && !onHome(), F = fr(game);
-    const pg = F && calm ? frNext(game) ?? coachNext(game) : undefined;
+    const calm = !tools.card && tools.mode === 'pan' && !menuOpen && !tools.againOn() && !onHome(), F = fr(game) || cl(game);
+    const pg = F && calm ? (cl(game) ? clNext(game) : frNext(game) ?? coachNext(game)) : undefined;
     if (pg) openCard({ kind: 'story', id: 0, page: pg }); // 🧭 the frontier's cards: intro, set pieces, picks, the spike
     else if (!F && M.actNew && !tools.card && tools.mode === 'pan' && !menuOpen && !tools.againOn()) { M.actNew = false; openCard({ kind: 'story', id: 0, page: 'act' }); }
     else if ((game.arrived?.length || game.reported?.length) && (lessonOn(game) || onHome())) { game.arrived = []; game.reported = []; }
@@ -762,7 +780,7 @@ cardEl.addEventListener('input', e => {
   }
 });
 // 📋 the Railway level chip opens the Orders board
-hud.onclick = e => { if ((e.target as HTMLElement).closest('[data-orders]')) { if (tools.card?.kind === 'orders') closeCard(); else { menuOpen = false; tools.mode = 'pan'; tools.cancel(); openCard({ kind: 'orders', id: 0 }); } } };
+hud.onclick = e => { if ((e.target as HTMLElement).closest('[data-orders]')) { const k = cl(game) ? 'story' : 'orders'; if (tools.card?.kind === k) closeCard(); else { menuOpen = false; tools.mode = 'pan'; tools.cancel(); openCard({ kind: k, id: 0 }); } } };
 // no money piles up while nobody is playing: after 3 minutes without a touch the game pauses until the next one (Sébastien)
 const IDLE_S = 180, pausedEl = $('paused');
 let lastTouch = performance.now();

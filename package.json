@@ -7,6 +7,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
+    "build:lines": "tsc --noEmit && VITE_LINES=1 vite build --outDir dist-lines",
     "build:frontier": "tsc --noEmit && VITE_FRONTIER=1 vite build --outDir dist-frontier",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",

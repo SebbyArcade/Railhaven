@@ -22,6 +22,7 @@ import { BRIDGE_UPKEEP, bridgeSquares } from '../track/rules.ts';
 import { tickTrade, tradeDelivered, tradeRoom } from './trade.ts';
 import { deliverToTown, orderDone, reward, sizeName, steadyFull, stepOf } from './towns.ts';
 import { type NewsGo, say } from '../core/news.ts';
+import { bestTrip, cityDist, cl, clCap, clSpeed, fare, postBonus, tickLines, visit } from '../lines/lines.ts';
 
 export const LOAD_TIME = 4;
 /** Loading or unloading time for this train: 🚉 the Grand Station makes it 25% shorter on Ashford Isle. */
@@ -452,12 +453,12 @@ function nearestTown(g: Game, t: Train): { kind: 'town'; id: number } | null {
 /** Goods trains run themselves: each idle train collects the best waiting load and takes it where the plan says. */
 export function tickTrains(g: Game, dt: number) {
   tickShips(g, dt); tickScouts(g, dt); tickSweeps(g, dt);
-  if (Math.floor(g.s.t) !== Math.floor(g.s.t - dt)) { if (fr(g)) for (const m of tickFrontier(g)) say(g, m); else { tickMissions(g); tickBooms(g); } if (Math.floor(g.s.t) % 5 === 0) { checkLevel(g); tickTrade(g); } } // reaching an island can let a held level through
+  if (Math.floor(g.s.t) !== Math.floor(g.s.t - dt)) { if (cl(g)) for (const m of tickLines(g, 1)) say(g, m); else if (fr(g)) for (const m of tickFrontier(g)) say(g, m); else { tickMissions(g); tickBooms(g); } if (Math.floor(g.s.t) % 5 === 0) { checkLevel(g); tickTrade(g); } } // reaching an island can let a held level through
   let plan: Plan | null = null;
   const P = () => (plan ??= shipPlan(g));
-  const fm = fleetMul(g.s.trains.length);
+  const fm = fleetMul(g.s.trains.length), lines = !!cl(g);
   // each island has its own engines: vmax is the fastest, slower islands' trains run at their share of it (speedOf)
-  g.sys.vmax = V_MAX * topEng(g) * expressMul(g) * frSpeed(g); // 🧭 Engine Works
+  g.sys.vmax = V_MAX * topEng(g) * expressMul(g) * frSpeed(g) * clSpeed(g); // 🧭 Engine Works
   // bridges cost a little to keep up, every minute, like trains on the move (counted with running costs); never while
   // money is below zero, so bridges alone can't push a railway further into the red (no-fail)
   const br = g.s.money > 0 ? bridgeSquares(g) * BRIDGE_UPKEEP / 60 * dt : 0;
@@ -474,6 +475,7 @@ export function tickTrains(g: Game, dt: number) {
     // held up: a train with somewhere to go standing still (not loading, reversing, broken down or resting aside)
     if (j && (j.phase === 'toLoad' || j.phase === 'toDrop') && t.v === 0 && t.pause <= 0 && !t.broke && !t.rr && t.plan.length) t.stopT = (t.stopT ?? 0) + dt;
     else if (t.stopT) t.stopT = 0;
+    if (lines) { clTrain(g, t, dt); continue; } // 🚉 City Lines: trains carry travellers between cities
     if (!j) {
       t.noWork = (t.noWork ?? 0) + dt;
       // waiting for better work a long while: forget its oldest trip, so it tries the best load again some time
@@ -514,10 +516,63 @@ export function tickTrains(g: Game, dt: number) {
   }
 }
 
+/**
+ * 🚉 City Lines: an idle train takes the best group of waiting travellers (most fare per square run) from one city's
+ * station to another's. Fares are the only money; the visitors make both cities grow.
+ */
+function clTrain(g: Game, t: Train, dt: number) {
+  const j = t.job, cap = Math.round(capOf(g, t) * clCap(g));
+  if (!j) {
+    t.noWork = (t.noWork ?? 0) + dt;
+    if (!parked(t) || t.moveTo !== undefined || t.ferry) return;
+    if ((t.idle = (t.idle ?? 0) - dt) > 0) return;
+    t.idle = 2;
+    const b = bestTrip(g, t, headSquare(g, t), cap); if (!b) return;
+    t.noWork = 0;
+    t.job = { src: -b.a.id - 1, to: { kind: 'town', id: b.b.id }, good: 'pax', phase: 'toLoad', timer: 0 };
+    if (!g.sys.sendToArea(t, destSquares(g, { kind: 'town', id: b.a.id }))) endJob(t);
+    return;
+  }
+  if (j.timer > 0) { j.timer -= dt; if (j.timer > 0) return; }
+  const a = siteOf(g, -j.src - 1), b = siteOf(g, j.to.id), jt = j as typeof j & { tries?: number };
+  if (!a || !b) { t.cargo = undefined; endJob(t); return; }
+  const stuck = () => { if ((jt.tries = (jt.tries ?? 0) + 1) >= 6) { t.cargo = undefined; endJob(t); } else j.timer = 5; };
+  if (j.phase === 'toLoad') {
+    if (!parked(t)) return;
+    const sq = destSquares(g, { kind: 'town', id: a.id });
+    if (!sq.includes(headSquare(g, t))) { if (!g.sys.sendToArea(t, sq)) endJob(t); return; }
+    j.phase = 'loading'; j.timer = loadTime(g, t);
+  } else if (j.phase === 'loading') {
+    const c = cl(g)!, key = `${a.id}>${b.id}`, n = Math.min(cap, Math.floor(c.pax[key] ?? 0));
+    if (n <= 0) { endJob(t); return; }
+    c.pax[key]! -= n; const d = cityDist(g, a, b);
+    t.cargo = { good: 'pax', n, d: d > 0 ? d : 8 };
+    j.phase = 'toDrop'; if (!g.sys.sendToArea(t, destSquares(g, j.to))) stuck();
+  } else if (j.phase === 'toDrop') {
+    if (!parked(t)) return;
+    if (destSquares(g, j.to).includes(headSquare(g, t))) { j.phase = 'unloading'; j.timer = loadTime(g, t); }
+    else if (!g.sys.sendToArea(t, destSquares(g, j.to))) stuck();
+  } else if (j.phase === 'unloading') {
+    const c = t.cargo; if (!c) { endJob(t); return; }
+    const v = fare(g, a, b, c.n, c.d) + postBonus(g, a, b); pay(g, v);
+    visit(g, a, b, c.n);
+    t.lastPay = { pay: Math.round(v), at: g.s.t, n: c.n, good: 'pax', to: j.to }; tripDone(t, v);
+    t.cargo = undefined; endJob(t);
+  }
+}
+
 /** What a train is doing, in plain words. */
 export function trainStatus(g: Game, t: Train): string {
   const j = t.job;
   if (t.ferry) { const to = bldOf(g, t.ferry.to); return `⛴ Going to the dock to sail to ${to ? islandName(g, islandOfB(g, to)) : 'another island'}`; }
+  if (cl(g)) {
+    if (!j) return t.v > 0 ? '🚂 On its way' : '💤 Waiting for travellers (8 or more waiting to go somewhere)';
+    const a = siteOf(g, -j.src - 1)?.name ?? 'a city', b = siteOf(g, j.to.id)?.name ?? 'a city';
+    if (j.phase === 'toLoad') return `🚂 Going to ${a} to pick up travellers for ${b}`;
+    if (j.phase === 'loading') return `🧳 Travellers boarding at ${a} for ${b}`;
+    if (j.phase === 'toDrop') return `🚂 Taking ${t.cargo?.n ?? ''} travellers from ${a} to ${b}`;
+    return `🧳 Travellers getting off at ${b}`;
+  }
   if (!j) return t.v > 0 ? '🚂 On its way' : `💤 Waiting for a load (a building needs ${minLoad(g, fleetIsl(g, t))} ready)`;
   const src = (g.s.buildings ?? []).find(b => b.id === j.src), where = destName(g, j.to), icon = GOODS[j.good as Good]?.icon ?? '';
   const name = src ? INDUSTRIES[src.kind].name : 'the yard';

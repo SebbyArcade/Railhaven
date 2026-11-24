@@ -2,6 +2,8 @@ import { hallOf } from '../buildings/stations.ts';
 import type { Game, Site } from '../state.ts';
 import { fr, LOOKOUT_SUP } from '../frontier/frontier.ts';
 import { frStoryHtml, frTownHtml } from '../frontier/ui.ts';
+import { clStoryHtml, clTownHtml } from '../lines/ui.ts';
+import { cl, clCap } from '../lines/lines.ts';
 import { fallsMul, POI, POI_RARITY, poisOf, RARITY } from '../world/explore.ts';
 import { isleCard, reportsHtml, scoutCard } from './discover.ts';
 import { joinGap } from '../track/joins.ts';
@@ -58,7 +60,7 @@ const bName = (b: Building) => INDUSTRIES[b.kind].name;
 export function cardHtml(g: Game, c: Card, view?: MapView | null): string | null {
   if (c.kind === 'shed') return shedCard(g, c.page);
   if (c.kind === 'fleet') return fleetCard(g, c.page);
-  if (c.kind === 'story') return fr(g) ? frStoryHtml(g, c.page) : storyHtml(g, c.page);
+  if (c.kind === 'story') return cl(g) ? clStoryHtml(g, c.page) : fr(g) ? frStoryHtml(g, c.page) : storyHtml(g, c.page);
   if (c.kind === 'orders') return ordersHtml(g);
   if (c.kind === 'map') return mapHtml(g, view ?? null);
   if (c.kind === 'ship') return shipCard(g, c.id);
@@ -83,6 +85,7 @@ function townCard(g: Game, t: Site, page?: string): string {
     h += gap && j ? `<div class="warn">🔌 Not on the railway yet: your track is only ${gap.length === 1 ? '1 square' : `${gap.length} squares`} short (about ${fmtMoney(j.cost)}). Lay track from the gold arrow over the dashed ${gap.length === 1 ? 'square' : 'squares'}: its 🚉 station goes on the pale outline ${go}</div>`
       : `<div class="warn">🔌 Not on the railway yet: ${hallOf(g.track, g.world.n, t, g.world.terr, yardSet(g)) ? 'join your line to either end of its station' : 'lay track from your line into its 🚉 station outline'} (🛤 Rails shows it, with an arrow where track comes in) ${go}</div>`;
   }
+  if (cl(g)) return h + clTownHtml(g, t); // 🚉 City Lines: travellers and visitors, no goods
   const done = orderDone(g, t);
   h += `<h3>📋 ${done ? 'Order filled!' : `Wants these to grow into a ${sizeName(L + 1)}`}</h3>`;
   for (const k of Object.keys(o) as Good[]) {
@@ -506,11 +509,11 @@ function shedCard(g: Game, page?: string): string {
 }
 
 function trainCard(g: Game, t: Train): string {
-  let h = `<div class="head"><b class="big">🚂</b><div><h2>Train ${t.id}</h2><span class="chip2">Carries ${trainCapOf(g, t)}</span></div></div>`;
+  let h = `<div class="head"><b class="big">🚂</b><div><h2>Train ${t.id}</h2><span class="chip2">${cl(g) ? `🧳 Seats ${Math.round(trainCapOf(g, t) * clCap(g))}` : `Carries ${trainCapOf(g, t)}`}</span></div></div>`;
   if (t.broke && g.s.t < t.broke.doneAt) { const c = Math.ceil(t.broke.crewAt - g.s.t); h += `<div class="warn">🔧 Broken down: ${c > 0 ? `the repair crew arrives in ${c} s` : `the crew is fixing it, ${Math.ceil(t.broke.doneAt - g.s.t)} s left`}. Trains behind it wait.</div>`; }
   h += `<div class="note big2">${trainStatus(g, t)}</div>`;
-  if (t.lastPay) { h += `<div class="row"><b class="ico">💰</b><div class="grow">Last delivery: ${t.lastPay.n} ${GOODS[t.lastPay.good as Good]?.icon ?? ''} to ${esc(destName(g, t.lastPay.to))} paid <b>${fmtMoney(t.lastPay.pay)}</b>${t.lastPay.sup ? ` and made <b>🛤 ${t.lastPay.sup} supplies</b>` : ""}</div></div>`; }
-  h += `<small class="why">Trains run themselves: each one takes the best waiting load to the place that needs it.</small>`;
+  if (t.lastPay) { h += `<div class="row"><b class="ico">💰</b><div class="grow">Last ${t.lastPay.good === 'pax' ? 'trip' : 'delivery'}: ${t.lastPay.n} ${t.lastPay.good === 'pax' ? 'travellers' : GOODS[t.lastPay.good as Good]?.icon ?? ''} to ${esc(destName(g, t.lastPay.to))} paid <b>${fmtMoney(t.lastPay.pay)}</b>${t.lastPay.sup ? ` and made <b>🛤 ${t.lastPay.sup} supplies</b>` : ""}</div></div>`; }
+  h += `<small class="why">${cl(g) ? 'Trains run themselves: each one picks up the biggest group of waiting travellers it can reach and takes them where they want to go.' : 'Trains run themselves: each one takes the best waiting load to the place that needs it.'}</small>`;
   h += t.sellAfter ? `<div class="note">💰 Sold: it goes as soon as it has delivered its load (+${fmtMoney(trainRefund(g))})</div>`
     : `<button class="act alt" data-act="selltrain" data-id="${t.id}">💰 Sell this train · +${fmtMoney(trainRefund(g))}<br><small>half its price back${t.cargo ? ' · it delivers its load first' : ''}</small></button>`;
   return h;

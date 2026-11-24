@@ -84,7 +84,7 @@ export const inputsOf = (k: IndustryKind) => Object.keys(info(k).in ?? {}) as Go
 /** input store per good, by level */
 export const bufOf = (b: Building) => 30 + 20 * b.lvl;
 /** Why this kind can't be built yet (Railway level), or '' */
-export const lockedText = (g: Game, k: IndustryKind) => k === 'dock' && (fr(g)?.stage || fr(g)?.perks.some(p => p.k === 'harbour')) ? '' : (info(k).ring ?? 0) > (g.s.rings ?? 0)
+export const lockedText = (g: Game, k: IndustryKind) => (g.s as { cl?: unknown }).cl ? (k === 'dock' ? '' : 'City Lines has no industries: your trains carry travellers') : k === 'dock' && (fr(g)?.stage || fr(g)?.perks.some(p => p.k === 'harbour')) ? '' : (info(k).ring ?? 0) > (g.s.rings ?? 0)
   ? `🔒 Found past the edge of the sea: send ${info(k).ring === 1 ? 'an' : info(k).ring} 🗺 expedition${info(k).ring === 1 ? '' : 's'} from a level 3 dock`
   : (info(k).unlock ?? 0) > (g.s.rlv ?? 0) ? `🔒 Unlocks at Railway level ${info(k).unlock}` : '';
 export const MINES = new Set<IndustryKind>(['stone', 'coal', 'iron', 'oil', 'gold', 'gems', 'cocoa', 'rubber']);
