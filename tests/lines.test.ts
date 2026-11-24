@@ -17,7 +17,7 @@ describe('🚉 City Lines', () => {
     const g = newGame(4242); setupLines(g);
     expect(orderOf(g, g.s.sites[0]!)).toEqual({});
     expect(lockedText(g, 'dock')).toBe('');
-    expect(lockedText(g, 'lumber')).not.toBe('');
+    expect(lockedText(g, 'farm')).not.toBe('');
   });
   it('visitors grow a city, and growing gives a pick of 3 different buildings', () => {
     const g = newGame(4242); setupLines(g); const [a, b] = g.s.sites.filter(s => s.kind === 'town');
