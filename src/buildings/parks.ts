@@ -54,7 +54,7 @@ export const hasProject = (g: Game, t: Site, k: ParkKind) => (g.s.parks ?? []).s
 /** Order sizes at this town: 5% smaller per park, and 5% smaller with a Tram Line. */
 export function orderMul(g: Game, t: Site): number {
   let m = 1;
-  for (const p of g.s.parks ?? []) if (p.town === t.id && !p.fp) m -= p.k === 'park' ? PARK_ORDER : projectOf(p.k)?.order ?? 0;
+  for (const p of g.s.parks ?? []) if (p.town === t.id) m -= p.fp ? (p.fp === 'granary' ? 0.25 : 0) : p.k === 'park' ? PARK_ORDER : projectOf(p.k)?.order ?? 0;
   return Math.max(0.5, m);
 }
 /** Pay for deliveries to this town: 1 plus each project's bonus. */

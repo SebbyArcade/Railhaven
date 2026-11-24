@@ -47,7 +47,7 @@ import { checkStuck } from './economy/nofail.ts';
 import { ashford, compass, missionsOf, msOf, recommendedBuild, swapMission } from './progress/missions.ts';
 import { missionPill } from './ui/story.ts';
 import { FRONTIER, FRONTIER_SEED } from './frontier/mode.ts';
-import { BUY_SUP, buySupplies, fr, frNext, PERKS, type PerkKind, pickPerk, setupFrontier } from './frontier/frontier.ts';
+import { BUY_SUP, buySupplies, fr, frNext, PERKS, type PerkKind, pickPerk, sailOn, setupFrontier } from './frontier/frontier.ts';
 import { gameHtml } from './ui/gamecard.ts';
 import { decodeLegacy, importLegacy, isLegacy } from './save/legacy.ts';
 import { LESSONS, lessonOn, lessonText, skipLessons } from './progress/lessons.ts';
@@ -289,11 +289,12 @@ cardEl.onclick = e => {
   if (b.dataset.go !== undefined) { goMission(+b.dataset.go); return; }
   if (b.dataset.act === 'frpick') { const t = game.s.sites.find(s => s.id === +b.dataset.town!), why = pickPerk(game, +b.dataset.town!, b.dataset.k as PerkKind); if (why) { toast(why); return; } toast(`${PERKS[b.dataset.k as PerkKind].icon} ${PERKS[b.dataset.k as PerkKind].name} built in ${t?.name}`); game.terrainDirty?.([]); if (fr(game)!.picks.length) openCard({ kind: 'story', id: 0, page: 'pick' }); else { closeCard(); if (t) lookAt(t.x, t.y); } return; }
   if (b.dataset.act === 'frshow') { // 🏁 frame Ashford and the golden spike together
-    const f = fr(game)!, n = game.world.n, a = game.s.sites[0]!, sx = f.spike % n, sy = (f.spike / n) | 0, c = game.s.camera; closeCard();
+    const f = fr(game)!, n = game.world.n, last = f.spikes?.at(-1), a = last !== undefined ? { x: last % n, y: (last / n) | 0 } : game.s.sites[0]!, sx = f.spike % n, sy = (f.spike / n) | 0, c = game.s.camera; closeCard();
     c.x = ((a.x + sx) / 2 + 0.5) * 32; c.y = ((a.y + sy) / 2 + 0.5) * 32;
     c.z = Math.max(0.15, Math.min(1.2, 0.8 * Math.min(view.w / ((Math.abs(sx - a.x) + 6) * 32), view.h / ((Math.abs(sy - a.y) + 6) * 32))));
     tools.flash = { square: f.spike, until: performance.now() + 3000 }; return;
   }
+  if (b.dataset.act === 'frsail') { const why = sailOn(game); if (why) { toast(why); return; } openCard({ kind: 'story', id: 0, page: 'isle' }); return; }
   if (b.dataset.act === 'frbuy') { const why = buySupplies(game); toast(why || `🪓 Ashford's crew cut ${BUY_SUP.n} supplies`); renderCard(); return; }
   if (b.dataset.act === 'swap') { const why = swapMission(game, +b.dataset.m!); toast(why || `🎯 New mission: ${msOf(game).main?.title}`); renderCard(); return; }
   const bld = game.s.buildings?.find(x => x.id === +(b.dataset.id ?? -1));

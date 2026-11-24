@@ -34,6 +34,13 @@ export function drawFrontier(ctx: CanvasRenderingContext2D, g: Game, tm: number,
       ctx.strokeText('🥾 the pass', PX, PY); ctx.fillStyle = '#d8f0c0'; ctx.fillText('🥾 the pass', PX, PY);
     }
   });
+  // spikes already driven: small gold markers
+  for (const i of f.spikes ?? []) {
+    const X = (i % n + 0.5) * TILE, Y = (((i / n) | 0) + 0.5) * TILE;
+    ctx.font = `${Math.round(15 * s)}px system-ui`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('🏁', X, Y);
+    ctx.font = `800 ${Math.round(11 * s)}px system-ui`; ctx.lineWidth = 3 * s; ctx.strokeStyle = 'rgba(30,20,10,.8)';
+    ctx.strokeText('✅', X + 10 * s, Y - 9 * s); ctx.fillStyle = '#ffd27a'; ctx.fillText('✅', X + 10 * s, Y - 9 * s);
+  }
   // the golden spike: a beacon on the far coast
   const X = (f.spike % n + 0.5) * TILE, Y = (((f.spike / n) | 0) + 0.5) * TILE, r = 14 * s;
   const glow = ctx.createRadialGradient(X, Y, 0, X, Y, r * (3.2 + pulse));

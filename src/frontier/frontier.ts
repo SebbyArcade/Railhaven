@@ -16,8 +16,9 @@ import type { Good } from '../buildings/industries.ts';
  *
  * All of it lives under g.s.fr; a game without it is the normal game, unchanged.
  */
-export type PerkKind = 'depot' | 'gang' | 'bridge' | 'tunnel' | 'lookout' | 'market';
-export interface PerkInfo { icon: string; name: string; text: string; /** the town building drawing it uses */ art: 'tram' | 'clock' | 'bridgeworks' | 'foundry' | 'park' | 'market' }
+export type PerkKind = 'depot' | 'gang' | 'bridge' | 'tunnel' | 'lookout' | 'market'
+  | 'foreman' | 'mason' | 'timber' | 'school' | 'well' | 'surveyor' | 'post' | 'harbour' | 'granary' | 'engine';
+export interface PerkInfo { icon: string; name: string; text: string; /** the town building drawing it uses */ art: 'tram' | 'clock' | 'bridgeworks' | 'foundry' | 'park' | 'market' | 'theatre' | 'grandstation' | 'cathedral' | 'exhibition' }
 export const PERKS: Record<PerkKind, PerkInfo> = {
   depot: { icon: '🏗', name: 'Supply Depot', text: 'This town takes wood and stone as track supplies (shorter hauls near the railhead), and the supply pile holds 60 more', art: 'tram' },
   gang: { icon: '🛠', name: 'Track Gang Hut', text: 'New track costs 20% fewer supplies everywhere (stacks, down to half)', art: 'clock' },
@@ -25,6 +26,16 @@ export const PERKS: Record<PerkKind, PerkInfo> = {
   tunnel: { icon: '⛰', name: 'Tunnel Guild', text: 'Track can tunnel through mountains', art: 'foundry' },
   lookout: { icon: '🔭', name: 'Lookout Tower', text: 'Clears the fog 14 squares round this town right away', art: 'park' },
   market: { icon: '🛒', name: 'Market Hall', text: 'Deliveries to this town pay 30% more money', art: 'market' },
+  foreman: { icon: '👷', name: "Foreman's Lodge", text: '25 track supplies right away, and the supply pile holds 20 more', art: 'clock' },
+  mason: { icon: '⛏', name: 'Stonemasons', text: 'Track over hills costs the same as flat land', art: 'foundry' },
+  timber: { icon: '🪚', name: 'Timber Yard', text: 'Wood and stone make 25% more supplies everywhere', art: 'tram' },
+  school: { icon: '📚', name: 'Railway School', text: 'From now on every pick offers 4 buildings instead of 3', art: 'exhibition' },
+  well: { icon: '🍀', name: 'Wishing Well', text: 'This town grants another wish right away: pick again', art: 'cathedral' },
+  surveyor: { icon: '📐', name: "Surveyor's Office", text: 'Clears the fog in a wide strip from this town to the golden spike', art: 'theatre' },
+  post: { icon: '📮', name: 'Post Office', text: 'Every town on this island shows on the map, with the land round it', art: 'clock' },
+  harbour: { icon: '⚓', name: 'Harbour Master', text: 'Your next ⚓ Dock is free, and docks unlock now', art: 'bridgeworks' },
+  granary: { icon: '🌾', name: 'Granary', text: "This town's orders ask for 25% less", art: 'market' },
+  engine: { icon: '🚂', name: 'Engine Works', text: 'Every train runs 15% faster (stacks)', art: 'grandstation' },
 };
 const KINDS = Object.keys(PERKS) as PerkKind[];
 
@@ -62,13 +73,29 @@ export interface FrState {
   wished?: number[];
   /** picks whose card already opened by itself (counted from the first) */
   shown?: number;
+  /** golden spikes driven before this island's (0 on Ashford Isle) */
+  stage?: number;
+  /** the island this spike stands on (undefined: Ashford Isle) */
+  isle?: number;
+  /** islands whose spike was driven */
+  isles?: number[];
+  /** squares of the spikes already driven */
+  spikes?: number[];
+  /** game time this island's frontier opened */
+  t0?: number;
+  /** ⚓ free docks left (the reward for a spike: one on your coast, one landing on the next island) */
+  freeDocks?: number;
+  /** the next island's first card was shown */
+  sailed?: boolean;
 }
 
 export const fr = (g: Game): FrState | undefined => (g.s as { fr?: FrState }).fr;
 export const START_SUP = 30;
 /** a depot pile holds this many supplies (+60 for each 🏗 Supply Depot): past it, trains stop hauling wood and stone there */
 export const SUP_CAP = 120;
-export const supCap = (g: Game) => SUP_CAP + 60 * perkCount(g, 'depot');
+export const supCap = (g: Game) => SUP_CAP + 60 * perkCount(g, 'depot') + 20 * perkCount(g, 'foreman');
+/** 🚂 Engine Works: trains' top speed multiplier */
+export const frSpeed = (g: Game) => 1 + 0.15 * perkCount(g, 'engine');
 /** 🪓 the no-fail way to get supplies: Ashford's crew cuts them for money, dearer each time (a fallback, not a shop) */
 export const BUY_SUP = { n: 5, price: 500 };
 export const buyPrice = (g: Game) => BUY_SUP.price * Math.min(4, 1 + (fr(g)?.bought ?? 0));
@@ -91,7 +118,7 @@ export function squareSup(g: Game, i: number, money: number): number {
   let c: number;
   if (t === T.Mountain) c = SUP.tunnel;
   else if (t === T.Water) c = money >= 3500 ? SUP.bridge[3]! : money >= 1500 ? SUP.bridge[2]! : SUP.bridge[1]!;
-  else c = t === T.Hills ? SUP.hills : SUP.flat;
+  else c = t === T.Hills && !hasPerk(g, 'mason') ? SUP.hills : SUP.flat;
   if (t === T.Water && hasPerk(g, 'bridge')) c = Math.ceil(c / 2);
   return c;
 }
@@ -104,8 +131,8 @@ export const PER_SUP = 2;
 /** Turn delivered wood and stone into supplies; returns how many supplies they made. */
 export function addSupplies(g: Game, n: number): number {
   const f = fr(g); if (!f) return 0;
-  const u = (f.units ?? 0) + n, got = Math.min(Math.floor(u / PER_SUP), Math.max(0, supCap(g) - f.sup));
-  f.sup += got; f.units = u % PER_SUP; f.earned = (f.earned ?? 0) + got; return got;
+  const u = (f.units ?? 0) + n * (1 + 0.25 * perkCount(g, 'timber')), got = Math.min(Math.floor(u / PER_SUP), Math.max(0, supCap(g) - f.sup));
+  f.sup += got; f.units = u - got * PER_SUP; if (f.units >= PER_SUP) f.units = u % PER_SUP; f.earned = (f.earned ?? 0) + got; return got;
 }
 
 export function buySupplies(g: Game): string {
@@ -120,9 +147,9 @@ export function buySupplies(g: Game): string {
 
 const D4 = [[1, 0], [0, 1], [-1, 0], [0, -1]] as const;
 
-/** Land squares of the home island by walking distance from Ashford (water blocks, mountains don't). */
-function landDist(g: Game): Int32Array {
-  const w = g.world, n = w.n, out = new Int32Array(n * n).fill(-1), a = g.s.sites[0]!, q = [a.y * n + a.x];
+/** Land squares by walking distance from a start square (Ashford by default): water and mountains block. */
+function landDist(g: Game, from?: number): Int32Array {
+  const w = g.world, n = w.n, out = new Int32Array(n * n).fill(-1), a = g.s.sites[0]!, q = [from ?? a.y * n + a.x];
   out[q[0]!] = 0;
   for (let h = 0; h < q.length; h++) {
     const i = q[h]!, x = i % n, y = (i / n) | 0;
@@ -133,14 +160,25 @@ function landDist(g: Game): Int32Array {
 
 /** Make the frontier: the golden spike on the far coast, a mountain ridge with one pass, a sea inlet. */
 export function setupFrontier(g: Game) {
-  const w = g.world, n = w.n, a = g.s.sites[0]!, d = landDist(g);
+  const a = g.s.sites[0]!, { spike, pieces } = carve(g, a.x, a.y, 11, 0);
+  plotsToTowns(g, g.world.home);
+  (g.s as { fr?: FrState }).fr = { sup: START_SUP, spike, pieces, seen: [], perks: [], wishes: [], picks: [], granted: 0, laid: 0, used: 0, stage: 0 };
+  g.s.tut = undefined; // the frontier has its own first card instead of the lessons
+}
+
+/**
+ * Carve one island's frontier from a start square (Ashford, or the landing shore of a later island): the spike on the
+ * farthest roomy square, a ridge with a pass at 45% of the way, an inlet at 75%. `clear`: squares kept free round the start.
+ */
+function carve(g: Game, ox: number, oy: number, clear: number, nth: number): { spike: number; pieces: Piece[] } {
+  const w = g.world, n = w.n, a = { x: ox, y: oy }, d = landDist(g, oy * n + ox);
   let spike = a.y * n + a.x, far = 0;
   // the farthest square with open land round it (not the tip of a one-square spit)
   const roomy = (i: number) => [1, -1, n, -n, n + 1, n - 1, -n + 1, -n - 1].filter(o => d[i + o]! >= 0).length >= 6;
   for (let i = 0; i < n * n; i++) if (d[i]! > far && roomy(i)) { far = d[i]!; spike = i; }
   const sx = spike % n, sy = (spike / n) | 0, len = Math.hypot(sx - a.x, sy - a.y) || 1;
   const ux = (sx - a.x) / len, uy = (sy - a.y) / len, px = -uy, py = ux; // along and across the way to the spike
-  const keep = (x: number, y: number) => Math.hypot(x - a.x, y - a.y) < 11 || Math.hypot(x - sx, y - sy) < 4
+  const keep = (x: number, y: number) => Math.hypot(x - a.x, y - a.y) < clear || Math.hypot(x - sx, y - sy) < 4
     || g.s.sites.some(s => Math.abs(s.x - x) <= 2 && Math.abs(s.y - y) <= 2);
   const land = (x: number, y: number) => x > 1 && y > 1 && x < n - 2 && y < n - 2 && w.terr[y * n + x]! > 0;
   const edits = g.s.terrainEdits, pieces: Piece[] = [];
@@ -162,32 +200,82 @@ export function setupFrontier(g: Game) {
         if (land(x, y) && !keep(x, y)) set(x, y, T.Mountain);
       }
     }
-    pieces.push({ kind: 'ridge', name: RIDGES[(g.s.seed >>> 0) % RIDGES.length]!, x: Math.round(rx), y: Math.round(ry), px: Math.round(rx + px * side * passAt), py: Math.round(ry + py * side * passAt) });
+    pieces.push({ kind: 'ridge', name: RIDGES[((g.s.seed >>> 0) + nth) % RIDGES.length]!, x: Math.round(rx), y: Math.round(ry), px: Math.round(rx + px * side * passAt), py: Math.round(ry + py * side * passAt) });
   }
 
   // 🌊 the inlet, 75% of the way: sea cutting in from the nearer coast, two squares wide, halfway across
   const ixf = 0.75, ix = a.x + ux * len * ixf, iy = a.y + uy * len * ixf;
   const reach = (s: 1 | -1) => { let k = 0; while (k < 60 && land(Math.round(ix + px * s * (k + 1)), Math.round(iy + py * s * (k + 1)))) k++; return k; };
   const R1 = reach(1), R2 = reach(-1), from: 1 | -1 = R1 <= R2 ? 1 : -1, wide = R1 + R2;
-  if (wide > 8) {
+  if (wide > 8 && nth === 0) { // later islands get no inlet: cutting land could split an island and renumber the islands
     const coast = from === 1 ? R1 : R2, depth = Math.round(wide * 0.6);
     for (let k = coast; k >= coast - depth; k--) for (const o of [0, 1]) {
       const x = Math.round(ix + px * from * k + ux * o), y = Math.round(iy + py * from * k + uy * o);
       if (land(x, y) && !keep(x, y)) set(x, y, T.Water);
     }
-    pieces.push({ kind: 'inlet', name: INLETS[(g.s.seed >>> 3) % INLETS.length]!, x: Math.round(ix + px * from * (coast - depth / 2)), y: Math.round(iy + py * from * (coast - depth / 2)) });
+    pieces.push({ kind: 'inlet', name: INLETS[((g.s.seed >>> 3) + nth) % INLETS.length]!, x: Math.round(ix + px * from * (coast - depth / 2)), y: Math.round(iy + py * from * (coast - depth / 2)) });
   }
   refreshWater(w); refreshIslands(w);
   // the spike must stay reachable without a tunnel (round the ridge by its pass, round the inlet by its head):
   // if the carving shut the way, take the inlet back out, then widen the pass, then drop the ridge
-  const open = () => { const dd = landDist(g); return dd[spike]! >= 0 && w.islandOf[spike] === w.islandOf[a.y * n + a.x]; };
+  const open = () => { const dd = landDist(g, a.y * n + a.x); return dd[spike]! >= 0 && w.islandOf[spike] === w.islandOf[a.y * n + a.x]; };
   if (!open()) { undo('inlet'); const k = pieces.findIndex(p => p.kind === 'inlet'); if (k >= 0) pieces.splice(k, 1); refreshWater(w); refreshIslands(w); }
   const rg = pieces.find(p => p.kind === 'ridge');
   if (!open() && rg?.px !== undefined) { undo('ridge', i => Math.hypot(i % n - rg.px!, ((i / n) | 0) - rg.py!) > 4); refreshWater(w); refreshIslands(w); }
   if (!open()) { undo('ridge'); const k = pieces.findIndex(p => p.kind === 'ridge'); if (k >= 0) pieces.splice(k, 1); refreshWater(w); refreshIslands(w); }
-  // sites that ended up on a mountain (a deposit at the foot is fine) stay where they were
-  (g.s as { fr?: FrState }).fr = { sup: START_SUP, spike, pieces, seen: [], perks: [], wishes: [], picks: [], granted: 0, laid: 0, used: 0 };
-  g.s.tut = undefined; // the frontier has its own first card instead of the lessons
+  return { spike, pieces };
+}
+
+// ---------------------------------------------------------------- the next island
+
+/** On a frontier island every settlement site is a town waiting for the railway: more towns, more wishes. */
+function plotsToTowns(g: Game, isl: number) {
+  const n = g.world.n;
+  for (const s of g.s.sites) if (s.kind === 'plot' && g.world.islandOf[s.y * n + s.x] === isl) Object.assign(s, { kind: 'town', pop: 0, lvl: 0, got: {} });
+}
+
+/** Supplies a new island's frontier brings (a fresh start for its railhead). */
+export const ISLE_SUP = 30;
+
+/** The next island to open after a spike: the nearest named island of fair size not yet done, by straight line from the spike. */
+export function nextIsle(g: Game): number | undefined {
+  const f = fr(g); if (!f) return;
+  const w = g.world, n = w.n, sx = f.spike % n, sy = (f.spike / n) | 0, done = new Set([w.home, ...(f.isles ?? []), ...(f.isle !== undefined ? [f.isle] : [])]);
+  let best: number | undefined, bd = Infinity;
+  w.islands.forEach((isl, k) => {
+    if (done.has(k) || !isl.name || isl.size < 120) return;
+    const d = Math.hypot(isl.cx - sx, isl.cy - sy); if (d < bd) { bd = d; best = k; }
+  });
+  return best;
+}
+
+/** After a spike: open the next island's frontier (its own spike, ridge and inlet) and give two free docks to reach it. */
+export function sailOn(g: Game): string {
+  const f = fr(g); if (!f) return '';
+  if (f.done === undefined) return 'Drive this golden spike first';
+  const k = nextIsle(g); if (k === undefined) return 'No more islands to open in this preview';
+  const w = g.world, n = w.n, sx = f.spike % n, sy = (f.spike / n) | 0;
+  // land where the island is nearest the last spike: that shore is the start of its railhead
+  let o = -1, od = Infinity;
+  for (let i = 0; i < n * n; i++) if (w.islandOf[i] === k && w.terr[i] !== T.Mountain) { const d = Math.hypot(i % n - sx, ((i / n) | 0) - sy); if (d < od) { od = d; o = i; } }
+  if (o < 0) return 'No shore to land on';
+  (f.isles ??= []).push(f.isle ?? w.home); (f.spikes ??= []).push(f.spike);
+  const { spike, pieces } = carve(g, o % n, (o / n) | 0, 5, (f.stage ?? 0) + 1);
+  plotsToTowns(g, k);
+  f.isle = k; f.stage = (f.stage ?? 0) + 1; f.spike = spike; f.pieces.push(...pieces);
+  f.done = undefined; f.fin = false; f.sailed = false; f.t0 = g.s.t; f.freeDocks = 2;
+  f.sup = Math.min(supCap(g), f.sup + ISLE_SUP);
+  reveal(g, o % n, (o / n) | 0, 4); // the landing shore shows, so the player sees where to land
+  return '';
+}
+
+/** The ⚓ steps to reach the island the spike stands on, while the railway hasn't landed there yet ('' once it has). */
+export function sailStep(g: Game, linkedDockIsles: Set<number>): string {
+  const f = fr(g); if (!f || f.isle === undefined || linkedDockIsles.has(f.isle)) return '';
+  const w = g.world, name = w.islands[f.isle]?.name ?? 'the island', from = f.isles?.at(-1) ?? w.home;
+  const free = (f.freeDocks ?? 0) > 0 ? 'free ' : '';
+  if (!linkedDockIsles.has(from)) return `Build a ${free}⚓ Dock facing ${name}`;
+  return `Land a ${free}⚓ Dock on ${name}`;
 }
 
 const RIDGES = ['Greyspine Ridge', 'Old Man Ridge', 'Kestrel Crags', 'The Backbone', 'Ravenwall'];
@@ -197,7 +285,8 @@ const INLETS = ['Seal Inlet', 'Heron Sound', 'Gannet Firth', 'Saltwater Arm', 'O
 
 /** The other town nearest to this one (not Ashford when there is any other). */
 function neighbour(g: Game, t: Site): Site | undefined {
-  const others = g.s.sites.filter(s => s.kind === 'town' && s !== t && g.world.islandOf[s.y * g.world.n + s.x] === g.world.home);
+  const n = g.world.n, isl = g.world.islandOf[t.y * n + t.x];
+  const others = g.s.sites.filter(s => s.kind === 'town' && s !== t && g.world.islandOf[s.y * n + s.x] === isl);
   const linkedOnes = new Set(others.filter(s => townLinked(g, s)).map(s => s.id));
   return others.filter(s => !linkedOnes.has(s.id)).sort((p, q) => Math.hypot(p.x - t.x, p.y - t.y) - Math.hypot(q.x - t.x, q.y - t.y))[0];
 }
@@ -231,11 +320,13 @@ export function townGrew(g: Game, t: Site) { const f = fr(g); if (f) { f.picks.p
 /** The three buildings offered to a town for this pick (seeded, never one it already has, Tunnel Guild once). */
 export function choices(g: Game, t: Site): PerkKind[] {
   const f = fr(g)!, nth = f.granted, have = new Set(f.perks.filter(p => p.town === t.id).map(p => p.k));
-  const ok = KINDS.filter(k => !have.has(k) && !(k === 'tunnel' && (hasPerk(g, 'tunnel') || f.granted < 2)) && !(k === 'bridge' && hasPerk(g, 'bridge')) && !(k === 'depot' && t === g.s.sites[0]));
+  const once: PerkKind[] = ['tunnel', 'bridge', 'mason', 'school', 'surveyor', 'post'];
+  const ok = KINDS.filter(k => !have.has(k) && !(once.includes(k) && hasPerk(g, k)) && !(k === 'tunnel' && f.granted < 2) && !(k === 'depot' && t === g.s.sites[0])
+    && !(k === 'surveyor' && f.done !== undefined) && !(k === 'well' && f.picks.length > 1));
   // before the first tunnel, a town at the ridge always offers the Tunnel Guild so the ridge is never a dead end
   const ranked = ok.map(k => ({ k, r: hash(g.s.seed, t.id, nth, 77 + KINDS.indexOf(k)) })).sort((p, q) => p.r - q.r).map(p => p.k);
-  const out = ranked.slice(0, 3);
-  if (ok.includes('tunnel') && !out.includes('tunnel') && f.granted >= 3) out[2] = 'tunnel';
+  const m = hasPerk(g, 'school') ? 4 : 3, out = ranked.slice(0, m);
+  if (ok.includes('tunnel') && !out.includes('tunnel') && f.granted >= 3) out[m - 1] = 'tunnel';
   return out;
 }
 
@@ -250,6 +341,14 @@ export function pickPerk(g: Game, townId: number, k: PerkKind): string {
   const spot = parkSpot(g, t);
   if (spot) (g.s.parks ??= []).push({ town: t.id, ...spot, k: PERKS[k].art, fp: k } as never);
   if (k === 'lookout') reveal(g, t.x, t.y, 14);
+  if (k === 'foreman') f.sup += 25;
+  if (k === 'well') { f.picks.unshift(t.id); f.granted++; }
+  if (k === 'harbour') f.freeDocks = (f.freeDocks ?? 0) + 1;
+  if (k === 'surveyor') { // a strip 3 wide from the town to the spike
+    const n = g.world.n, sx = f.spike % n, sy = (f.spike / n) | 0, L = Math.ceil(Math.hypot(sx - t.x, sy - t.y));
+    for (let s = 0; s <= L; s += 2) reveal(g, Math.round(t.x + (sx - t.x) * s / L), Math.round(t.y + (sy - t.y) * s / L), 3);
+  }
+  if (k === 'post') { const n = g.world.n, isl = g.world.islandOf[t.y * n + t.x]; for (const s of g.s.sites) if (s.kind === 'town' && g.world.islandOf[s.y * n + s.x] === isl) reveal(g, s.x, s.y, 4); }
   // the town grows a little with every building
   t.pop = (t.pop ?? 0) + 10;
   return '';

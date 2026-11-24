@@ -13,7 +13,7 @@ import { tickScouts } from '../world/explore.ts';
 import { tickSweeps } from '../world/landfall.ts';
 import { boomMul, tickBooms } from '../world/booms.ts';
 import { reachedIslands, tickMissions } from '../progress/missions.ts';
-import { fr, PER_SUP, tickFrontier } from '../frontier/frontier.ts';
+import { fr, frSpeed, PER_SUP, tickFrontier } from '../frontier/frontier.ts';
 import { capOf, expressMul, fleetIsl, fleetMulOf, FLEET, minLoad, rushDelivered } from './upgrades.ts';
 import { V_MAX } from '../trains/train.ts';
 import { isRev } from '../track/route.ts';
@@ -457,7 +457,7 @@ export function tickTrains(g: Game, dt: number) {
   const P = () => (plan ??= shipPlan(g));
   const fm = fleetMul(g.s.trains.length);
   // each island has its own engines: vmax is the fastest, slower islands' trains run at their share of it (speedOf)
-  g.sys.vmax = V_MAX * topEng(g) * expressMul(g);
+  g.sys.vmax = V_MAX * topEng(g) * expressMul(g) * frSpeed(g); // 🧭 Engine Works
   // bridges cost a little to keep up, every minute, like trains on the move (counted with running costs); never while
   // money is below zero, so bridges alone can't push a railway further into the red (no-fail)
   const br = g.s.money > 0 ? bridgeSquares(g) * BRIDGE_UPKEEP / 60 * dt : 0;

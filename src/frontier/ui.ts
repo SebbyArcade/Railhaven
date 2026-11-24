@@ -1,10 +1,11 @@
 import type { Game, Site } from '../state.ts';
-import { BUY_SUP, buyPrice, choices, PER_SUP, SUP, supCap, supFull, fr, PERKS, type Piece, spikeGap, wishOf } from './frontier.ts';
+import { BUY_SUP, buyPrice, choices, ISLE_SUP, nextIsle, PER_SUP, sailStep, SUP, supCap, supFull, fr, PERKS, type Piece, spikeGap, wishOf } from './frontier.ts';
 /** below this many supplies the 🪓 backup purchase shows */
 const LOW_SUP = 10;
 import { townLinked } from '../economy/towns.ts';
 import { isRevealed } from '../world/fog.ts';
 import { isLinked } from '../buildings/industries.ts';
+import { islandOfB, linkedDocks } from '../ships/docks.ts';
 
 const esc = (s: string) => s.replace(/[&<>"]/g, c => `&#${c.charCodeAt(0)};`);
 const bar = (f: number, col: string) => `<div class="bar"><i style="width:${Math.round(Math.min(1, Math.max(0, f)) * 100)}%;background:${col}"></i></div>`;
@@ -14,11 +15,18 @@ const look = (x: number, y: number, label = '📍 Show') => `<button class="mini
 /** The goal pill under the top bar: supplies and how far the golden spike is. */
 export function frPill(g: Game): string {
   const f = fr(g)!;
-  if (f.done !== undefined) return `<span class="mtext">🏁 Golden spike driven! <b>Tap for your island</b></span>`;
+  if (f.done !== undefined) return `<span class="mtext">🏁 Golden spike driven! ${nextIsle(g) !== undefined ? '<b>Tap to sail on ⛵</b>' : '<b>Tap for your railway</b>'}</span>`;
   const pick = f.picks.length ? ` · ✨ <b>Pick a building</b>` : '';
   const step = firstStep(g);
   if (step && !pick) return `<span class="mtext">🛤 <b>${f.sup}</b> · 👉 ${step}</span>`;
-  return `<span class="mtext">🛤 <b>${f.sup}</b> supplies · 🏁 ${spikeGap(g)} squares to the golden spike${pick}</span>`;
+  return `<span class="mtext">🛤 <b>${f.sup}</b> supplies · 🏁 ${spikeGap(g)} squares to the ${isleName(g)} spike${pick}</span>`;
+}
+
+/** The island the current spike stands on. */
+export const isleName = (g: Game) => { const f = fr(g)!; return f.isle === undefined ? 'Ashford Isle' : g.world.islands[f.isle]?.name ?? 'island'; };
+/** Docks joined to the railway: the islands they stand on, and whether one is on Ashford Isle. */
+function dockIsles(g: Game) {
+  return new Set(linkedDocks(g).map(b => islandOfB(g, b)));
 }
 
 /** The first steps, while the supply line isn't running yet (the lessons are off in the frontier). */
@@ -27,7 +35,7 @@ export function firstStep(g: Game): string {
   if (!camp) return (g.s.buildings ?? []).some(b => b.kind === 'wood' || b.kind === 'stone') ? 'Rail your camp to Ashford' : 'Build a 🪵 Lumber Camp by a forest';
   if (!g.s.trains.length) return 'Buy a 🚂 Train to haul the wood';
   if (!fr(g)!.earned) return `Your train brings 🪵 to Ashford: ${PER_SUP} 🪵 = 1 🛤`;
-  return '';
+  return sailStep(g, dockIsles(g));
 }
 
 /** Start distance to the spike, for the progress bar. */
@@ -58,11 +66,20 @@ export function frStoryHtml(g: Game, page?: string): string {
     return pieceCard(p) + `<button class="act" data-act="close">👍 Got it</button>`;
   }
   if (page === 'spike') {
-    const mins = Math.round((f.done ?? g.s.t) / 60), towns = g.s.sites.filter(s => s.kind === 'town' && townLinked(g, s)).length;
+    const nx = nextIsle(g), mins = Math.round(((f.done ?? g.s.t) - (f.t0 ?? 0)) / 60), towns = g.s.sites.filter(s => s.kind === 'town' && townLinked(g, s)).length;
     return `<div class="actcard"><div class="aic">🏁</div><small class="cap">THE GOLDEN SPIKE</small><h2>Coast to coast!</h2><p>The last spike is driven on the far shore. The whole island turned out to watch.</p></div>`
       + `<div class="chips"><span class="chip2 ok">⏱ ${mins} min</span><span class="chip2 ok">🛤 ${f.laid} squares laid</span><span class="chip2 ok">🏘 ${towns} towns linked</span><span class="chip2 ok">✨ ${f.granted} wishes granted</span><span class="chip2 ok">🏗 ${f.perks.length} buildings</span></div>`
-      + `<div class="note">This is the end of the preview island. In the full game the next island's far beacon would light up across the sea. Keep playing if you like: your towns keep growing.</div>`
-      + `<button class="act" data-act="close">🎉 Wonderful</button>`;
+      + (nx !== undefined
+        ? `<div class="row main"><b class="ico">⛵</b><div class="grow"><b>Next: ${esc(g.world.islands[nx]?.name ?? 'a new island')}</b><small>A new golden spike lights up across the sea. You get <b>2 free ⚓ Docks</b> (one on your coast, one to land there) and 🛤 ${ISLE_SUP} supplies.</small></div></div>`
+          + `<button class="act" data-act="frsail">⛵ Sail on</button><button class="act alt" data-act="close">Stay a while</button>`
+        : `<div class="note">That's every island in this preview. Keep playing if you like: your towns keep growing.</div><button class="act" data-act="close">🎉 Wonderful</button>`);
+  }
+  if (page === 'isle') {
+    return `<div class="actcard"><div class="aic">⛵</div><small class="cap">A NEW FRONTIER · ISLAND ${(f.stage ?? 0) + 1}</small><h2>${esc(isleName(g))}</h2><p>Its golden spike glows on the far side. Get your railway across the sea and out to it.</p></div>`
+      + `<div class="row"><b class="ico">⚓</b><div class="grow"><b>1. Build a Dock on your coast</b><small>Free. On ${esc(f.isles?.length && f.isles.at(-1) !== g.world.home ? g.world.islands[f.isles.at(-1)!]?.name ?? 'your island' : 'Ashford Isle')}, facing ${esc(isleName(g))}, joined to your railway.</small></div></div>`
+      + `<div class="row"><b class="ico">⚓</b><div class="grow"><b>2. Land a Dock on ${esc(isleName(g))}</b><small>Free too. Your track there starts from it.</small></div></div>`
+      + `<div class="row"><b class="ico">🛤</b><div class="grow"><b>3. Rail to the spike</b><small>Supplies still come from wood and stone at Ashford (or any 🏗 Supply Depot). Towns there make new wishes.</small></div></div>`
+      + `<div class="pair"><button class="act alt" data-act="frshow">🏁 Show me</button><button class="act" data-act="close">🚂 Let's go</button></div>`;
   }
   // the main card
   const gap = spikeGap(g); if (!startGap.has(f)) startGap.set(f, Math.max(gap, 1));

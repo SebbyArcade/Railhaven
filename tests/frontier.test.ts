@@ -91,3 +91,49 @@ describe('🧭 Frontier first steps', () => {
     expect(firstStep(g)).toMatch(/Lumber Camp/);
   });
 });
+
+describe('🧭 Frontier: more islands and more buildings', () => {
+  it('settlement sites on Ashford Isle are towns waiting for the railway', () => {
+    const g = frontier(), n = g.world.n;
+    expect(g.s.sites.filter(s => s.kind === 'plot' && g.world.islandOf[s.y * n + s.x] === g.world.home)).toHaveLength(0);
+    expect(g.s.sites.filter(s => s.kind === 'town' && g.world.islandOf[s.y * n + s.x] === g.world.home).length).toBeGreaterThanOrEqual(8);
+  });
+
+  it('a driven spike opens the next island with its own spike and two free docks', async () => {
+    const { sailOn, nextIsle } = await import('../src/frontier/frontier.ts');
+    const { priceOf, lockedText } = await import('../src/buildings/industries.ts');
+    const g = frontier(8), f = fr(g)!, old = f.spike;
+    expect(sailOn(g)).toMatch(/first/);
+    f.done = g.s.t; const k = nextIsle(g)!;
+    expect(k).toBeDefined();
+    const sup = f.sup;
+    expect(sailOn(g)).toBe('');
+    expect(f.isle).toBe(k); expect(f.stage).toBe(1); expect(f.done).toBeUndefined();
+    expect(f.spike).not.toBe(old); expect(g.world.islandOf[f.spike]).toBe(k);
+    expect(f.sup).toBeGreaterThan(sup);
+    expect(priceOf(g, 'dock')).toBe(0); expect(lockedText(g, 'dock')).toBe('');
+    expect(nextIsle(g)).not.toBe(k);
+  });
+
+  it('picks come from a wide, varied set: well picks again, school offers four', () => {
+    const g = frontier(), f = fr(g)!, t = g.s.sites.find(s => s.kind === 'town' && s !== g.s.sites[0])!;
+    const seen = new Set<string>();
+    for (let k = 0; k < 40; k++) { f.granted = k; for (const c of choices(g, t)) seen.add(c); }
+    expect(seen.size).toBeGreaterThanOrEqual(12);
+    f.granted = 5; f.picks = [t.id];
+    expect(pickPerk(g, t.id, 'well' as never) === '' || !choices(g, t).includes('well' as never)).toBe(true);
+    f.perks.push({ town: t.id, k: 'school' as never });
+    f.picks = [t.id]; expect(choices(g, t)).toHaveLength(4);
+  });
+
+  it('Timber Yard makes more supplies; Stonemasons make hills cost like flat land', async () => {
+    const { addSupplies, squareSup } = await import('../src/frontier/frontier.ts');
+    const g = frontier(), f = fr(g)!, n = g.world.n;
+    f.sup = 0; f.units = 0; addSupplies(g, 20); const plain = f.sup;
+    f.perks.push({ town: 0, k: 'timber' as never }); f.sup = 0; f.units = 0; addSupplies(g, 20);
+    expect(f.sup).toBeGreaterThan(plain);
+    let hill = -1; for (let i = 0; i < n * n; i++) if (g.world.terr[i] === T.Hills) { hill = i; break; }
+    expect(squareSup(g, hill, 100)).toBe(2);
+    f.perks.push({ town: 0, k: 'mason' as never }); expect(squareSup(g, hill, 100)).toBe(1);
+  });
+});
