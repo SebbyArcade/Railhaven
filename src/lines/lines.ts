@@ -142,7 +142,7 @@ function rate(g: Game, a: Site, b: Site): number {
   const from = 1 + 0.3 * count(g, 'market', a) + 0.25 * count(g, 'street', a) + 0.15 * count(g, 'tram', a);
   const to = 1 + 0.4 * count(g, 'hotel', b) + 0.3 * count(g, 'theatre', b) + 0.1 * count(g, 'park', b) + 0.15 * count(g, 'tram', b);
   const capital = (a === g.s.sites[0] ? 1.5 : 1) * (b === g.s.sites[0] ? 1.5 : 1);
-  return 6 * (1 + 0.5 * La) * (1 + 0.5 * Lb) * from * to * capital;
+  return 4 * (1 + 0.5 * La) * (1 + 0.5 * Lb) * from * to * capital;
 }
 /** travellers waiting the moment two cities are first linked (so the first train has work at once), and the smallest group a train sets off for */
 export const FIRST_CROWD = 15, MIN_GROUP = 6;
