@@ -25,7 +25,7 @@ export interface Poi { id: number; kind: PoiKind; x: number; y: number; seen?: b
 export const POI: Record<PoiKind, { icon: string; name: string; perk: string }> = {
   ruins: { icon: '🏛', name: 'Old ruins', perk: 'buildings with any part within 6 squares make 10% more' },
   lighthouse: { icon: '🗼', name: 'Lighthouse', perk: 'ships within 10 squares sail 20% faster' },
-  lookout: { icon: '⛰', name: 'Lookout hill', perk: 'uncovers the land 10 squares around' },
+  lookout: { icon: '⛰', name: 'Lookout hill', perk: 'uncovers the land 10 squares around, and the coast and towns of the nearest island across the sea' },
   wreck: { icon: '⚓', name: 'Shipwreck', perk: 'a ship or scout boat passing by salvages it' },
   halt: { icon: '🏚', name: 'Old halt', perk: 'its old rails and fittings are salvaged: +$2,000' },
   falls: { icon: '💧', name: 'Silver Falls', perk: 'tourists come: town orders within 12 squares pay 10% bigger rewards' },
@@ -33,7 +33,7 @@ export const POI: Record<PoiKind, { icon: string; name: string; perk: string }> 
   mill: { icon: '🌾', name: 'Old windmill', perk: 'wheat farms with any part within 8 squares make 10% more' },
   // frontier finds: only on islands across the sea
   shaft: { icon: '⛏', name: 'Old mine shaft', perk: 'mines and quarries with any part within 8 squares make 10% more' },
-  camp: { icon: '🏕', name: "Explorer's camp", perk: "the explorer's notes mark everything still hidden on this island with a ?" },
+  camp: { icon: '🏕', name: "Explorer's camp", perk: "the explorer's notes mark everything still hidden on this island with a ?, and chart the coasts and towns of the 2 nearest islands" },
 };
 /** Landmarks found only on islands across the sea. */
 export const FRONTIER: PoiKind[] = ['shaft', 'camp'];
@@ -183,11 +183,28 @@ export function checkPois(g: Game) {
     for (let dy = -CLAIM_R; dy <= CLAIM_R && !near; dy++) for (let dx = -CLAIM_R; dx <= CLAIM_R && !near; dx++) if (g.linked?.has((p.y + dy) * n + p.x + dx)) near = true;
     if (!near) continue;
     p.got = true;
-    if (p.kind === 'lookout') reveal(g, p.x, p.y, LOOKOUT_R);
+    if (p.kind === 'lookout') { reveal(g, p.x, p.y, LOOKOUT_R); chartIslands(g, p.x, p.y, 1); }
     if (p.kind === 'halt') { g.s.money += HALT_PAY; g.s.earned = (g.s.earned ?? 0) + HALT_PAY; }
-    if (p.kind === 'camp') reveal(g, p.x, p.y, CAMP_R);
+    if (p.kind === 'camp') { reveal(g, p.x, p.y, CAMP_R); chartIslands(g, p.x, p.y, 2); }
     news(g, `${POI[p.kind].icon} ${POI[p.kind].name} is yours: ${POI[p.kind].perk}${poiGift(g, p.kind, p.x, p.y)}`, { kind: 'sq', x: p.x, y: p.y });
   }
+}
+
+/**
+ * 🗺 A camp's notes or a lookout's view across the sea (Sébastien, 2026-11-24: since landing crews map a whole island,
+ * camps and lookouts did little): the coasts and towns of the nearest islands not yet reached come out of the fog,
+ * so they point the way to the next crossing.
+ */
+export function chartIslands(g: Game, x: number, y: number, count: number) {
+  const w = g.world, n = w.n, here = w.islandOf[y * n + x];
+  const near = w.islands.map((isl, k) => ({ k, isl })).filter(o => o.k !== here && o.k !== w.home && o.isl.name)
+    .sort((a, b) => Math.hypot(a.isl.cx - x, a.isl.cy - y) - Math.hypot(b.isl.cx - x, b.isl.cy - y)).slice(0, count);
+  const ks = new Set(near.map(o => o.k));
+  for (let i = 0; i < n * n; i++) {
+    if (!ks.has(w.islandOf[i]!)) continue;
+    if ([i + 1, i - 1, i + n, i - n].some(j => w.terr[j] === T.Water)) reveal(g, i % n, (i / n) | 0, 1);
+  }
+  for (const s of g.s.sites) if (s.kind === 'town' && ks.has(w.islandOf[s.y * n + s.x]!)) reveal(g, s.x, s.y, 3);
 }
 
 /** Salvage a wreck within a square of (x, y), once. Returns the money found (0 if none). */

@@ -170,3 +170,15 @@ describe('🧭 Frontier landmarks', () => {
     expect(poiGift(newGame(3), 'camp', 1, 1)).toBe('');
   });
 });
+
+describe('🗺 Camps and lookouts chart the islands across the sea (main game too)', () => {
+  it('charts the coast and towns of the nearest islands', async () => {
+    const { chartIslands } = await import('../src/world/explore.ts');
+    const { isRevealed } = await import('../src/world/fog.ts');
+    const g = newGame(3), w = g.world, n = w.n, a = g.s.sites[0]!;
+    const k = w.islands.map((isl, i) => ({ i, isl })).filter(o => o.i !== w.home && o.isl.name).sort((p, q) => Math.hypot(p.isl.cx - a.x, p.isl.cy - a.y) - Math.hypot(q.isl.cx - a.x, q.isl.cy - a.y))[0]!.i;
+    const coast = [...Array(n * n).keys()].filter(i => w.islandOf[i] === k && [i + 1, i - 1, i + n, i - n].some(j => w.terr[j] === T.Water));
+    chartIslands(g, a.x, a.y, 1);
+    expect(coast.every(i => isRevealed(g, i))).toBe(true);
+  });
+});
