@@ -1,5 +1,7 @@
 import type { Game, Site } from '../state.ts';
-import { BUY_SUP, buyPrice, choices, supCap, supFull, fr, PERKS, type Piece, spikeGap, wishOf } from './frontier.ts';
+import { BUY_SUP, buyPrice, choices, PER_SUP, SUP, supCap, supFull, fr, PERKS, type Piece, spikeGap, wishOf } from './frontier.ts';
+/** below this many supplies the 🪓 backup purchase shows */
+const LOW_SUP = 10;
 import { townLinked } from '../economy/towns.ts';
 import { isRevealed } from '../world/fog.ts';
 import { isLinked } from '../buildings/industries.ts';
@@ -36,7 +38,7 @@ export function frStoryHtml(g: Game, page?: string): string {
   if (page === 'intro') {
     return `<div class="actcard"><div class="aic">🧭</div><small class="cap">FRONTIER VILLAGE · PREVIEW</small><h2>Drive the golden spike</h2>`
       + `<p>Get your track to the 🏁 <b>golden spike</b> on the far coast.</p></div>`
-      + `<div class="row"><b class="ico">🛤</b><div class="grow"><b>Track costs supplies, not money</b><small>You have ${f.sup}. Trains bring 🪵 wood and 🪨 stone to Ashford: 4 make 1 supply.</small></div></div>`
+      + `<div class="row"><b class="ico">🛤</b><div class="grow"><b>Track costs supplies, not money</b><small>You have ${f.sup}. Trains bring 🪵 wood and 🪨 stone to Ashford: every ${PER_SUP} make 1 supply, and 1 supply lays 1 square.</small></div></div>`
       + `<div class="row"><b class="ico">✨</b><div class="grow"><b>Towns make wishes</b><small>Grant one and pick 1 of 3 buildings for that town.</small></div></div>`
       + `<div class="row"><b class="ico">⛰</b><div class="grow"><b>The land fights back</b><small>${f.pieces.length === 2 ? 'A ridge and a sea inlet stand' : f.pieces.length ? `A ${f.pieces[0]!.kind === 'ridge' ? 'ridge' : 'sea inlet'} stands` : 'Hills and water stand'} in the way. Go round, or grow a town that gets you through.</small></div></div>`
       + `<div class="pair"><button class="act alt" data-act="frshow">🏁 Show me the spike</button><button class="act" data-act="close">🚂 Let's go</button></div>`;
@@ -69,7 +71,10 @@ export function frStoryHtml(g: Game, page?: string): string {
   if (step) h += `<div class="note big2">👉 First: ${step}</div>`;
   if (f.picks.length) h += `<button class="act alt" data-act="page" data-page="pick">✨ Pick a building for ${esc(town(g, f.picks[0]!)?.name ?? 'a town')} ›</button>`;
   h += `<div class="row main"><b class="ico">🏁</b><div class="grow"><div class="line"><span>Golden spike</span><span>${f.done !== undefined ? '✅ Driven' : `${gap} squares to go`}</span></div>${bar(f.done !== undefined ? 1 : 1 - gap / g0, '#ffd27a')}<small>On the far coast. Your track must reach within ${2} squares of it.</small>${look(sx, sy)}</div></div>`;
-  h += `<div class="row"><b class="ico">🛤</b><div class="grow"><div class="line"><span>Track supplies</span><span><b>${f.sup}</b> / ${supCap(g)}</span></div><small>2 a square, 3 on hills, 8-20 a bridge square, 10 a tunnel. Trains bring 🪵 wood and 🪨 stone to a 🏗 depot: 4 units make 1 supply. ${supFull(g) ? '<b>The pile is full</b>: lay track, or pick a 🏗 Supply Depot for more room.' : ''}</small><div class="btns"><button class="mini buy" data-act="frbuy" ${g.s.money >= buyPrice(g) ? '' : 'disabled'}>🪓 Buy ${BUY_SUP.n} for $${buyPrice(g).toLocaleString('en-US')}</button></div></div></div>`;
+  h += `<div class="row"><b class="ico">🛤</b><div class="grow"><div class="line"><span>Track supplies</span><span><b>${f.sup}</b> / ${supCap(g)}</span></div><small>Rails are built with supplies, not money: ${SUP.flat} a square, ${SUP.hills} on hills, ${SUP.bridge[1]}-${SUP.bridge[3]} a bridge square, ${SUP.tunnel} a tunnel.</small></div></div>`;
+  h += `<div class="row"><b class="ico">🪵</b><div class="grow"><b>Earn supplies by hauling</b><small>Trains bring 🪵 wood and 🪨 stone to a 🏗 depot (Ashford first): every ${PER_SUP} 🪵 or 🪨 make 1 supply. ${supFull(g) ? '<b>The pile is full</b>: lay track, or pick a 🏗 Supply Depot for more room.' : ''}</small></div></div>`;
+  // the 🪓 backup purchase shows only when supplies run low, so it never reads as the way to get them
+  if (f.sup < LOW_SUP) h += `<div class="row"><b class="ico">🪓</b><div class="grow"><b>Running low?</b><small>A backup so you're never stuck: Ashford's crew sells a few.</small><div class="btns"><button class="mini buy" data-act="frbuy" ${g.s.money >= buyPrice(g) ? '' : 'disabled'}>🪓 Buy ${BUY_SUP.n} for $${buyPrice(g).toLocaleString('en-US')}</button></div></div></div>`;
   const wishes = f.wishes.map(w => ({ w, t: town(g, w.town), to: w.to !== undefined ? town(g, w.to) : undefined })).filter(x => x.t && x.to);
   h += `<h3>✨ Wishes</h3>`;
   if (!wishes.length) h += `<div class="note">Link a town to your railway and it makes a wish. Growing a town (fill its order, then ⬆ Upgrade) grants one too.</div>`;
@@ -93,9 +98,9 @@ export function frStoryHtml(g: Game, page?: string): string {
 function pieceCard(p: Piece): string {
   if (p.kind === 'ridge') return `<div class="actcard"><div class="aic">⛰</div><small class="cap">AHEAD</small><h2>${esc(p.name)}</h2><p>A wall of mountains runs right across the island. There is one way through: a narrow pass near one end.</p></div>`
     + `<div class="row"><b class="ico">🥾</b><div class="grow"><b>Go round by the pass</b><small>Longer, but plain track.</small>${p.px !== undefined ? look(p.px, p.py!, '📍 Show the pass') : ''}</div></div>`
-    + `<div class="row"><b class="ico">⛰</b><div class="grow"><b>Tunnel straight through</b><small>Grant a town's wish and pick the ⛰ Tunnel Guild. Tunnels cost 10 supplies a square.</small></div></div>`;
+    + `<div class="row"><b class="ico">⛰</b><div class="grow"><b>Tunnel straight through</b><small>Grant a town's wish and pick the ⛰ Tunnel Guild. Tunnels cost ${SUP.tunnel} supplies a square.</small></div></div>`;
   return `<div class="actcard"><div class="aic">🌊</div><small class="cap">AHEAD</small><h2>${esc(p.name)}</h2><p>The sea cuts deep into the land here. Your line can bridge it or run round its head.</p></div>`
-    + `<div class="row"><b class="ico">🌉</b><div class="grow"><b>Bridge it</b><small>Short and costly: 8 supplies a square near the shore. 🌉 Bridge Works halves that.</small></div></div>`
+    + `<div class="row"><b class="ico">🌉</b><div class="grow"><b>Bridge it</b><small>Short and costly: ${SUP.bridge[1]} supplies a square near the shore. 🌉 Bridge Works halves that.</small></div></div>`
     + `<div class="row"><b class="ico">🛤</b><div class="grow"><b>Go round its head</b><small>Plain track, but a long way.</small>${look(p.x, p.y, '📍 Show the inlet')}</div></div>`;
 }
 

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { newGame } from '../src/game.ts';
 import { buildPlan, extendPlan, planCost, planError, planSupplies, startPlan, undoStroke } from '../src/track/paint.ts';
-import { choices, fr, pickPerk, setupFrontier, spikeGap, tickFrontier, townGrew, BUY_SUP, buySupplies, START_SUP } from '../src/frontier/frontier.ts';
+import { choices, fr, pickPerk, setupFrontier, spikeGap, tickFrontier, townGrew, BUY_SUP, buySupplies, PER_SUP, START_SUP } from '../src/frontier/frontier.ts';
 import { deliverToTown, steadyGoods, townRoom } from '../src/economy/towns.ts';
 import { squareCost } from '../src/track/rules.ts';
 import { T } from '../src/world/terrain.ts';
@@ -48,7 +48,7 @@ describe('🧭 Frontier Village preview', () => {
     expect(steadyGoods(a, g)).toEqual(expect.arrayContaining(['wood', 'stone']));
     expect(townRoom(g, a, 'wood').steady).toBeGreaterThan(100);
     const before = fr(g)!.sup, r = deliverToTown(g, a, 'stone', 20);
-    expect(fr(g)!.sup - before).toBe(Math.floor((20 - r.order) / 4));
+    expect(fr(g)!.sup - before).toBe(Math.floor((20 - r.order) / PER_SUP));
   });
 
   it('mountains need the Tunnel Guild; a grown town picks one of three buildings', () => {

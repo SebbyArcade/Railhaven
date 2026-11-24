@@ -71,7 +71,7 @@ export const supCap = (g: Game) => SUP_CAP + 60 * perkCount(g, 'depot');
 export const BUY_SUP = { n: 5, price: 500 };
 export const buyPrice = (g: Game) => BUY_SUP.price * Math.min(4, 1 + (fr(g)?.bought ?? 0));
 /** supplies per new square, by what it crosses */
-export const SUP = { flat: 2, hills: 3, tunnel: 10, bridge: [0, 8, 14, 20] };
+export const SUP = { flat: 1, hills: 2, tunnel: 5, bridge: [0, 4, 7, 10] };
 export const SPIKE_R = 2;
 
 export const perkCount = (g: Game, k: PerkKind) => fr(g)?.perks.filter(p => p.k === k).length ?? 0;
@@ -97,7 +97,7 @@ export const gangMul = (g: Game) => Math.max(0.5, 1 - 0.2 * perkCount(g, 'gang')
 export const stroke = (g: Game, per: number[]) => per.length ? Math.max(1, Math.round(per.reduce((a, b) => a + b, 0) * gangMul(g))) : 0;
 
 /** units of wood or stone that make one 🛤 supply */
-export const PER_SUP = 4;
+export const PER_SUP = 2;
 /** Deliveries a depot took as supplies (PER_SUP units each; the rest waits for the next load). */
 export function addSupplies(g: Game, n: number) { const f = fr(g); if (!f) return; const u = (f.units ?? 0) + n; f.sup = Math.min(supCap(g), f.sup + Math.floor(u / PER_SUP)); f.units = u % PER_SUP; }
 
