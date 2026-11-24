@@ -67,6 +67,8 @@ export interface Train {
   stopT?: number;
   /** broken down: waits for the repair crew (see world/events.ts) */
   broke?: { crewAt: number; doneAt: number };
+  /** stopped in the middle of a platform or loading track: the track left ahead of it there, kept for it until it leaves */
+  rest?: number[];
   /** head position when saved, to find the train again if the rails were rebuilt */
   at?: { x: number; y: number; tx: number; ty: number };
   /**
@@ -158,6 +160,7 @@ export class TrainSystem {
 
   private stepsHeld(t: Train): number[] {
     const ids = t.trail.map(s => s.piece);
+    if (t.rest && !t.plan.length) ids.push(...t.rest);
     if (t.rr) for (const m of t.rr.moves) if (!isRev(m)) ids.push(m.piece);
     for (let k = 0, c = 0; k < t.plan.length && c < t.held; k++) { const m = t.plan[k]!; if (isRev(m)) continue; ids.push(m.piece); c++; }
     return ids;
@@ -235,10 +238,52 @@ export class TrainSystem {
       d += this.net.pieces[m.piece]!.len;
     }
     if (signal) d -= SIGNAL_GAP; // stop short of a red signal
+    const end = this.toCentre(t);
+    if (end !== null) d = Math.min(d, end);
     const r = t.plan[0];
     if (isRev(r) && r.clear === null) return 0;
     if (isRev(r) && r.clear && r.clear !== 'end') d = Math.min(d, this.toClear(t, r.clear));
     return d;
+  }
+
+  /**
+   * On the last leg into a station hall or yard: how far the head may still go so the train stands in the middle of
+   * the platform or loading track rather than at its far end (null: no such stop ahead). The track's length is
+   * measured along the rails from the trip's last step back to the area's switch or edge, so it stays the same as
+   * the train runs in. A train longer than the track still runs to the far end, as before.
+   */
+  private toCentre(t: Train): number | null {
+    if (!t.area || t.plan.some(isRev)) return null;
+    const len = (s: Step) => this.net.pieces[s.piece]!.len, head = t.trail.at(-1)!;
+    const last = t.plan.at(-1) ?? head;
+    let total = len(head) - t.headS;
+    for (const m of t.plan) total += len(m as Step);
+    return total - this.centreGap(t, last as Step);
+  }
+
+  /** half the spare plain track (no switch) behind step `last` inside the train's area: how far short of the end it stops */
+  private centreGap(t: Train, last: Step): number {
+    const set = new Set(t.area!), pc = (s: Step) => this.net.pieces[s.piece]!;
+    const plainIn = (s: Step) => pc(s).kind !== 'fan' && pc(s).squares.every(q => set.has(q));
+    if (!plainIn(last)) return 0;
+    let run = pc(last).len, cur = last;
+    for (let k = 0; k < 40; k++) {
+      const back = nextStepsOf(this.net, rev(cur)).map(rev).filter(plainIn);
+      if (back.length !== 1) break;
+      cur = back[0]!; run += pc(cur).len;
+    }
+    return Math.max(0, (run - trainLength(t)) / 2);
+  }
+
+  /** the train has reached the middle of its platform or loading track: the trip ends here, the rest of the way is let go */
+  private atCentre(t: Train): boolean {
+    if (!t.plan.length || t.v >= 1) return false;
+    const end = this.toCentre(t);
+    if (end === null || end > 0.5) return false;
+    if (t.plan.filter(m => !isRev(m)).length > t.held) return false; // still waiting on a signal
+    t.rest = (t.plan.filter(m => !isRev(m)) as Step[]).map(m => m.piece);
+    t.plan = []; t.held = 0; this.rebuildHolds();
+    return true;
   }
 
   /** How far the train must still go for its tail to pass node `x`. */
@@ -376,6 +421,7 @@ export class TrainSystem {
     // the only way is over a broken rail: take it anyway and wait there for the repair crew
     const route = this.route({ ...req, push: this.pushOf(t), ...(area ? { revParity: this.backIn(t) } : {}) }) ?? this.route({ ...req, push: this.pushOf(t) }) ?? (this.blocked.size ? findRoute(this.net, { ...req, extra: s => req.extra!(s) + (this.blocked.has(s.piece) ? 20000 : 0) }) : null);
     if (!route) return false;
+    delete t.rest;
     t.plan = route; t.dest = dest; t.held = 0; t.wait = 0; t.refuge = undefined;
     if (area) t.area = area; else delete t.area;
     this.rebuildHolds();
@@ -562,11 +608,12 @@ export class TrainSystem {
     let go = Math.min(t.v * dt, auth);
     if (go <= 0.001) {
       t.v = Math.min(t.v, 0);
-      if (!t.plan.length) { t.v = 0; t.wait = 0; if (t.refuge === undefined) { t.dest = undefined; delete t.area; } return; } // arrived
+      if (!t.plan.length || this.atCentre(t)) { t.v = 0; t.wait = 0; if (t.refuge === undefined) { t.dest = undefined; delete t.area; } return; } // arrived
       if (!isRev(t.plan[0])) t.wait += dt; else t.wait = 0;
       this.unstick(t); return;
     }
     t.wait = 0; this.heldUp.delete(t.id);
+    if (t.rest) delete t.rest; // on the move again: the platform track it kept is let go
     while (go > 0) {
       const head = t.trail.at(-1)!, room = this.net.pieces[head.piece]!.len - t.headS;
       if (go <= room) { t.headS += go; go = 0; break; }
@@ -576,7 +623,7 @@ export class TrainSystem {
       t.plan.shift(); t.held--; t.trail.push(nx); t.headS = 0;
     }
     this.trimTail(t);
-    if (!t.plan.length && t.v < 1 && this.authority(t) < 1) {
+    if ((!t.plan.length || this.atCentre(t)) && t.v < 1 && this.authority(t) < 1) {
       t.v = 0;
       if (t.refuge === undefined) { t.dest = undefined; delete t.area; }
     }

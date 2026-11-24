@@ -1,5 +1,5 @@
 import { hash } from '../core/rng.ts';
-import { buildingSquares, buildingUp, capOf, type Building, GOODS, type Good, INDUSTRIES, isLinked, yardLen, yardSquares } from '../buildings/industries.ts';
+import { buildingSquares, buildingUp, capOf, type Building, GOODS, type Good, INDUSTRIES, isLinked, tracksOf, yardLen, yardSquares } from '../buildings/industries.ts';
 import type { Game } from '../state.ts';
 import { barriersDown } from '../buildings/closing.ts';
 import { TILE } from '../world/terrain.ts';
@@ -87,6 +87,43 @@ export function drawQuay(ctx: CanvasRenderingContext2D, g: Game, b: Building) {
 }
 
 /**
+ * The loading platforms: a raised stone loading bank along the yard on the building's side (where the goods pile up),
+ * and a narrow loading bank between each pair of loading tracks, so every track a train may stand on has a platform
+ * beside it. Stone edging, a yellow line along the track edge, ramps at the ends and lamps; drawn under the trains.
+ * In the building's frame: tracks at v = -24, -40, -56, -72 (nearest first).
+ */
+function loadingPlatforms(ctx: CanvasRenderingContext2D, g: Game, b: Building, L0: number, tm: number, zoom: number) {
+  let a = -L0 / 2, z = L0 / 2;
+  const bank = (v0: number, w: number, edges: number[], lamps: boolean) => {
+    const L = z - a; ctx.save(); ctx.translate((a + z) / 2, 0);
+    ctx.fillStyle = 'rgba(0,0,0,.22)'; ctx.fillRect(-L / 2 + 1, v0 + 1.2, L, w);
+    ctx.fillStyle = '#8f8576'; ctx.fillRect(-L / 2, v0, L, w); // stone face
+    ctx.fillStyle = '#d6cbb2'; ctx.fillRect(-L / 2 + 0.5, v0 + 0.5, L - 1, w - 1); // paving
+    ctx.fillStyle = 'rgba(0,0,0,.14)'; ctx.fillRect(-L / 2 + 0.5, v0 + 0.5, 2, w - 1); ctx.fillRect(L / 2 - 2.5, v0 + 0.5, 2, w - 1); // ramps
+    ctx.fillStyle = '#e8c84a'; for (const e of edges) ctx.fillRect(-L / 2 + 2.5, e, L - 5, 0.5); // safety lines
+    if (zoom > 1.2) { ctx.fillStyle = 'rgba(120,108,88,.35)'; for (let u = -L / 2 + 5; u < L / 2 - 2; u += 4) ctx.fillRect(u, v0 + 1, 0.3, w - 2); } // paving joints
+    if (lamps && zoom >= 0.5) for (const u of [-L / 2 + 3.5, L / 2 - 3.5]) {
+      ctx.fillStyle = '#2e2a26'; ctx.beginPath(); ctx.arc(u, v0 + w / 2, 0.55, 0, 7); ctx.fill();
+      const gl = 0.7 + 0.3 * Math.sin(tm * 2 + u);
+      ctx.fillStyle = `rgba(255,214,120,${0.18 * gl})`; ctx.beginPath(); ctx.arc(u, v0 + w / 2, 2, 0, 7); ctx.fill();
+      ctx.fillStyle = '#ffe2a0'; ctx.beginPath(); ctx.arc(u, v0 + w / 2, 0.35, 0, 7); ctx.fill();
+    }
+    ctx.restore();
+  };
+  // along the building, from just off the nearest track's rail to the building's row
+  bank(-19.6, 6.2, [-19.0], true);
+  if (b.kind === 'dock') return; // the dock's other tracks run on the quay
+  // the banks between tracks stop where the tracks fan out to their switches (an end square with a switch on it)
+  const n = g.world.n, T = TILE, sq = yardSquares(n, b), h = sq.length / 2;
+  const dir = b.horizontal ? (b.side > 0 ? 1 : -1) : (b.side > 0 ? -1 : 1);
+  const us = sq.map((i, k) => ({ u: dir * (k + 0.5 - h) * T, fan: (g.net.bySquare.get(i) ?? []).some(id => g.net.pieces[id]!.kind === 'fan') })).filter(q => !q.fan).map(q => q.u);
+  if (!us.length) return;
+  a = Math.max(-L0 / 2, Math.min(...us) - T / 2 + 1.5); z = Math.min(L0 / 2, Math.max(...us) + T / 2 - 1.5);
+  // between each pair of tracks, clear of the rails (±3.4 either side of a track's middle)
+  for (let k = 1; k < tracksOf(b); k++) { const mid = -24 - 16 * (k - 1) - 8; bank(mid - 2.6, 5.2, [mid - 2.1, mid + 1.6], false); }
+}
+
+/**
  * An industry in its yard, as a little model: a loading platform along the yard, the building and its props on the
  * row beside it, and crates that pile up with the stock. Drawn in the building's own frame: u along the yard,
  * v across it with the yard tracks at negative v.
@@ -97,10 +134,7 @@ export function drawBuilding(ctx: CanvasRenderingContext2D, g: Game, b: Building
   const rot = b.horizontal ? (b.side > 0 ? 0 : Math.PI) : (b.side > 0 ? -Math.PI / 2 : Math.PI / 2);
   ctx.save(); ctx.translate(cx, cy); ctx.rotate(rot);
   const L = yardLen(b) * T - 6, H = (k: number) => hash(g.s.seed, b.x, b.y, k);
-  // loading platform along the yard
-  ctx.fillStyle = 'rgba(0,0,0,.2)'; ctx.fillRect(-L / 2 + 1, -19.4 + 1.2, L, 4.4);
-  ctx.fillStyle = '#d0c4a8'; ctx.fillRect(-L / 2, -19.4, L, 4.4);
-  ctx.fillStyle = '#efe3a8'; ctx.fillRect(-L / 2, -19.4, L, 0.6);
+  loadingPlatforms(ctx, g, b, L, tm, zoom);
   // the goods pile up on the platform as the stock grows: a row along it, then a second and third layer on top
   if (b.kind !== 'dock') stockPile(ctx, b, L);
   // half of all buildings are laid out the other way round along their yard (docks keep their pier and office as built)
