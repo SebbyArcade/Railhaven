@@ -142,8 +142,10 @@ function rate(g: Game, a: Site, b: Site): number {
   const from = 1 + 0.3 * count(g, 'market', a) + 0.25 * count(g, 'street', a) + 0.15 * count(g, 'tram', a);
   const to = 1 + 0.4 * count(g, 'hotel', b) + 0.3 * count(g, 'theatre', b) + 0.1 * count(g, 'park', b) + 0.15 * count(g, 'tram', b);
   const capital = (a === g.s.sites[0] ? 1.5 : 1) * (b === g.s.sites[0] ? 1.5 : 1);
-  return 4 * (1 + 0.5 * La) * (1 + 0.5 * Lb) * from * to * capital;
+  return 6 * (1 + 0.5 * La) * (1 + 0.5 * Lb) * from * to * capital;
 }
+/** travellers waiting the moment two cities are first linked (so the first train has work at once), and the smallest group a train sets off for */
+export const FIRST_CROWD = 15, MIN_GROUP = 6;
 export const waitCap = (g: Game, a: Site) => 40 * (1 + (a.lvl ?? 0)) * (1 + 0.5 * count(g, 'tram', a));
 /** Visitors a city needs to grow from each size. */
 export const growNeed = (L: number) => [60, 160, 360, 700, 1200][L] ?? Math.round(1200 * Math.pow(1.5, L - 4));
@@ -174,7 +176,7 @@ export function tickLines(g: Game, dt: number): string[] {
     if (cityLinked(g, a)) { const L = a.lvl ?? 0, lo = L === 0 ? 15 : sizeCap(L - 1); a.pop = Math.max(a.pop ?? 0, Math.round(lo + (sizeCap(L) - lo) * growProgress(g, a))); }
     const ps = partners(g, a); if (!ps.length) continue;
     const cap = waitCap(g, a);
-    for (const { b } of ps) { const k = `${a.id}>${b.id}`; c.pax[k] = Math.min(cap, (c.pax[k] ?? 0) + rate(g, a, b) * dt / 60); }
+    for (const { b } of ps) { const k = `${a.id}>${b.id}`; c.pax[k] = Math.min(cap, (c.pax[k] ?? FIRST_CROWD) + rate(g, a, b) * dt / 60); } // a newly linked city has a crowd waiting at once
   }
   // goal steps
   const all = steps(g);
@@ -251,7 +253,7 @@ export function bestTrip(g: Game, t: Train, at: number, cap: number): { a: Site;
     const reach = railDist(g, 't' + a.id, h.squares)[at]!; if (reach < 0) continue;
     for (const { b, d } of partners(g, a)) {
       const w = waiting(g, a, b), claimedN = g.s.trains.reduce((s, o) => s + (o !== t && o.job?.src === -a.id - 1 && o.job.to.id === b.id && o.job.phase !== 'toDrop' && o.job.phase !== 'unloading' ? cap : 0), 0);
-      const n = Math.min(cap, w - claimedN); if (n < Math.min(8, cap * 0.3)) continue;
+      const n = Math.min(cap, w - claimedN); if (n < Math.min(MIN_GROUP, cap * 0.3)) continue;
       const s = fare(g, a, b, n, d) / (reach + d + 10);
       if (s > bs) { bs = s; best = { a, b, d, n }; }
     }

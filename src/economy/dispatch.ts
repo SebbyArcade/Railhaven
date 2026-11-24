@@ -22,7 +22,7 @@ import { BRIDGE_UPKEEP, bridgeSquares } from '../track/rules.ts';
 import { tickTrade, tradeDelivered, tradeRoom } from './trade.ts';
 import { deliverToTown, orderDone, reward, sizeName, steadyFull, stepOf } from './towns.ts';
 import { type NewsGo, say } from '../core/news.ts';
-import { bestTrip, cityDist, cl, clCap, clSpeed, fare, postBonus, tickLines, visit } from '../lines/lines.ts';
+import { bestTrip, cityDist, cl, MIN_GROUP, partners, clCap, clSpeed, fare, postBonus, tickLines, visit } from '../lines/lines.ts';
 
 export const LOAD_TIME = 4;
 /** Loading or unloading time for this train: 🚉 the Grand Station makes it 25% shorter on Ashford Isle. */
@@ -566,7 +566,7 @@ export function trainStatus(g: Game, t: Train): string {
   const j = t.job;
   if (t.ferry) { const to = bldOf(g, t.ferry.to); return `⛴ Going to the dock to sail to ${to ? islandName(g, islandOfB(g, to)) : 'another island'}`; }
   if (cl(g)) {
-    if (!j) return t.v > 0 ? '🚂 On its way' : '💤 Waiting for travellers (8 or more waiting to go somewhere)';
+    if (!j) return t.v > 0 ? '🚂 On its way' : g.s.sites.filter(s => s.kind === 'town' && partners(g, s).length).length < 2 ? '💤 Waiting: link a second city by rail, then travellers start coming' : `💤 Waiting for travellers: it sets off when ${MIN_GROUP} want to go the same way`;
     const a = siteOf(g, -j.src - 1)?.name ?? 'a city', b = siteOf(g, j.to.id)?.name ?? 'a city';
     if (j.phase === 'toLoad') return `🚂 Going to ${a} to pick up travellers for ${b}`;
     if (j.phase === 'loading') return `🧳 Travellers boarding at ${a} for ${b}`;
