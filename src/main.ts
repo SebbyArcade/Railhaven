@@ -46,6 +46,8 @@ import { buyFishing, FISHING } from './economy/upgrades.ts';
 import { checkStuck } from './economy/nofail.ts';
 import { ashford, compass, missionsOf, msOf, recommendedBuild, swapMission } from './progress/missions.ts';
 import { missionPill } from './ui/story.ts';
+import { FRONTIER, FRONTIER_SEED } from './frontier/mode.ts';
+import { BUY_SUP, buySupplies, fr, frNext, PERKS, type PerkKind, pickPerk, setupFrontier } from './frontier/frontier.ts';
 import { gameHtml } from './ui/gamecard.ts';
 import { decodeLegacy, importLegacy, isLegacy } from './save/legacy.ts';
 import { LESSONS, lessonOn, lessonText, skipLessons } from './progress/lessons.ts';
@@ -62,7 +64,8 @@ const $ = (id: string) => document.getElementById(id)!;
 
 const params = new URLSearchParams(location.search);
 /** a new game in the browser starts Mira's lessons */
-const freshGame = (seed?: number) => { const g = newGame(seed); g.s.tut = 0; return g; };
+if (FRONTIER) document.title = 'Railhaven · Frontier Village preview';
+const freshGame = (seed?: number) => { if (FRONTIER) { const g = newGame(seed ?? (loadFrom(localStorage) ? undefined : FRONTIER_SEED)); setupFrontier(g); return g; } const g = newGame(seed); g.s.tut = 0; return g; };
 // save slots: the playing game stays under the usual key, the list of games beside it (made from this browser's game the first time)
 const slotsOk = (() => { try { readIndex(localStorage); return true; } catch { return false; } })();
 let game: Game = (!params.has('new') && !params.has('seed') && loadFrom(localStorage)) || freshGame(params.has('seed') ? +params.get('seed')! : undefined);
@@ -284,6 +287,14 @@ cardEl.onclick = e => {
   if (b.dataset.act === 'loadold') { const t = oldSave(); if (t) void bringOver(t); return; }
   if (b.dataset.act === 'loadpaste') { const t = (cardEl.querySelector('#pasteCode') as HTMLTextAreaElement | null)?.value ?? ''; if (t.trim()) void bringOver(t); else toast('Paste the code first'); return; }
   if (b.dataset.go !== undefined) { goMission(+b.dataset.go); return; }
+  if (b.dataset.act === 'frpick') { const t = game.s.sites.find(s => s.id === +b.dataset.town!), why = pickPerk(game, +b.dataset.town!, b.dataset.k as PerkKind); if (why) { toast(why); return; } toast(`${PERKS[b.dataset.k as PerkKind].icon} ${PERKS[b.dataset.k as PerkKind].name} built in ${t?.name}`); game.terrainDirty?.([]); if (fr(game)!.picks.length) openCard({ kind: 'story', id: 0, page: 'pick' }); else { closeCard(); if (t) lookAt(t.x, t.y); } return; }
+  if (b.dataset.act === 'frshow') { // 🏁 frame Ashford and the golden spike together
+    const f = fr(game)!, n = game.world.n, a = game.s.sites[0]!, sx = f.spike % n, sy = (f.spike / n) | 0, c = game.s.camera; closeCard();
+    c.x = ((a.x + sx) / 2 + 0.5) * 32; c.y = ((a.y + sy) / 2 + 0.5) * 32;
+    c.z = Math.max(0.15, Math.min(1.2, 0.8 * Math.min(view.w / ((Math.abs(sx - a.x) + 6) * 32), view.h / ((Math.abs(sy - a.y) + 6) * 32))));
+    tools.flash = { square: f.spike, until: performance.now() + 3000 }; return;
+  }
+  if (b.dataset.act === 'frbuy') { const why = buySupplies(game); toast(why || `🪓 Ashford's crew cut ${BUY_SUP.n} supplies`); renderCard(); return; }
   if (b.dataset.act === 'swap') { const why = swapMission(game, +b.dataset.m!); toast(why || `🎯 New mission: ${msOf(game).main?.title}`); renderCard(); return; }
   const bld = game.s.buildings?.find(x => x.id === +(b.dataset.id ?? -1));
   if (b.dataset.act === 'page' && tools.card) { openCard({ ...tools.card, page: b.dataset.page || undefined } as Card); return; }
@@ -690,7 +701,10 @@ function frame(now: number) {
     lastCard = Math.floor(now / 1000);
     checkArrivals(game); // islands just reached queue their arrival card
     const M = msOf(game); // a new act opens its card once nothing else is open
-    if (M.actNew && !tools.card && tools.mode === 'pan' && !menuOpen && !tools.againOn()) { M.actNew = false; openCard({ kind: 'story', id: 0, page: 'act' }); }
+    const calm = !tools.card && tools.mode === 'pan' && !menuOpen && !tools.againOn() && !onHome(), F = fr(game);
+    const pg = F && calm ? frNext(game) : undefined;
+    if (pg) openCard({ kind: 'story', id: 0, page: pg }); // 🧭 the frontier's cards: intro, set pieces, picks, the spike
+    else if (!F && M.actNew && !tools.card && tools.mode === 'pan' && !menuOpen && !tools.againOn()) { M.actNew = false; openCard({ kind: 'story', id: 0, page: 'act' }); }
     else if ((game.arrived?.length || game.reported?.length) && (lessonOn(game) || onHome())) { game.arrived = []; game.reported = []; }
     else if (game.arrived?.length && !tools.card && tools.mode === 'pan' && !menuOpen && !tools.againOn()) openCard({ kind: 'isle', id: game.arrived.shift()!, fresh: true }); // 🏝 a new island
     else if (game.reported?.length && !tools.card && (tools.mode === 'pan' || tools.mode === 'scout') && !tools.scout && !menuOpen && !tools.againOn()) { // 🧭 a scout is back: its report

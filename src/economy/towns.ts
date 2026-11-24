@@ -1,4 +1,5 @@
 import type { Game, Site } from '../state.ts';
+import { addSupplies, DEPOT_GOODS, depotTakes, isDepot, townGrew } from '../frontier/frontier.ts';
 import { farText, type Good, INDUSTRIES, type IndustryKind, inputsOf, isFactory, yardSet } from '../buildings/industries.ts';
 import { hallOf } from '../buildings/stations.ts';
 import { reveal } from '../world/fog.ts';
@@ -80,6 +81,7 @@ export function steadyGoods(t: Site, g?: Game): Good[] {
   const out = [...new Set(LADDER.slice(0, Math.min(stepOf(t), LADDER.length)).flatMap(o => Object.keys(o) as Good[]))];
   if (g && isCoastal(g, t)) { out.push('fish'); if (stepOf(t) >= 2) out.push('shellfish'); }
   if (g) for (const k of waitsAbroad(g, t).length ? Object.keys(orderOf(g, t)) as Good[] : []) if (!out.includes(k) && !overseas(g, k)) out.push(k);
+  if (g && isDepot(g, t)) for (const k of DEPOT_GOODS) if (!out.includes(k)) out.push(k); // 🧭 a supply depot always takes wood and stone
   return out;
 }
 
@@ -142,7 +144,7 @@ export function townLinked(g: Game, t: Site): boolean {
 /** How many units of a good the town takes right now, split into open-order and steady parts. */
 export function townRoom(g: Game, t: Site, k: Good): { order: number; steady: number } {
   const o = orderOf(g, t), left = o[k] ? Math.max(0, o[k]! - (t.got?.[k] ?? 0)) : 0;
-  return { order: left, steady: steadyGoods(t, g).includes(k) ? Math.floor(t.steady?.[k] ?? 0) : 0 };
+  return { order: left, steady: depotTakes(g, t, k) ? 999 : steadyGoods(t, g).includes(k) ? Math.floor(t.steady?.[k] ?? 0) : 0 };
 }
 export const townWants = (g: Game, t: Site, k: Good) => { const r = townRoom(g, t, k); return r.order + r.steady > 0 || steadyGoods(t, g).includes(k) || !!orderOf(g, t)[k]; };
 
@@ -153,6 +155,7 @@ export const townWants = (g: Game, t: Site, k: Good) => { const r = townRoom(g, 
 export function deliverToTown(g: Game, t: Site, k: Good, n: number, tradeLeft = 0) {
   const r = townRoom(g, t, k), order = Math.min(n, r.order), trade = Math.min(n - order, tradeLeft), steady = Math.min(n - order - trade, r.steady), surplus = n - order - trade - steady;
   if (order) { (t.got ??= {})[k] = (t.got[k] ?? 0) + order; }
+  if (depotTakes(g, t, k)) { addSupplies(g, steady + surplus); return { order, trade, steady: steady + surplus, surplus: 0 }; } // 🧭 into the supply pile
   if (steady) (t.steady ??= {})[k] = (t.steady[k] ?? 0) - steady;
   return { order, trade, steady, surplus };
 }
@@ -175,6 +178,7 @@ export function upgradeTown(g: Game, t: Site): string {
   if (price > g.s.money) return `Need $${(price - g.s.money).toLocaleString('en-US')} more to upgrade ${t.name}`;
   g.s.money -= price;
   t.lvl = stepOf(t) + 1; t.got = {}; t.filled = false;
+  townGrew(g, t); // 🧭 a grown town picks a new building
   const isl = g.world.islandOf[t.y * g.world.n + t.x];
   t.sea0 = isCoastal(g, t) && (g.s.buildings ?? []).some(b => b.kind === 'dock' && (b.fish ?? 0) > 0 && g.world.islandOf[(b.y) * g.world.n + b.x] === isl) || undefined;
   return '';

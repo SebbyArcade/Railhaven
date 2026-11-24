@@ -1,3 +1,4 @@
+import { drawFrontier } from './frontier.ts';
 import { drawParks } from './parks.ts';
 import { hallOf } from '../buildings/stations.ts';
 import type { Game } from '../state.ts';
@@ -131,6 +132,7 @@ export class Renderer {
     drawScouting(ctx, g, this.tools, tm, cam.z); // scout routes run into the fog: draw them over it
     drawPoiZones(ctx, g, this.tools, tm, (x, y) => x >= x0 - 12 && x <= x1 + 12 && y >= y0 - 12 && y <= y1 + 12, cam.z); // landmark take-over squares and reach, over the fog
     drawMaps(ctx, g, this.tools, tm, cam.z);
+    drawFrontier(ctx, g, tm, cam.z); // 🧭 the golden spike, set pieces and wishes, over the fog
     this.drawIslandNames(ctx, cam.z);
     ctx.restore();
     if (seasonOf(g.s.t) === 3) this.drawSnow(ctx, view, tm);

@@ -1,4 +1,6 @@
 import type { Game } from '../state.ts';
+import { fr } from '../frontier/frontier.ts';
+import { frPill } from '../frontier/ui.ts';
 import { ACTS, actOf, ashford, compass, type Mission, msOf, progress, reachedIslands, rumourOf, SWAP_SHARE } from '../progress/missions.ts';
 import { islandSpec, SPEC_TEXT } from '../world/specialty.ts';
 import { islandKnown } from '../world/fog.ts';
@@ -15,6 +17,7 @@ export function progressText(g: Game, m: Mission): { f: number; text: string } {
 
 /** The mission pill under the top bar: the main mission and a Go button. */
 export function missionPill(g: Game): string {
+  if (fr(g)) return frPill(g);
   const m = msOf(g).main; if (!m) return '';
   const p = progressText(g, m);
   return `<span class="mtext">🎯 ${esc(m.title)}${p.text ? ` <b>${p.text}</b>` : ''}</span><button data-go="0">Go ›</button>`;

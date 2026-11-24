@@ -12,7 +12,7 @@ import { hallsOf } from './stations.ts';
  * pay more (the Tram Line makes orders smaller instead). Nothing here earns money by itself.
  */
 export type ParkKind = 'park' | 'clock' | 'market' | 'tram' | 'theatre' | 'foundry' | 'bridgeworks' | 'grandstation' | 'cathedral' | 'exhibition';
-export interface Park { town: number; x: number; y: number; k: ParkKind }
+export interface Park { town: number; x: number; y: number; k: ParkKind; /** 🧭 a Frontier Village perk building: drawn as k, its effect is the perk's alone */ fp?: string }
 
 /** up to 3 parks per town, each making its orders 5% smaller */
 export const PARK_PRICE = [5000, 10000, 20000];
@@ -38,7 +38,7 @@ export const projectOf = (k: ParkKind) => PROJECTS.find(p => p.k === k);
 /** The projects a town can have (the Foundry is Ashford's alone). */
 export const projectsFor = (g: Game, t: Site) => PROJECTS.filter(P => !P.ashford || t === g.s.sites[0]);
 /** ⛰ Has Ashford built the Foundry? Then track may tunnel through mountains. */
-export const hasTunnels = (g: Game) => (g.s.parks ?? []).some(p => p.k === 'foundry');
+export const hasTunnels = (g: Game) => (g.s.parks ?? []).some(p => p.k === 'foundry') || !!(g.s as { fr?: { perks: { k: string }[] } }).fr?.perks.some(p => p.k === 'tunnel');
 
 /** 🚉 Grand Station: load and unload time on Ashford Isle. */
 export const GRAND_LOAD = 0.75;
@@ -47,20 +47,20 @@ export const hasGrandStation = (g: Game) => (g.s.parks ?? []).some(p => p.k === 
 export const CATHEDRAL_PAY = 0.05;
 export const rewardMul = (g: Game) => (g.s.parks ?? []).some(p => p.k === 'cathedral') ? 1 + CATHEDRAL_PAY : 1;
 
-export const parksOf = (g: Game, t: Site) => (g.s.parks ?? []).filter(p => p.town === t.id && p.k === 'park');
-export const projectsOf = (g: Game, t: Site) => (g.s.parks ?? []).filter(p => p.town === t.id && p.k !== 'park');
-export const hasProject = (g: Game, t: Site, k: ParkKind) => (g.s.parks ?? []).some(p => p.town === t.id && p.k === k);
+export const parksOf = (g: Game, t: Site) => (g.s.parks ?? []).filter(p => p.town === t.id && p.k === 'park' && !p.fp);
+export const projectsOf = (g: Game, t: Site) => (g.s.parks ?? []).filter(p => p.town === t.id && p.k !== 'park' && !p.fp);
+export const hasProject = (g: Game, t: Site, k: ParkKind) => (g.s.parks ?? []).some(p => p.town === t.id && p.k === k && !p.fp);
 
 /** Order sizes at this town: 5% smaller per park, and 5% smaller with a Tram Line. */
 export function orderMul(g: Game, t: Site): number {
   let m = 1;
-  for (const p of g.s.parks ?? []) if (p.town === t.id) m -= p.k === 'park' ? PARK_ORDER : projectOf(p.k)?.order ?? 0;
+  for (const p of g.s.parks ?? []) if (p.town === t.id && !p.fp) m -= p.k === 'park' ? PARK_ORDER : projectOf(p.k)?.order ?? 0;
   return Math.max(0.5, m);
 }
 /** Pay for deliveries to this town: 1 plus each project's bonus. */
 export function payMul(g: Game, t: Site): number {
   let m = 1;
-  for (const p of g.s.parks ?? []) if (p.town === t.id) m += projectOf(p.k)?.pay ?? 0;
+  for (const p of g.s.parks ?? []) if (p.town === t.id) m += p.fp ? (p.fp === 'market' ? 0.3 : 0) : projectOf(p.k)?.pay ?? 0;
   return m;
 }
 

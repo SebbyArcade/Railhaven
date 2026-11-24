@@ -1,5 +1,7 @@
 import { hallOf } from '../buildings/stations.ts';
 import type { Game, Site } from '../state.ts';
+import { fr } from '../frontier/frontier.ts';
+import { frStoryHtml, frTownHtml } from '../frontier/ui.ts';
 import { fallsMul, POI, POI_RARITY, poisOf, RARITY } from '../world/explore.ts';
 import { isleCard, reportsHtml, scoutCard } from './discover.ts';
 import { joinGap } from '../track/joins.ts';
@@ -56,7 +58,7 @@ const bName = (b: Building) => INDUSTRIES[b.kind].name;
 export function cardHtml(g: Game, c: Card, view?: MapView | null): string | null {
   if (c.kind === 'shed') return shedCard(g, c.page);
   if (c.kind === 'fleet') return fleetCard(g, c.page);
-  if (c.kind === 'story') return storyHtml(g, c.page);
+  if (c.kind === 'story') return fr(g) ? frStoryHtml(g, c.page) : storyHtml(g, c.page);
   if (c.kind === 'orders') return ordersHtml(g);
   if (c.kind === 'map') return mapHtml(g, view ?? null);
   if (c.kind === 'ship') return shipCard(g, c.id);
@@ -74,6 +76,7 @@ function townCard(g: Game, t: Site, page?: string): string {
   const L = stepOf(t), o = orderOf(g, t), linked = townLinked(g, t), plan = shipPlan(g);
   let h = `<div class="head"><b class="big">🏘</b><div><h2>${esc(t.name ?? 'Town')}</h2><span class="chip2">${sizeName(L)}</span> <span class="chip2">👥 ${Math.floor(t.pop ?? 0)}</span>${linked && isCapital(g, t) && g.s.caps && Object.keys(g.s.caps).length ? ` <span class="chip2">👑 Capital of ${esc(islandName(g, islandOfSite(g, t)))}</span>` : ''}</div></div>`;
   if (page === 'parks' || page === 'projects') return h + townPage(g, t, page);
+  h += frTownHtml(g, t); // 🧭 its wish and buildings
   if (!linked) {
     const gap = joinGap(g, t)?.squares, go = `<button class="mini" data-act="railtown" data-x="${t.x}" data-y="${t.y}">🛤 Lay track ›</button>`;
     const j = joinGap(g, t);

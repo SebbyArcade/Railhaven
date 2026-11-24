@@ -505,7 +505,8 @@ export const noSpotText = (kind: IndustryKind) => MINES.has(kind)
   : `No room for ${aName(INDUSTRIES[kind].name)} on uncovered land: it needs ${INDUSTRIES[kind].needs}`;
 
 /** "Ashford's park" / "Ashford's Clock Tower", for refusals. */
-export function parkName(g: Game, p: { town: number; k: string }): string {
+export function parkName(g: Game, p: { town: number; k: string; fp?: string }): string {
   const t = g.s.sites.find(s => s.id === p.town)?.name ?? 'a town';
+  if (p.fp) return `${t}'s ${({ depot: 'Supply Depot', gang: 'Track Gang Hut', bridge: 'Bridge Works', tunnel: 'Tunnel Guild', lookout: 'Lookout Tower', market: 'Market Hall' } as Record<string, string>)[p.fp] ?? 'building'}`;
   return `${t}'s ${{ park: 'park', clock: 'Clock Tower', market: 'Market Hall', tram: 'Tram Line', theatre: 'Grand Theatre' }[p.k] ?? 'park'}`;
 }

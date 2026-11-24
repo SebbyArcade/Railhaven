@@ -13,6 +13,7 @@ import { tickScouts } from '../world/explore.ts';
 import { tickSweeps } from '../world/landfall.ts';
 import { boomMul, tickBooms } from '../world/booms.ts';
 import { reachedIslands, tickMissions } from '../progress/missions.ts';
+import { fr, tickFrontier } from '../frontier/frontier.ts';
 import { capOf, expressMul, fleetIsl, fleetMulOf, FLEET, minLoad, rushDelivered } from './upgrades.ts';
 import { V_MAX } from '../trains/train.ts';
 import { isRev } from '../track/route.ts';
@@ -332,7 +333,7 @@ function tripDone(t: Train, v: number) {
 
 /** Goods nobody is waiting for (past-order buying or surplus) that pay less than the trip costs are not worth fetching. */
 export const losesMoney = (g: Game, ship: Ship, pay: number, reach: number, isl = g.world.home) =>
-  (ship.why === 'steady' || ship.why === 'extra') && !ship.rush && ship.sea === undefined && pay < tripCost(g, reach + ship.d, isl);
+  (ship.why === 'steady' || ship.why === 'extra') && !ship.rush && !ship.sup && ship.sea === undefined && pay < tripCost(g, reach + ship.d, isl);
 
 /** Pick the best waiting load for an idle train: open orders (and factories making what one waits for) first, then by pay per square of travel. */
 function bestJob(g: Game, t: Train, plan: Plan): { b: Building; k: Good; ship: Ship } | null {
@@ -350,7 +351,7 @@ function bestJob(g: Game, t: Train, plan: Plan): { b: Building; k: Good; ship: S
       // goods an order waits for: the load that fills it soonest (most units per square run, empty and loaded), whatever
       // the good is worth; other loads: the best pay per square
       const urgent = ship.why === 'order' || ship.feeds || ship.rush || ship.sea !== undefined;
-      if (!urgent && losing) continue; // its last trips lost money: only work something waits for
+      if (!urgent && losing && !ship.sup) continue; // its last trips lost money: only work something waits for
 
       const s = urgent ? 1e3 + Math.min(cap, avail) / (reach + ship.d + 8) : v / (reach + ship.d + 8);
       if (s > bs) { bs = s; best = { b, k, ship }; }
@@ -450,7 +451,7 @@ function nearestTown(g: Game, t: Train): { kind: 'town'; id: number } | null {
 /** Goods trains run themselves: each idle train collects the best waiting load and takes it where the plan says. */
 export function tickTrains(g: Game, dt: number) {
   tickShips(g, dt); tickScouts(g, dt); tickSweeps(g, dt);
-  if (Math.floor(g.s.t) !== Math.floor(g.s.t - dt)) { tickMissions(g); tickBooms(g); if (Math.floor(g.s.t) % 5 === 0) { checkLevel(g); tickTrade(g); } } // reaching an island can let a held level through
+  if (Math.floor(g.s.t) !== Math.floor(g.s.t - dt)) { if (fr(g)) for (const m of tickFrontier(g)) say(g, m); else { tickMissions(g); tickBooms(g); } if (Math.floor(g.s.t) % 5 === 0) { checkLevel(g); tickTrade(g); } } // reaching an island can let a held level through
   let plan: Plan | null = null;
   const P = () => (plan ??= shipPlan(g));
   const fm = fleetMul(g.s.trains.length);

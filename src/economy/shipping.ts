@@ -9,6 +9,7 @@ import { tradeRoom } from './trade.ts';
 import { lanesFrom, seaBound, seaLanes } from '../ships/ships.ts';
 import { isCrossing } from '../track/state.ts';
 import { sameRail } from '../track/isles.ts';
+import { depotTakes, fr } from '../frontier/frontier.ts';
 
 /** Train load, and the least a train waits for before it sets off to collect (it leaves mostly full). */
 /** a train's load before any wagon upgrade (the real one is trainCap(g)) */
@@ -45,7 +46,7 @@ export const bldDist = (g: Game, b: Building) => railDist(g, 'b' + b.id, yardSqu
 export type Dest = { kind: 'town' | 'bld'; id: number };
 export type Why = 'order' | 'factory' | 'steady' | 'extra';
 /** where a load goes; `sea` = the far dock when it goes to a dock for a ship */
-export interface Ship { to: Dest; why: Why; d: number; /** steady buying paid in full (the town's order waits on the outer islands) */ full?: boolean; /** a factory whose product an open order is waiting for */ feeds?: boolean; rush?: boolean; sea?: number; /** a second sea route: the far dock passes it on to this dock */ then?: number }
+export interface Ship { to: Dest; why: Why; d: number; /** 🧭 for a supply depot (track supplies) */ sup?: boolean; /** steady buying paid in full (the town's order waits on the outer islands) */ full?: boolean; /** a factory whose product an open order is waiting for */ feeds?: boolean; rush?: boolean; sea?: number; /** a second sea route: the far dock passes it on to this dock */ then?: number }
 type Pair = { s: { b: Building; k: Good; sk: string }; b: Building; to: Dest; d: number; t?: Site; f?: Building };
 type Targets = (from: Building, k: Good, d0: number, dist: Int32Array, push: (p: Omit<Pair, 's' | 'b'>) => void) => void;
 /** The plan: building id → where its goods go; `docks` holds landed goods at docks, keyed `dockId/good`. */
@@ -163,6 +164,8 @@ export function shipPlan(g: Game, skip?: Train): Plan {
   for (const p of pairs) if (!out.has(p.s.sk) && p.t) out.set(p.s.sk, { to: p.to, why: 'extra', d: p.d });
   const plan = new Map<number, Ship>() as Plan; plan.docks = new Map();
   for (const [k, v] of out) if (k.includes('/')) plan.docks.set(k, v); else plan.set(+k, v);
+  // 🧭 Frontier: wood and stone for a supply depot become track supplies, worth the trip whatever they pay
+  if (fr(g)) for (const s of srcs) { const v = out.get(s.sk), t = v?.to.kind === 'town' ? siteOf(g, v.to.id) : undefined; if (v && t && v.why !== 'order' && depotTakes(g, t, s.k)) v.sup = true; }
   return plan;
 }
 

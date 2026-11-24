@@ -3,3 +3,4 @@ dist
 test-results
 shots
 *.log
+dist-frontier
