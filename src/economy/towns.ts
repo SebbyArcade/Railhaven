@@ -155,9 +155,10 @@ export const townWants = (g: Game, t: Site, k: Good) => { const r = townRoom(g, 
 export function deliverToTown(g: Game, t: Site, k: Good, n: number, tradeLeft = 0) {
   const r = townRoom(g, t, k), order = Math.min(n, r.order), trade = Math.min(n - order, tradeLeft), steady = Math.min(n - order - trade, r.steady), surplus = n - order - trade - steady;
   if (order) { (t.got ??= {})[k] = (t.got[k] ?? 0) + order; }
-  if (depotTakes(g, t, k)) { addSupplies(g, steady + surplus); return { order, trade, steady: steady + surplus, surplus: 0 }; } // 🧭 into the supply pile
+  // 🧭 every wood and stone a depot gets also goes on the supply pile, order goods included, so hauling always lays track
+  if (depotTakes(g, t, k)) { const sup = addSupplies(g, n); return { order, trade, steady: steady + surplus, surplus: 0, sup }; }
   if (steady) (t.steady ??= {})[k] = (t.steady[k] ?? 0) - steady;
-  return { order, trade, steady, surplus };
+  return { order, trade, steady, surplus, sup: 0 };
 }
 
 /** Steady demand refills; people move in as the order fills. */

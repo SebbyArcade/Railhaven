@@ -13,7 +13,7 @@ import { tickScouts } from '../world/explore.ts';
 import { tickSweeps } from '../world/landfall.ts';
 import { boomMul, tickBooms } from '../world/booms.ts';
 import { reachedIslands, tickMissions } from '../progress/missions.ts';
-import { fr, tickFrontier } from '../frontier/frontier.ts';
+import { fr, PER_SUP, tickFrontier } from '../frontier/frontier.ts';
 import { capOf, expressMul, fleetIsl, fleetMulOf, FLEET, minLoad, rushDelivered } from './upgrades.ts';
 import { V_MAX } from '../trains/train.ts';
 import { isRev } from '../track/route.ts';
@@ -419,7 +419,8 @@ function unload(g: Game, t: Train) {
   // 🏛 town projects pay more; while its order waits on goods from the outer islands, the rest of the order pays in full
   const v = (payFor(k, p.order + p.trade, c.d, 'order') + payFor(k, p.steady, c.d, steadyFull(g, town, k) ? 'order' : 'steady') + payFor(k, p.surplus, c.d, 'extra')) * payMul(g, town) * boomMul(g, town);
   pay(g, v); if (rushDelivered(g, j.to, k, p.order)) news(g, `⭐ Rush done: ${town.name} got its ${GOODS[k].name.toLowerCase()}`, { kind: 'town', id: town.id });
-  t.lastPay = { pay: Math.round(v), at: g.s.t, n: c.n, good: k, to: j.to }; tripDone(t, v);
+  t.lastPay = { pay: Math.round(v), at: g.s.t, n: c.n, good: k, to: j.to, ...(p.sup ? { sup: p.sup } : {}) }; tripDone(t, v);
+  if (p.sup) { const f = fr(g)!; if (f.earned === p.sup) news(g, `🛤 +${p.sup} track supplies! Every ${PER_SUP} ${GOODS[k].icon} your trains bring to ${town.name} make 1 supply, and 1 supply lays 1 square of rails`, { kind: 'town', id: town.id }); }
   if (!town.filled && orderDone(g, town)) {
     town.filled = true;
     const r = Math.round(reward(stepOf(town)) * fallsMul(g, town.x, town.y) * rewardMul(g)); pay(g, r); // ⛪ Cathedral +5%

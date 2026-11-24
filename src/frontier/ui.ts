@@ -26,6 +26,7 @@ export function firstStep(g: Game): string {
   const camp = (g.s.buildings ?? []).some(b => (b.kind === 'wood' || b.kind === 'stone') && isLinked(g, b));
   if (!camp) return (g.s.buildings ?? []).some(b => b.kind === 'wood' || b.kind === 'stone') ? 'Rail your camp to Ashford' : 'Build a 🪵 Lumber Camp by a forest';
   if (!g.s.trains.length) return 'Buy a 🚂 Train to haul the wood';
+  if (!fr(g)!.earned) return `Your train brings 🪵 to Ashford: ${PER_SUP} 🪵 = 1 🛤`;
   return '';
 }
 
@@ -68,11 +69,11 @@ export function frStoryHtml(g: Game, page?: string): string {
   const g0 = Math.max(startGap.get(f)!, gap);
   const step = firstStep(g);
   let h = `<div class="head"><b class="big">🧭</b><div><h2>Frontier Village</h2><span class="chip2">🛤 ${f.sup} supplies</span> <span class="chip2">✨ ${f.granted} wishes</span> <span class="chip2">🏗 ${f.perks.length} buildings</span></div></div>`;
-  if (step) h += `<div class="note big2">👉 First: ${step}</div>`;
+  if (step) h += `<div class="note big2">👉 Next: ${step}</div>`;
   if (f.picks.length) h += `<button class="act alt" data-act="page" data-page="pick">✨ Pick a building for ${esc(town(g, f.picks[0]!)?.name ?? 'a town')} ›</button>`;
   h += `<div class="row main"><b class="ico">🏁</b><div class="grow"><div class="line"><span>Golden spike</span><span>${f.done !== undefined ? '✅ Driven' : `${gap} squares to go`}</span></div>${bar(f.done !== undefined ? 1 : 1 - gap / g0, '#ffd27a')}<small>On the far coast. Your track must reach within ${2} squares of it.</small>${look(sx, sy)}</div></div>`;
   h += `<div class="row"><b class="ico">🛤</b><div class="grow"><div class="line"><span>Track supplies</span><span><b>${f.sup}</b> / ${supCap(g)}</span></div><small>Rails are built with supplies, not money: ${SUP.flat} a square, ${SUP.hills} on hills, ${SUP.bridge[1]}-${SUP.bridge[3]} a bridge square, ${SUP.tunnel} a tunnel.</small></div></div>`;
-  h += `<div class="row"><b class="ico">🪵</b><div class="grow"><b>Earn supplies by hauling</b><small>Trains bring 🪵 wood and 🪨 stone to a 🏗 depot (Ashford first): every ${PER_SUP} 🪵 or 🪨 make 1 supply. ${supFull(g) ? '<b>The pile is full</b>: lay track, or pick a 🏗 Supply Depot for more room.' : ''}</small></div></div>`;
+  h += `<div class="row"><b class="ico">🪵</b><div class="grow"><b>Earn supplies by hauling</b><div class="chips"><span class="chip2">🪵 Lumber Camp or 🪨 Quarry</span> → <span class="chip2">🚂 train</span> → <span class="chip2">🏛 Ashford</span> → <span class="chip2">🛤 ${f.earned ?? 0} earned</span></div><small>Trains bring 🪵 wood and 🪨 stone to a 🏗 depot (Ashford first): every ${PER_SUP} 🪵 or 🪨 make 1 supply. ${supFull(g) ? '<b>The pile is full</b>: lay track, or pick a 🏗 Supply Depot for more room.' : ''}</small></div></div>`;
   // the 🪓 backup purchase shows only when supplies run low, so it never reads as the way to get them
   if (f.sup < LOW_SUP) h += `<div class="row"><b class="ico">🪓</b><div class="grow"><b>Running low?</b><small>A backup so you're never stuck: Ashford's crew sells a few.</small><div class="btns"><button class="mini buy" data-act="frbuy" ${g.s.money >= buyPrice(g) ? '' : 'disabled'}>🪓 Buy ${BUY_SUP.n} for $${buyPrice(g).toLocaleString('en-US')}</button></div></div></div>`;
   const wishes = f.wishes.map(w => ({ w, t: town(g, w.town), to: w.to !== undefined ? town(g, w.to) : undefined })).filter(x => x.t && x.to);

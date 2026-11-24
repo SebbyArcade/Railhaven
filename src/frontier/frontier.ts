@@ -54,6 +54,8 @@ export interface FrState {
   intro?: boolean; fin?: boolean;
   /** wood and stone delivered toward the next supply */
   units?: number;
+  /** supplies earned by hauling so far */
+  earned?: number;
   /** 🪓 supply loads bought from Ashford's crew */
   bought?: number;
   /** towns that already made their link wish (each town wishes for a neighbour once; growing grants the rest) */
@@ -99,7 +101,12 @@ export const stroke = (g: Game, per: number[]) => per.length ? Math.max(1, Math.
 /** units of wood or stone that make one 🛤 supply */
 export const PER_SUP = 2;
 /** Deliveries a depot took as supplies (PER_SUP units each; the rest waits for the next load). */
-export function addSupplies(g: Game, n: number) { const f = fr(g); if (!f) return; const u = (f.units ?? 0) + n; f.sup = Math.min(supCap(g), f.sup + Math.floor(u / PER_SUP)); f.units = u % PER_SUP; }
+/** Turn delivered wood and stone into supplies; returns how many supplies they made. */
+export function addSupplies(g: Game, n: number): number {
+  const f = fr(g); if (!f) return 0;
+  const u = (f.units ?? 0) + n, got = Math.min(Math.floor(u / PER_SUP), Math.max(0, supCap(g) - f.sup));
+  f.sup += got; f.units = u % PER_SUP; f.earned = (f.earned ?? 0) + got; return got;
+}
 
 export function buySupplies(g: Game): string {
   const f = fr(g); if (!f) return '';

@@ -48,7 +48,10 @@ describe('🧭 Frontier Village preview', () => {
     expect(steadyGoods(a, g)).toEqual(expect.arrayContaining(['wood', 'stone']));
     expect(townRoom(g, a, 'wood').steady).toBeGreaterThan(100);
     const before = fr(g)!.sup, r = deliverToTown(g, a, 'stone', 20);
-    expect(fr(g)!.sup - before).toBe(Math.floor((20 - r.order) / PER_SUP));
+    expect(fr(g)!.sup - before).toBe(Math.floor(20 / PER_SUP)); expect(r.sup).toBe(Math.floor(20 / PER_SUP));
+    // wood that fills Ashford's order makes supplies too: hauling always lays track
+    expect(townRoom(g, a, "wood").order).toBeGreaterThan(0); const s0 = fr(g)!.sup, w = deliverToTown(g, a, "wood", 10);
+    expect(w.order).toBeGreaterThan(0); expect(fr(g)!.sup - s0).toBe(Math.floor(10 / PER_SUP));
   });
 
   it('mountains need the Tunnel Guild; a grown town picks one of three buildings', () => {

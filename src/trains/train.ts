@@ -58,7 +58,7 @@ export interface Train {
   job?: { src: number; to: { kind: 'town' | 'bld'; id: number }; good: string; phase: 'toLoad' | 'loading' | 'toDrop' | 'unloading'; timer: number; sea?: number; then?: number };
   /** seconds until an idle train looks for a load again, and what its last delivery paid */
   idle?: number;
-  lastPay?: { pay: number; at: number; n: number; good: string; to: { kind: 'town' | 'bld'; id: number } };
+  lastPay?: { pay: number; at: number; n: number; good: string; to: { kind: 'town' | 'bld'; id: number }; sup?: number };
   /** the trip (by destination) for which it already looked for a free platform on arrival */
   platTry?: number;
   /** seconds to wait in a refuge (out of another train's way) before trying again */

@@ -509,7 +509,7 @@ function trainCard(g: Game, t: Train): string {
   let h = `<div class="head"><b class="big">🚂</b><div><h2>Train ${t.id}</h2><span class="chip2">Carries ${trainCapOf(g, t)}</span></div></div>`;
   if (t.broke && g.s.t < t.broke.doneAt) { const c = Math.ceil(t.broke.crewAt - g.s.t); h += `<div class="warn">🔧 Broken down: ${c > 0 ? `the repair crew arrives in ${c} s` : `the crew is fixing it, ${Math.ceil(t.broke.doneAt - g.s.t)} s left`}. Trains behind it wait.</div>`; }
   h += `<div class="note big2">${trainStatus(g, t)}</div>`;
-  if (t.lastPay) { h += `<div class="row"><b class="ico">💰</b><div class="grow">Last delivery: ${t.lastPay.n} ${GOODS[t.lastPay.good as Good]?.icon ?? ''} to ${esc(destName(g, t.lastPay.to))} paid <b>${fmtMoney(t.lastPay.pay)}</b></div></div>`; }
+  if (t.lastPay) { h += `<div class="row"><b class="ico">💰</b><div class="grow">Last delivery: ${t.lastPay.n} ${GOODS[t.lastPay.good as Good]?.icon ?? ''} to ${esc(destName(g, t.lastPay.to))} paid <b>${fmtMoney(t.lastPay.pay)}</b>${t.lastPay.sup ? ` and made <b>🛤 ${t.lastPay.sup} supplies</b>` : ""}</div></div>`; }
   h += `<small class="why">Trains run themselves: each one takes the best waiting load to the place that needs it.</small>`;
   h += t.sellAfter ? `<div class="note">💰 Sold: it goes as soon as it has delivered its load (+${fmtMoney(trainRefund(g))})</div>`
     : `<button class="act alt" data-act="selltrain" data-id="${t.id}">💰 Sell this train · +${fmtMoney(trainRefund(g))}<br><small>half its price back${t.cargo ? ' · it delivers its load first' : ''}</small></button>`;
